@@ -1,6 +1,7 @@
 package com.javelin_ide.ui;
 
 import com.javelin_ide.build.ProcessManager;
+import com.javelin_ide.terminal.TerminalCompletion;
 import com.javelin_ide.terminal.TerminalSession;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -25,6 +26,7 @@ import javafx.util.Duration;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
@@ -42,6 +44,7 @@ public final class TerminalPanel extends BorderPane {
     private static final String MONO = "-fx-font-family: 'Monospaced'; -fx-font-size: 13px;";
 
     private final String baseName;
+    private final Supplier<File> directorySupplier;
     private final TerminalSession session;
     private final TextArea transcript = new TextArea();
     private final TextField input = new TextField();
@@ -56,6 +59,7 @@ public final class TerminalPanel extends BorderPane {
 
     public TerminalPanel(String name, ProcessManager processes, Supplier<File> directory) {
         this.baseName = name;
+        this.directorySupplier = directory;
         this.session = new TerminalSession(name, processes, directory, new TerminalSession.Listener() {
             @Override public void onOutput(String line) { Platform.runLater(() -> append(line)); }
             @Override public void onStateChanged() { Platform.runLater(TerminalPanel.this::refresh); }
@@ -82,6 +86,11 @@ public final class TerminalPanel extends BorderPane {
                 historyIndex++; input.setText(historyIndex == history.size() ? "" : history.get(historyIndex)); input.end(); e.consume();
             }
         });
+        input.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+            if (e.getCode() == KeyCode.TAB && !e.isControlDown() && !e.isAltDown() && !e.isMetaDown()) {
+                completeInput(); e.consume();
+            }
+        });
         input.setOnAction(e -> submit());
         addEventFilter(KeyEvent.KEY_PRESSED, this::handleControlKeys);
 
@@ -91,6 +100,26 @@ public final class TerminalPanel extends BorderPane {
         ticker.setCycleCount(Timeline.INDEFINITE);
         ticker.play();
         refresh();
+    }
+
+    private void completeInput() {
+        String before = input.getText();
+        int caret = input.getCaretPosition();
+        File currentDirectory = sessionDirectory();
+        String completed = TerminalCompletion.complete(
+                before, caret,
+                currentDirectory == null ? Path.of(System.getProperty("user.home")) : currentDirectory.toPath(),
+                System.getenv(),
+                com.javelin_ide.build.ShellCommand.isWindows());
+        if (!completed.equals(before)) {
+            input.setText(completed);
+            input.positionCaret(Math.min(completed.length(), caret + completed.length() - before.length()));
+        }
+    }
+
+    private File sessionDirectory() {
+        // Keep completion rooted in the same directory as commands submitted to this terminal.
+        return directorySupplier.get();
     }
 
     /** Tab title: name, active virtualenv, and a dot while a command is running. */
