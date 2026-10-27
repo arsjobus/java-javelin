@@ -2,6 +2,7 @@ package com.javelin_ide;
 
 import com.javelin_ide.build.BuildSystem;
 import com.javelin_ide.editor.Indentation;
+import com.javelin_ide.editor.Symbols;
 import com.javelin_ide.editor.SyntaxHighlighter;
 import com.javelin_ide.editor.TextSearch;
 import com.javelin_ide.icon.AppIcon;
@@ -9,6 +10,9 @@ import com.javelin_ide.io.CrashLog;
 import com.javelin_ide.io.FileIO;
 import com.javelin_ide.io.ImageFiles;
 import com.javelin_ide.io.ProjectFiles;
+import com.javelin_ide.io.ProjectFinder;
+import com.javelin_ide.io.ProjectPaths;
+import com.javelin_ide.io.RecentProjects;
 import com.javelin_ide.io.ProjectChange;
 import com.javelin_ide.io.ProjectWatcher;
 import com.javelin_ide.io.RecoveryStore;
@@ -24,6 +28,7 @@ import com.javelin_ide.language.Lsp;
 import com.javelin_ide.settings.DefaultShortcuts;
 import com.javelin_ide.settings.EditorPreferences;
 import com.javelin_ide.settings.Keybindings;
+import com.javelin_ide.settings.NameList;
 import com.javelin_ide.settings.Settings;
 import com.javelin_ide.settings.SettingsTemplates;
 import com.javelin_ide.settings.Themes;
@@ -87,7 +92,6 @@ import java.util.regex.Pattern;
 import java.util.prefs.Preferences;
 
 public final class App extends Application {
-    private static final int MAX_RECENT_PROJECTS = 8;
     private static final String THEME_KEY = "theme";
     private static final String DEFAULT_TREE_EXCLUDES = ".git,target";
     private final TabPane tabs = new TabPane();
@@ -99,6 +103,7 @@ public final class App extends Application {
     private final TreeGestures treeGestures = new TreeGestures();
     private final Label status = new Label("Ready");
     private final Preferences preferences = Preferences.userNodeForPackage(App.class);
+    private final RecentProjects recentStore = new RecentProjects(preferences);
     private final Map<Tab, Boolean> dirty = new HashMap<>();
     private final Map<Tab, Subscription> subscriptions = new HashMap<>();
     private final Map<CodeArea, List<CaretNode>> extraCarets = new HashMap<>();
@@ -135,7 +140,7 @@ public final class App extends Application {
     private List<Theme> themes = Themes.builtIn();
     private Theme theme = themes.get(0);
     private EditorPreferences editorPrefs = EditorPreferences.from(settings);
-    private Set<String> treeExcludes = parseNames(settings.get("tree.exclude", DEFAULT_TREE_EXCLUDES));
+    private Set<String> treeExcludes = NameList.parse(settings.get("tree.exclude", DEFAULT_TREE_EXCLUDES));
     private int zoom; // temporary font-size offset for this session; never saved
     private static final int AUTOSAVE_SECONDS = 5;
     private final RecoveryStore recovery = new RecoveryStore(settings.userFile().getParent().resolve("recovery"));
@@ -439,7 +444,7 @@ public final class App extends Application {
         editorPrefs = EditorPreferences.from(settings);
         searchCaseSensitive = settings.getBoolean(Settings.SEARCH_CASE_SENSITIVE, false);
         applyIcon();
-        treeExcludes = parseNames(settings.get("tree.exclude", DEFAULT_TREE_EXCLUDES));
+        treeExcludes = NameList.parse(settings.get("tree.exclude", DEFAULT_TREE_EXCLUDES));
         refreshThemes();
         applyTheme();
         applyKeybindings();
@@ -734,12 +739,6 @@ public final class App extends Application {
         }
         refreshProjectTree();
         revealInTree(to.toFile());
-    }
-
-    private static Set<String> parseNames(String commaSeparated) {
-        Set<String> names = new LinkedHashSet<>();
-        for (String name : commaSeparated.split(",")) if (!name.isBlank()) names.add(name.strip());
-        return names;
     }
 
     private Menu createRecentProjectsMenu() {
@@ -1182,10 +1181,7 @@ public final class App extends Application {
     }
 
     private File findFile(File dir, String q) {
-        File[] files = dir.listFiles(); if (files == null) return null;
-        for (File f : files) if (f.isFile() && f.getName().equals(q)) return f;
-        for (File f : files) if (f.isDirectory() && !treeExcludes.contains(f.getName())) { File hit = findFile(f, q); if (hit != null) return hit; }
-        return null;
+        return ProjectFinder.find(dir, q, treeExcludes).orElse(null);
     }
 
     private void matchBracket() {
@@ -1363,8 +1359,7 @@ public final class App extends Application {
     }
 
     private String displayPath(File file) {
-        if (projectDirectory != null && file.toPath().startsWith(projectDirectory.toPath())) return projectDirectory.toPath().relativize(file.toPath()).toString();
-        return file.getPath();
+        return ProjectPaths.display(projectDirectory, file);
     }
 
     private void forgetTab(Tab tab) {
@@ -1431,8 +1426,7 @@ public final class App extends Application {
     }
 
     private static File toFile(URI uri) {
-        if (!"file".equalsIgnoreCase(uri.getScheme())) return null;
-        try { return new File(uri); } catch (IllegalArgumentException ex) { return null; }
+        return ProjectPaths.fromUri(uri);
     }
 
     private File fileOf(CodeArea editor) {
@@ -1454,20 +1448,11 @@ public final class App extends Application {
 
     /** The caret, nudged left when it sits just after an identifier so that the identifier is the symbol under it. */
     private int symbolOffset(CodeArea a) {
-        int caret = a.getCaretPosition();
-        String text = a.getText();
-        boolean onWord = caret < text.length() && Character.isJavaIdentifierPart(text.charAt(caret));
-        if (!onWord && caret > 0 && Character.isJavaIdentifierPart(text.charAt(caret - 1))) return caret - 1;
-        return caret;
+        return Symbols.symbolOffset(a.getText(), a.getCaretPosition());
     }
 
     private String wordAt(CodeArea a, int offset) {
-        String text = a.getText();
-        if (offset < 0 || offset >= text.length() || !Character.isJavaIdentifierPart(text.charAt(offset))) return "";
-        int start = offset, end = offset;
-        while (start > 0 && Character.isJavaIdentifierPart(text.charAt(start - 1))) start--;
-        while (end < text.length() && Character.isJavaIdentifierPart(text.charAt(end))) end++;
-        return text.substring(start, end);
+        return Symbols.wordAt(a.getText(), offset);
     }
 
     private void popupStyler(Parent root) {
@@ -1725,14 +1710,11 @@ public final class App extends Application {
     }
 
     private List<String> recentProjects() {
-        List<String> projects = new ArrayList<>();
-        for (int i = 0; i < MAX_RECENT_PROJECTS; i++) { String path = preferences.get("recent.project." + i, ""); if (!path.isBlank() && new File(path).isDirectory()) projects.add(path); }
-        return projects;
+        return recentStore.list();
     }
 
     private void addRecentProject(File directory) {
-        List<String> projects = recentProjects(); String path = directory.getAbsolutePath(); projects.remove(path); projects.add(0, path);
-        for (int i = 0; i < MAX_RECENT_PROJECTS; i++) { if (i < projects.size()) preferences.put("recent.project." + i, projects.get(i)); else preferences.remove("recent.project." + i); }
+        recentStore.add(directory);
     }
 
     private void showError(String title, String message) { Alert a = new Alert(Alert.AlertType.ERROR); a.setTitle(title); a.setHeaderText(null); a.setContentText(message == null ? "Unknown error." : message); Dialogs.show(a); }

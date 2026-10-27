@@ -102,7 +102,7 @@ See [HARDENING.md](HARDENING.md) for what each item covers, how it is verified, 
 - [ ] Reliable build/run workflow
 - [ ] Git workflow
 - [ ] Explicit local AI workflow
-- [ ] Documentation
+- [x] Documentation (see [FEATURES.md](FEATURES.md): every feature mapped to the test that verifies it)
 - [ ] Release packaging
 - [ ] No mandatory account
 - [ ] No mandatory cloud service

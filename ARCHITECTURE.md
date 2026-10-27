@@ -78,3 +78,11 @@ Beyond the v0.5 roadmap items, `LanguageServerSession` also offers signature hel
 `com.javelin_ide.settings` is JavaFX-free, like `language`. `Settings` layers a user file and a project file over defaults held by the caller; the file format is deliberately trivial (`key=value`, `#` comments, values verbatim) and writes preserve the user's comments and ordering. `Keybindings` is a registry of action ids and shortcut strings, `EditorPreferences` is the validated `editor.*` view of the settings, and `Themes` discovers built-in and custom themes. `App` registers each menu item with `Keybindings`, and `ui.Shortcuts` is the only place shortcut strings become JavaFX key combinations. `ui.SettingsDialog` is a thin editor over the same files.
 
 Two rules keep customization from becoming ambient behavior: `theme` and `key.*` are read from the user file only (a project cannot restyle or rebind the editor by being opened), and project commands (`run.command`, `build.command`, `language.server.*`) are either pre-filled into a confirmation dialog or echoed in the Output panel when used. The `java.util.prefs` store still holds recent projects and last-used commands. See `CUSTOMIZATION.md`.
+
+## Keeping `App` thin (v1.0)
+
+`App` is the JavaFX wiring and nothing else may be decided there that a test could decide. Logic that does not need a
+window lives in a JavaFX-free class and `App` calls it: `io.RecentProjects` (recent list), `io.ProjectFinder` (Go to
+File), `io.ProjectPaths` (display paths, URI to file), `editor.Symbols` (symbol under the caret) and
+`settings.NameList` (comma-separated settings). New behaviour follows the same rule, and `FEATURES.md` lists the test
+that verifies it.

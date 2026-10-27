@@ -49,6 +49,8 @@ Terminals:
 
 Nothing runs unless you ask for it, commands are echoed before they run, and all child processes are stopped when the editor exits.
 
+See [FEATURES.md](FEATURES.md) for every feature and the test that verifies it.
+
 ## Requirements
 
 - Java 21+
