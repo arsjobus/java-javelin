@@ -90,6 +90,7 @@ public final class App extends Application {
     private final TabPane tabs = new TabPane();
     private final TreeView<File> projectTree = new TreeView<>();
     private final ContextMenu treeMenu = new ContextMenu();
+    private MenuItem renameTreeItem;
     private final TreeGestures treeGestures = new TreeGestures();
     private final Label status = new Label("Ready");
     private final Preferences preferences = Preferences.userNodeForPackage(App.class);
@@ -146,9 +147,20 @@ public final class App extends Application {
         stage.setTitle("Javelin");
         applyIcon();
         projectTree.setShowRoot(true);
+        projectTree.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         projectTree.setCellFactory(tree -> new TreeCell<>() {
             {   // right-clicking a row selects it first, so the menu always acts on the row under the pointer
-                setOnContextMenuRequested(event -> { if (!isEmpty() && getTreeItem() != null) projectTree.getSelectionModel().select(getTreeItem()); });
+                addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
+                    if (event.getButton() != MouseButton.SECONDARY || isEmpty() || getTreeItem() == null) return;
+                    if (!projectTree.getSelectionModel().getSelectedItems().contains(getTreeItem()))
+                        projectTree.getSelectionModel().clearAndSelect(projectTree.getRow(getTreeItem()));
+                    event.consume(); // keep a multi-selection when its selected rows are right-clicked
+                });
+                setOnContextMenuRequested(event -> {
+                    if (!isEmpty() && getTreeItem() != null && !projectTree.getSelectionModel().getSelectedItems().contains(getTreeItem()))
+                        projectTree.getSelectionModel().clearAndSelect(projectTree.getRow(getTreeItem()));
+                    renameTreeItem.setDisable(projectTree.getSelectionModel().getSelectedItems().size() != 1);
+                });
                 // Double-click opens a file. It is decided from the presses on this very row, not from the tree's
                 // selection or JavaFX's click count, so a shaky hand, a drag or a tree rebuild cannot lose or redirect it.
                 addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
@@ -185,6 +197,7 @@ public final class App extends Application {
             }
         });
         MenuItem newFile = new MenuItem("New File..."), newFolder = new MenuItem("New Folder..."), rename = new MenuItem("Rename..."), delete = new MenuItem("Delete...");
+        renameTreeItem = rename;
         newFile.setOnAction(e -> createInTree(false));
         newFolder.setOnAction(e -> createInTree(true));
         rename.setOnAction(e -> renameInTree());
@@ -502,14 +515,15 @@ public final class App extends Application {
         if (projectDirectory == null) return;
         Set<File> expanded = new HashSet<>();
         collectExpanded(projectTree.getRoot(), expanded);
-        TreeItem<File> selected = projectTree.getSelectionModel().getSelectedItem();
-        File selectedFile = selected == null ? null : selected.getValue();
+        List<File> selectedFiles = projectTree.getSelectionModel().getSelectedItems().stream().map(TreeItem::getValue).toList();
         projectTree.setRoot(createTreeItem(projectDirectory));
         restoreExpanded(projectTree.getRoot(), expanded);
         projectTree.getRoot().setExpanded(true);
         // A rebuild must not drop the selection, or the next click/Enter/F2 acts on nothing or on another row.
-        TreeItem<File> again = selectedFile == null ? null : findTreeItem(projectTree.getRoot(), selectedFile);
-        if (again != null) projectTree.getSelectionModel().select(again);
+        for (File selectedFile : selectedFiles) {
+            TreeItem<File> again = findTreeItem(projectTree.getRoot(), selectedFile);
+            if (again != null) projectTree.getSelectionModel().select(again);
+        }
         treeGestures.reset();
         treeWatcher.watch(projectDirectory.toPath()); // what the tree now shows is the baseline, so our own changes are not reported again
     }
@@ -571,22 +585,20 @@ public final class App extends Application {
         }
     }
 
-    /** Deletes the selected file or folder after asking. This is permanent: it does not go to a trash. */
+    /** Deletes the selected files and folders after asking. This is permanent: it does not go to a trash. */
     private void deleteFromTree() {
         if (!requireProject("Delete")) return;
-        TreeItem<File> selected = projectTree.getSelectionModel().getSelectedItem();
-        if (selected == null) { status.setText("Select a file or folder to delete first."); return; }
-        File target = selected.getValue();
-        if (target.equals(projectDirectory)) { status.setText("The project folder itself cannot be deleted from here."); return; }
-        Path path = target.toPath();
+        List<TreeItem<File>> selected = new ArrayList<>(projectTree.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) { status.setText("Select files or folders to delete first."); return; }
+        if (selected.stream().anyMatch(item -> item.getValue().equals(projectDirectory))) { status.setText("The project folder itself cannot be deleted from here."); return; }
+        List<Path> targets = ProjectFiles.topLevelTargets(selected.stream().map(item -> item.getValue().toPath()).toList());
         List<Tab> open = new ArrayList<>();
-        for (Tab tab : tabs.getTabs()) if (tab.getUserData() instanceof File f && ProjectFiles.isInside(path, f.toPath())) open.add(tab);
+        for (Tab tab : tabs.getTabs()) if (tab.getUserData() instanceof File f && targets.stream().anyMatch(path -> ProjectFiles.isInside(path, f.toPath()))) open.add(tab);
         long unsaved = open.stream().filter(t -> Boolean.TRUE.equals(dirty.get(t))).count();
-        String inside = "";
-        if (target.isDirectory()) { try { inside = ProjectFiles.contents(path).describe(); } catch (IOException ignored) { /* the count is only a courtesy */ } }
-        StringBuilder message = new StringBuilder(target.isDirectory()
-            ? "Delete the folder \"" + target.getName() + "\"" + (inside.isEmpty() ? "?" : " and everything in it (" + inside + ")?")
-            : "Delete \"" + target.getName() + "\"?");
+        String names = targets.stream().map(path -> "\"" + path.getFileName() + "\"").reduce((a, b) -> a + ", " + b).orElse("");
+        StringBuilder message = new StringBuilder("Delete " + names + "?");
+        long folderCount = targets.stream().filter(Files::isDirectory).count();
+        if (folderCount > 0) message.append("\nFolders and everything inside them will be deleted.");
         message.append("\n\nThis cannot be undone; the files are not moved to a trash.");
         if (!open.isEmpty()) message.append("\n\n").append(open.size()).append(open.size() == 1 ? " open tab will be closed" : " open tabs will be closed")
             .append(unsaved == 0 ? "." : ", and " + unsaved + (unsaved == 1 ? " has unsaved changes that will be lost." : " have unsaved changes that will be lost."));
@@ -595,14 +607,16 @@ public final class App extends Application {
         confirm.setTitle("Delete"); confirm.setHeaderText(null); confirm.setContentText(message.toString());
         confirm.getButtonTypes().setAll(delete, cancel);
         if (Dialogs.show(confirm).orElse(cancel) != delete) return;
-        try {
+        List<String> failures = new ArrayList<>();
+        for (Path path : targets) try {
             ProjectFiles.delete(projectDirectory.toPath(), path);
-            status.setText("Deleted: " + displayPath(target));
         } catch (IOException ex) {
-            showError("Could not delete", ex.getMessage()); // part of a folder may already be gone; the tree below shows what is left
+            failures.add(path.getFileName() + ": " + ex.getMessage());
         }
         for (Tab tab : open) if (!Files.exists(((File) tab.getUserData()).toPath())) tabs.getTabs().remove(tab);
         refreshProjectTree();
+        if (failures.isEmpty()) status.setText("Deleted " + targets.size() + (targets.size() == 1 ? " item." : " items."));
+        else showError("Could not delete everything", String.join("\n", failures));
     }
 
     /** The row that was dragged, if the drag carries the path of something inside the project. */
@@ -623,6 +637,7 @@ public final class App extends Application {
     /** Rename the selected file or folder. Open tabs follow it; nothing is ever overwritten. */
     private void renameInTree() {
         if (!requireProject("Rename")) return;
+        if (projectTree.getSelectionModel().getSelectedItems().size() > 1) { status.setText("Select one file or folder to rename."); return; }
         TreeItem<File> selected = projectTree.getSelectionModel().getSelectedItem();
         if (selected == null) { status.setText("Select a file or folder to rename first."); return; }
         File target = selected.getValue();

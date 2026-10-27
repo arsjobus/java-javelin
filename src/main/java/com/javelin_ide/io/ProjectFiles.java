@@ -9,6 +9,10 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * Creating, renaming, moving and deleting files and folders in the project tree. JavaFX-free, so the rules are tested
@@ -96,6 +100,15 @@ public final class ProjectFiles {
     /** True if {@code candidate} is {@code ancestor} or lies somewhere below it. Compares paths; touches no files. */
     public static boolean isInside(Path ancestor, Path candidate) {
         return candidate.toAbsolutePath().normalize().startsWith(ancestor.toAbsolutePath().normalize());
+    }
+
+    /** Returns selected paths in parent-first order, omitting any item already covered by a selected folder. */
+    public static List<Path> topLevelTargets(Collection<Path> selected) {
+        List<Path> ordered = selected.stream().map(path -> path.toAbsolutePath().normalize())
+                .sorted(Comparator.comparingInt(Path::getNameCount)).toList();
+        List<Path> result = new ArrayList<>();
+        for (Path path : ordered) if (result.stream().noneMatch(path::startsWith)) result.add(path);
+        return List.copyOf(result);
     }
 
     /**

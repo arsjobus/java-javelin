@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -185,6 +186,30 @@ class ProjectFilesTest {
         ProjectFiles.delete(project, project.resolve("a"));
         assertFalse(Files.exists(project.resolve("a")));
         assertEquals("stay", Files.readString(project.resolve("sibling.txt")));
+    }
+
+    @Test void multipleSelectedFilesAndFoldersCanBeDeletedTogether() throws IOException {
+        Path folder = Files.createDirectories(project.resolve("src/nested"));
+        Path nestedFile = Files.createFile(folder.resolve("Main.java"));
+        Path otherFile = Files.createFile(project.resolve("notes.txt"));
+        Path otherFolder = Files.createDirectory(project.resolve("assets"));
+        Files.createFile(otherFolder.resolve("logo.png"));
+
+        for (Path target : ProjectFiles.topLevelTargets(List.of(nestedFile, otherFile, project.resolve("src"), otherFolder)))
+            ProjectFiles.delete(project, target);
+
+        assertFalse(Files.exists(project.resolve("src")));
+        assertFalse(Files.exists(otherFile));
+        assertFalse(Files.exists(otherFolder));
+        assertTrue(Files.isDirectory(project), "the project root is preserved");
+    }
+
+    @Test void selectedChildrenAreOmittedWhenTheirFolderIsAlsoSelected() {
+        Path folder = project.resolve("src");
+        Path nestedFile = folder.resolve("Main.java");
+        Path sibling = project.resolve("notes.txt");
+
+        assertEquals(List.of(sibling, folder), ProjectFiles.topLevelTargets(List.of(nestedFile, sibling, folder)));
     }
 
     @Test void deletesWhenGivenAnUnnormalizedPath() throws IOException {
