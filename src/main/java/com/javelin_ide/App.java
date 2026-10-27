@@ -9,6 +9,7 @@ import com.javelin_ide.io.CrashLog;
 import com.javelin_ide.io.FileIO;
 import com.javelin_ide.io.ImageFiles;
 import com.javelin_ide.io.ProjectFiles;
+import com.javelin_ide.io.ProjectChange;
 import com.javelin_ide.io.ProjectWatcher;
 import com.javelin_ide.io.RecoveryStore;
 import com.javelin_ide.build.ManagedProcess;
@@ -722,7 +723,9 @@ public final class App extends Application {
 
     private void openProjectDirectory(File directory) {
         if (!directory.isDirectory()) { showError("Could not open project", "The selected directory no longer exists."); return; }
-        projectDirectory = directory.getAbsoluteFile();
+        File nextProjectDirectory = directory.getAbsoluteFile();
+        ProjectChange.closeSessionsIfChanged(projectDirectory, nextProjectDirectory, terminals::closeAll);
+        projectDirectory = nextProjectDirectory;
         String projectName = projectDirectory.getName();
         primaryStage.setTitle("Javelin IDE - " + (projectName.isBlank() ? projectDirectory.getAbsolutePath() : projectName));
         settings.setProject(projectDirectory.toPath()); // reads <project>/.javelin-ide/settings.conf if there is one

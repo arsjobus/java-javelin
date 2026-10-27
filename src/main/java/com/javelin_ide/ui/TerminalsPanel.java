@@ -45,6 +45,14 @@ public final class TerminalsPanel extends BorderPane {
         return panel;
     }
 
+    /** Stops and removes every terminal session when the active project changes. */
+    public void closeAll() {
+        for (Tab tab : tabs.getTabs()) {
+            if (tab.getContent() instanceof TerminalPanel panel) panel.dispose();
+        }
+        tabs.getTabs().clear();
+    }
+
     /** Focuses the selected terminal, opening one if none are left. */
     public void focusInput() {
         Tab tab = tabs.getSelectionModel().getSelectedItem();
