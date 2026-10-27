@@ -129,4 +129,19 @@ class TextSearchTest {
         assertNull(TextSearch.first("Foo", "foo", 0));
         assertEquals(0, TextSearch.count("Foo", "foo"));
     }
+    @Test void ignoreCaseFindsMatchesWithoutChangingTheirOffsets() {
+        assertEquals(m(0, 3), TextSearch.first("Foo fOO", "foo", 0, true));
+        assertEquals(m(4, 7), TextSearch.next("Foo fOO", "foo", 0, 3, true));
+        assertEquals(m(0, 3), TextSearch.previous("Foo fOO", "foo", 4, true));
+        assertEquals(2, TextSearch.count("Foo fOO", "foo", true));
+        assertEquals(2, TextSearch.ordinal("Foo fOO", "foo", 4, true));
+    }
+
+    @Test void replacementIsCaseSensitiveByDefaultAndCanIgnoreCase() {
+        assertEquals("foo X X", TextSearch.replace("foo X Foo", "Foo", "X", false));
+        assertEquals("X X X", TextSearch.replace("foo X Foo", "foo", "X", true));
+        assertEquals("foo", TextSearch.replace("foo", "", "X", true));
+    }
+
 }
+

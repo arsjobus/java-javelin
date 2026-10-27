@@ -931,6 +931,7 @@ public final class App extends Application {
 
     /** The text of the last Search, so Find Next / Find Previous (F3 / Shift+F3) can repeat it. */
     private String lastSearch = "";
+    private static final boolean SEARCH_IGNORE_CASE = true;
 
     private void search() {
         currentEditor().ifPresent(a -> {
@@ -939,7 +940,7 @@ public final class App extends Application {
             TextInputDialog d = new TextInputDialog(initial); d.setTitle("Search"); d.setHeaderText("Find text (F3: next, Shift+F3: previous)"); d.setContentText("Search:");
             Dialogs.show(d).filter(s -> !s.isEmpty()).ifPresent(q -> {
                 lastSearch = q;
-                showMatch(a, q, TextSearch.first(a.getText(), q, a.getCaretPosition()));
+                showMatch(a, q, TextSearch.first(a.getText(), q, a.getCaretPosition(), SEARCH_IGNORE_CASE), SEARCH_IGNORE_CASE);
             });
         });
     }
@@ -948,32 +949,42 @@ public final class App extends Application {
         currentEditor().ifPresent(a -> {
             if (lastSearch.isEmpty()) { search(); return; }
             IndexRange sel = a.getSelection();
-            showMatch(a, lastSearch, TextSearch.next(a.getText(), lastSearch, sel.getStart(), sel.getEnd()));
+            showMatch(a, lastSearch, TextSearch.next(a.getText(), lastSearch, sel.getStart(), sel.getEnd(), SEARCH_IGNORE_CASE), SEARCH_IGNORE_CASE);
         });
     }
 
     private void findPrevious() {
         currentEditor().ifPresent(a -> {
             if (lastSearch.isEmpty()) { search(); return; }
-            showMatch(a, lastSearch, TextSearch.previous(a.getText(), lastSearch, a.getSelection().getStart()));
+            showMatch(a, lastSearch, TextSearch.previous(a.getText(), lastSearch, a.getSelection().getStart(), SEARCH_IGNORE_CASE), SEARCH_IGNORE_CASE);
         });
     }
 
     /** Selects the match and scrolls it into view, then gives the editor focus back (the Search dialog had it). */
-    private void showMatch(CodeArea a, String query, TextSearch.Match match) {
+    private void showMatch(CodeArea a, String query, TextSearch.Match match, boolean ignoreCase) {
         if (match == null) { status.setText("Not found: " + query); return; }
         a.selectRange(match.start(), match.end());
         a.requestFollowCaret(); a.requestFocus();
         Platform.runLater(() -> { a.requestFollowCaret(); a.requestFocus(); });   // once the dialog has finished closing
-        status.setText("Found " + TextSearch.ordinal(a.getText(), query, match.start()) + " of " + TextSearch.count(a.getText(), query) + ": " + query);
+        status.setText("Found " + TextSearch.ordinal(a.getText(), query, match.start(), ignoreCase) + " of " + TextSearch.count(a.getText(), query, ignoreCase) + ": " + query);
     }
 
     private void replace() {
         currentEditor().ifPresent(a -> {
-            TextInputDialog f = new TextInputDialog(); f.setTitle("Replace"); f.setHeaderText("Find text"); f.setContentText("Find:");
+            Dialog<String> f = new Dialog<>(); f.setTitle("Replace"); f.setHeaderText("Find text");
+            TextField findField = new TextField();
+            CheckBox ignoreCase = new CheckBox("Ignore case");
+            f.getDialogPane().setContent(new VBox(8, new Label("Find:"), findField, ignoreCase));
+            f.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+            f.setResultConverter(button -> button == ButtonType.OK ? findField.getText() : null);
             Optional<String> q = Dialogs.show(f); if (q.isEmpty() || q.get().isEmpty()) return;
             TextInputDialog r = new TextInputDialog(); r.setTitle("Replace"); r.setHeaderText("Replacement text"); r.setContentText("Replace with:");
-            Dialogs.show(r).ifPresent(v -> { a.replaceText(a.getText().replace(q.get(), v)); status.setText("Replaced: " + q.get()); });
+            Dialogs.show(r).ifPresent(v -> {
+                String original = a.getText();
+                String replaced = TextSearch.replace(original, q.get(), v, ignoreCase.isSelected());
+                if (!original.equals(replaced)) a.replaceText(0, a.getLength(), replaced);
+                status.setText("Replaced: " + q.get());
+            });
         });
     }
 
