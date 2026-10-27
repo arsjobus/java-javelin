@@ -120,7 +120,7 @@ public final class App extends Application {
     private final SplitPane editorSplit = new SplitPane(tabs);
     private static final long TREE_WATCH_MILLIS = 2000;
     // Notices files added, removed, renamed or moved outside the editor (terminal, build, git, file manager).
-    private final ProjectWatcher treeWatcher = new ProjectWatcher(() -> this.treeExcludes, () -> Platform.runLater(this::refreshProjectTree));
+    private final ProjectWatcher treeWatcher = new ProjectWatcher(() -> this.treeExcludes, () -> Platform.runLater(this::refreshAfterOutsideChange));
     private File projectDirectory;
     private Scene scene;
     // v0.8 customization: plain-file settings (see CUSTOMIZATION.md). The java.util.prefs store still holds
@@ -533,6 +533,40 @@ public final class App extends Application {
         }
         treeGestures.reset();
         treeWatcher.watch(projectDirectory.toPath()); // what the tree now shows is the baseline, so our own changes are not reported again
+    }
+
+    /** Refreshes open, clean text buffers when a terminal, Git, or another program changes files on disk. */
+    private void refreshAfterOutsideChange() {
+        refreshProjectTree();
+        int reloaded = 0;
+        int conflicts = 0;
+        int missing = 0;
+        for (Tab tab : tabs.getTabs()) {
+            if (!(tab.getUserData() instanceof File file)) continue;
+            if (tab.getContent() instanceof ImageViewerPane) continue;
+            if (!file.isFile()) { missing++; continue; }
+            if (Boolean.TRUE.equals(dirty.get(tab))) { conflicts++; continue; }
+            CodeArea editor = editorFor(file);
+            if (editor == null) continue;
+            try {
+                String diskText = FileIO.readText(file.toPath());
+                if (!diskText.equals(editor.getText())) {
+                    int caret = Math.min(editor.getCaretPosition(), diskText.length());
+                    editor.replaceText(diskText);
+                    editor.moveTo(caret);
+                    dirty.put(tab, false);
+                    updateTabTitle(tab);
+                    language.open(file, diskText);
+                    highlight(editor);
+                    reloaded++;
+                }
+            } catch (IOException ex) {
+                status.setText("Could not reload changed file " + file.getName() + ": " + ex.getMessage());
+            }
+        }
+        if (reloaded > 0) status.setText("Reloaded " + reloaded + (reloaded == 1 ? " changed file from disk" : " changed files from disk"));
+        else if (conflicts > 0) status.setText("Files changed on disk; kept " + conflicts + (conflicts == 1 ? " unsaved tab" : " unsaved tabs") + " open. Save or reload after reviewing your edits.");
+        else if (missing > 0) status.setText(missing + (missing == 1 ? " open file was" : " open files were") + " removed from disk; its tab is still open.");
     }
 
     /** Rebuilding the tree must not fold every folder the person had open. */

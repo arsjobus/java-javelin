@@ -80,9 +80,9 @@ class ProjectWatcherTest {
         assertTrue(watcher.poll());
     }
 
-    @Test void editingTheContentsOfAFileIsNotATreeChange() throws IOException {
+    @Test void editingTheContentsOfAFileIsNoticed() throws IOException {
         Files.writeString(project.resolve("Main.java"), "class Main { int x; }");
-        assertFalse(watcher.poll());
+        assertTrue(watcher.poll());
     }
 
     @Test void aDeletedProjectFolderIsNoticed() throws IOException {
@@ -148,13 +148,13 @@ class ProjectWatcherTest {
         Path file = Files.writeString(dir.resolve("plain.txt"), "x");
         watcher.watch(file);
         assertFalse(watcher.poll());
-        assertEquals(Set.of(), ProjectWatcher.snapshot(file, Set.of()));
+        assertEquals(Set.of(), ProjectWatcher.snapshot(file, Set.of()).keySet());
     }
 
     // ---- snapshot ----
 
     @Test void snapshotListsRelativePathsWithFoldersMarked() {
-        assertEquals(Set.of("Main.java", "src/", "src" + project.getFileSystem().getSeparator() + "A.java"), ProjectWatcher.snapshot(project, Set.of()));
+        assertEquals(Set.of("Main.java", "src/", "src" + project.getFileSystem().getSeparator() + "A.java"), ProjectWatcher.snapshot(project, Set.of()).keySet());
     }
 
     @Test void snapshotDoesNotFollowSymbolicLinksOutOfTheProject() throws IOException {
@@ -165,7 +165,7 @@ class ProjectWatcherTest {
         watcher.acknowledge();
         Files.writeString(outside.resolve("more.txt"), "");
         assertFalse(watcher.poll(), "what is behind a link is not part of the project tree");
-        assertTrue(ProjectWatcher.snapshot(project, Set.of()).contains("link"));
+        assertTrue(ProjectWatcher.snapshot(project, Set.of()).containsKey("link"));
     }
 
     @Test void snapshotSurvivesAnUnreadableFolder() throws IOException {
@@ -173,7 +173,7 @@ class ProjectWatcherTest {
         Files.writeString(locked.resolve("hidden.txt"), "");
         assumeTrue(locked.toFile().setReadable(false) && !Files.isReadable(locked), "permissions cannot be taken away here (root?)");
         try {
-            Set<String> seen = ProjectWatcher.snapshot(project, Set.of());
+            Set<String> seen = ProjectWatcher.snapshot(project, Set.of()).keySet();
             assertTrue(seen.contains("Main.java"));
             assertTrue(seen.contains("locked/"));
         } finally {
