@@ -29,6 +29,7 @@ the editor from starting; the affected value falls back to its default.
 | --- | --- | --- | --- |
 | `theme` | `light` | user only | `light`, `dark`, `high-contrast`, or a custom theme name (below). |
 | `app.icon` | built-in icon | user only | Path to a PNG, JPEG or GIF used for the window, taskbar and macOS Dock icon (`~` is your home folder). A missing or unreadable file falls back to the built-in icon and says so in the status bar. |
+| `search.caseSensitive` | `false` | user only | Whether Search matches uppercase and lowercase letters exactly. The Search dialog's Match case checkbox updates this setting. |
 | `editor.fontFamily` | `Monospaced` | user, project | Editor font. |
 | `editor.fontSize` | `14` | user, project | 8 to 48. |
 | `editor.tabSize` | `4` | user, project | 1 to 16. Used for Tab, auto-indent and Format Document. |
@@ -42,7 +43,8 @@ the editor from starting; the affected value falls back to its default.
 | `language.server.<id>` | suggestion | user, project | Pre-filled into Language > Start Language Server...; servers are still started only after you confirm. |
 | `key.<action id>` | see below | user only | Keybinding override. |
 
-`theme` and `key.*` are read from the user file only. A project cannot change your theme or shortcuts by being opened;
+`theme`, `key.*` and `search.caseSensitive` are read from the user file only. A project cannot change your theme,
+shortcuts or Search behavior by being opened;
 if a project file contains them they are ignored with a warning.
 
 `build.command`, `run.command` and `language.server.*` in a project file are commands that came with the project. Treat

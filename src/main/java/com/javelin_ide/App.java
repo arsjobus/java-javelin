@@ -120,6 +120,7 @@ public final class App extends Application {
     // v0.8 customization: plain-file settings (see CUSTOMIZATION.md). The java.util.prefs store still holds
     // recent projects, the last-used commands and, as a fallback for existing installs, the old theme choice.
     private final Settings settings = new Settings(Settings.defaultUserDirectory().resolve(Settings.FILE_NAME));
+    private boolean searchCaseSensitive = settings.getBoolean(Settings.SEARCH_CASE_SENSITIVE, false);
     private final Keybindings keys = new Keybindings(settings);
     private final Map<String, MenuItem> menuItems = new LinkedHashMap<>();
     private final List<String> keyProblems = new ArrayList<>();
@@ -416,6 +417,7 @@ public final class App extends Application {
     /** Re-applies everything derived from settings: editor preferences, theme, shortcuts, and the project tree. */
     private void applySettings() {
         editorPrefs = EditorPreferences.from(settings);
+        searchCaseSensitive = settings.getBoolean(Settings.SEARCH_CASE_SENSITIVE, false);
         applyIcon();
         treeExcludes = parseNames(settings.get("tree.exclude", DEFAULT_TREE_EXCLUDES));
         refreshThemes();
@@ -931,16 +933,29 @@ public final class App extends Application {
 
     /** The text of the last Search, so Find Next / Find Previous (F3 / Shift+F3) can repeat it. */
     private String lastSearch = "";
-    private static final boolean SEARCH_IGNORE_CASE = true;
 
     private void search() {
         currentEditor().ifPresent(a -> {
             String selected = a.getSelectedText();
             String initial = !selected.isEmpty() && selected.indexOf('\n') < 0 ? selected : lastSearch;
-            TextInputDialog d = new TextInputDialog(initial); d.setTitle("Search"); d.setHeaderText("Find text (F3: next, Shift+F3: previous)"); d.setContentText("Search:");
+            Dialog<String> d = new Dialog<>();
+            d.setTitle("Search"); d.setHeaderText("Find text (F3: next, Shift+F3: previous)");
+            TextField query = new TextField(initial);
+            CheckBox matchCase = new CheckBox("Match case");
+            matchCase.setSelected(searchCaseSensitive);
+            matchCase.setOnAction(e -> {
+                searchCaseSensitive = matchCase.isSelected();
+                settings.put(Settings.Scope.USER, Settings.SEARCH_CASE_SENSITIVE, Boolean.toString(searchCaseSensitive));
+                saveUserSettings();
+            });
+            d.getDialogPane().setContent(new VBox(8, new Label("Search:"), query, matchCase));
+            d.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+            d.setResultConverter(button -> button == ButtonType.OK ? query.getText() : null);
+            d.setOnShown(e -> query.requestFocus());
             Dialogs.show(d).filter(s -> !s.isEmpty()).ifPresent(q -> {
                 lastSearch = q;
-                showMatch(a, q, TextSearch.first(a.getText(), q, a.getCaretPosition(), SEARCH_IGNORE_CASE), SEARCH_IGNORE_CASE);
+                boolean ignoreCase = !searchCaseSensitive;
+                showMatch(a, q, TextSearch.first(a.getText(), q, a.getCaretPosition(), ignoreCase), ignoreCase);
             });
         });
     }
@@ -949,14 +964,16 @@ public final class App extends Application {
         currentEditor().ifPresent(a -> {
             if (lastSearch.isEmpty()) { search(); return; }
             IndexRange sel = a.getSelection();
-            showMatch(a, lastSearch, TextSearch.next(a.getText(), lastSearch, sel.getStart(), sel.getEnd(), SEARCH_IGNORE_CASE), SEARCH_IGNORE_CASE);
+            boolean ignoreCase = !searchCaseSensitive;
+            showMatch(a, lastSearch, TextSearch.next(a.getText(), lastSearch, sel.getStart(), sel.getEnd(), ignoreCase), ignoreCase);
         });
     }
 
     private void findPrevious() {
         currentEditor().ifPresent(a -> {
             if (lastSearch.isEmpty()) { search(); return; }
-            showMatch(a, lastSearch, TextSearch.previous(a.getText(), lastSearch, a.getSelection().getStart(), SEARCH_IGNORE_CASE), SEARCH_IGNORE_CASE);
+            boolean ignoreCase = !searchCaseSensitive;
+            showMatch(a, lastSearch, TextSearch.previous(a.getText(), lastSearch, a.getSelection().getStart(), ignoreCase), ignoreCase);
         });
     }
 

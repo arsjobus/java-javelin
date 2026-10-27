@@ -30,6 +30,7 @@ public final class Settings {
 
     public static final String FILE_NAME = "settings.conf";
     public static final String PROJECT_DIRECTORY = ".javelin-ide";
+    public static final String SEARCH_CASE_SENSITIVE = "search.caseSensitive";
 
     private final Path userFile;
     private Path projectFile;
@@ -59,7 +60,7 @@ public final class Settings {
 
     /** Keys that only the user file may set. */
     public static boolean isUserOnly(String key) {
-        return key.equals("theme") || key.equals("app.icon") || key.startsWith("key.");
+        return key.equals("theme") || key.equals("app.icon") || key.equals(SEARCH_CASE_SENSITIVE) || key.startsWith("key.");
     }
 
     public Path userFile() { return userFile; }
