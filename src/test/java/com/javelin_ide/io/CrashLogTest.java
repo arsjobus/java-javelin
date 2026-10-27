@@ -3,6 +3,8 @@ package com.javelin_ide.io;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
@@ -48,29 +50,39 @@ class CrashLogTest {
 
     @Test void installedHandlerWritesAReportAndNotifiesTheCaller() throws Exception {
         Thread.UncaughtExceptionHandler original = Thread.getDefaultUncaughtExceptionHandler();
+        PrintStream originalErr = System.err;
         AtomicReference<Path> written = new AtomicReference<>();
         CountDownLatch latch = new CountDownLatch(1);
-        try {
+        try (PrintStream ignored = new PrintStream(OutputStream.nullOutputStream())) {
+            System.setErr(ignored);
             assertSame(original, CrashLog.install(dir.resolve("c"), p -> { written.set(p); latch.countDown(); }));
             Thread t = new Thread(() -> { throw new IllegalArgumentException("boom on a worker"); }, "worker-7");
             t.start();
             assertTrue(latch.await(10, TimeUnit.SECONDS));
             assertTrue(Files.readString(written.get()).contains("worker-7"));
             assertTrue(Files.readString(written.get()).contains("boom on a worker"));
-        } finally { Thread.setDefaultUncaughtExceptionHandler(original); }
+        } finally {
+            System.setErr(originalErr);
+            Thread.setDefaultUncaughtExceptionHandler(original);
+        }
     }
 
     @Test void failingToWriteTheReportStillNotifiesWithNull() throws Exception {
         Path blocker = dir.resolve("blocker");
         Files.writeString(blocker, "a file where a folder should be");
         Thread.UncaughtExceptionHandler original = Thread.getDefaultUncaughtExceptionHandler();
+        PrintStream originalErr = System.err;
         AtomicReference<Path> written = new AtomicReference<>(Path.of("sentinel"));
         CountDownLatch latch = new CountDownLatch(1);
-        try {
+        try (PrintStream ignored = new PrintStream(OutputStream.nullOutputStream())) {
+            System.setErr(ignored);
             CrashLog.install(blocker, p -> { written.set(p); latch.countDown(); throw new IllegalStateException("callback failure is swallowed"); });
             new Thread(() -> { throw new Error("x"); }).start();
             assertTrue(latch.await(10, TimeUnit.SECONDS));
             assertNull(written.get());
-        } finally { Thread.setDefaultUncaughtExceptionHandler(original); }
+        } finally {
+            System.setErr(originalErr);
+            Thread.setDefaultUncaughtExceptionHandler(original);
+        }
     }
 }

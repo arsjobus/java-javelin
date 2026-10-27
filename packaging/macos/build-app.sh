@@ -38,7 +38,8 @@ mkdir -p target/dist
 mvn -q dependency:copy-dependencies -DoutputDirectory=target/dist -DincludeScope=runtime
 cp "target/$jar" target/dist/
 
-java -cp target/classes com.javelin_ide.icon.IconExporter packaging/icons
+# IconExporter only draws into BufferedImages; keep AWT headless so it does not try to register an AppKit app.
+java -Djava.awt.headless=true -cp target/classes com.javelin_ide.icon.IconExporter packaging/icons
 
 rm -rf dist
 mkdir -p dist

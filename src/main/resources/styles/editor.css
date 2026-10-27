@@ -180,7 +180,7 @@
 .popup-pane .list-cell:filled:selected { -fx-background-color: #ccd0da; }
 .popup-pane .popup-text, .popup-pane.scroll-pane > .viewport { -fx-background-color: #e6e9ef; -fx-text-fill: #4c4f69; }
 .scroll-bar > .track, .scroll-bar > .track-background { -fx-background-color: #eff1f5; }
-.scroll-bar > .thumb { -fx-background-color: #9ca0b0; }
+.scroll-bar > .thumb { -fx-background-color: #767676; }
 .scroll-bar > .thumb:hover { -fx-background-color: #7c7f93; }
 .theme-dark.root {
     -fx-base: #313244;
@@ -208,7 +208,7 @@
 .theme-dark .code-area .number { -fx-fill: #fab387; }
 .theme-dark .code-area .selection { -fx-highlight-fill: #5b3f85; }
 .theme-dark .terminal-transcript, .theme-dark .terminal-input,
-.theme-dark .terminal-transcript .content { -fx-background-color: #1e1e2e; }
+.theme-dark .terminal-transcript .content { -fx-background-color: #11111b; }
 .theme-dark .terminal-transcript, .theme-dark .terminal-input { -fx-highlight-fill: #5b3f85; -fx-highlight-text-fill: #cdd6f4; }
 .theme-dark .terminal-transcript .text, .theme-dark .terminal-input { -fx-text-fill: #cdd6f4; }
 .theme-dark .terminal-input .prompt-text { -fx-fill: #6c7086; }
