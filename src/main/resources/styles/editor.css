@@ -34,6 +34,13 @@
 .theme-dark .code-area .comment { -fx-fill: #6a9955; }
 .theme-dark .code-area .annotation { -fx-fill: #dcdcaa; }
 .theme-dark .code-area .number { -fx-fill: #b5cea8; }
+.theme-dark .terminal-transcript,
+.theme-dark .terminal-input { -fx-background-color: #1e1e1e; }
+.theme-dark .terminal-transcript .content { -fx-background-color: #1e1e1e; }
+.theme-dark .terminal-transcript .text,
+.theme-dark .terminal-input { -fx-text-fill: #d4d4d4; }
+.theme-dark .terminal-input .prompt-text { -fx-fill: #858585; }
+.theme-dark .terminal-input .caret { -fx-stroke: #d4d4d4; }
 .theme-dark .problem-error { -fx-text-fill: #ff8a80; }
 .theme-dark .problem-warning { -fx-text-fill: #e0b84a; }
 .theme-dark .prompt-venv { -fx-text-fill: #6abf69; }
@@ -76,6 +83,13 @@
 .theme-hc .code-area .comment { -fx-fill: #8fd18f; }
 .theme-hc .code-area .annotation { -fx-fill: #ffd866; }
 .theme-hc .code-area .number { -fx-fill: #c3ffa0; }
+.theme-hc .terminal-transcript,
+.theme-hc .terminal-input { -fx-background-color: #000000; }
+.theme-hc .terminal-transcript .content { -fx-background-color: #000000; }
+.theme-hc .terminal-transcript .text,
+.theme-hc .terminal-input { -fx-text-fill: #ffffff; }
+.theme-hc .terminal-input .prompt-text { -fx-fill: #cccccc; }
+.theme-hc .terminal-input .caret { -fx-stroke: #ffffff; }
 .theme-hc .problem-error { -fx-text-fill: #ff6b6b; }
 .theme-hc .problem-warning { -fx-text-fill: #ffd866; }
 .theme-hc.popup-pane { -fx-background-color: #000000; -fx-border-color: #ffffff; }

@@ -66,7 +66,9 @@ public final class TerminalPanel extends BorderPane {
         });
 
         transcript.setEditable(false);
+        transcript.getStyleClass().add("terminal-transcript");
         transcript.setStyle(MONO);
+        input.getStyleClass().add("terminal-input");
         input.setStyle(MONO);
         input.setPromptText("Type a command (no PTY: full-screen programs are unsupported)");
         prompt.setStyle(MONO);
