@@ -144,7 +144,7 @@ public final class App extends Application {
             status.setText(report == null ? "An unexpected error occurred." : "An unexpected error occurred; a report was saved to " + report)));
         this.primaryStage = stage;
         Dialogs.setOwner(stage);
-        stage.setTitle("Javelin");
+        stage.setTitle("Javelin IDE");
         applyIcon();
         projectTree.setShowRoot(true);
         projectTree.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
@@ -722,6 +722,8 @@ public final class App extends Application {
     private void openProjectDirectory(File directory) {
         if (!directory.isDirectory()) { showError("Could not open project", "The selected directory no longer exists."); return; }
         projectDirectory = directory.getAbsoluteFile();
+        String projectName = projectDirectory.getName();
+        primaryStage.setTitle("Javelin IDE - " + (projectName.isBlank() ? projectDirectory.getAbsolutePath() : projectName));
         settings.setProject(projectDirectory.toPath()); // reads <project>/.javelin-ide/settings.conf if there is one
         applySettings();
         addRecentProject(projectDirectory);
