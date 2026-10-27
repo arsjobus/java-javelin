@@ -51,6 +51,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.Clipboard;
+import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -90,6 +91,8 @@ public final class App extends Application {
     private static final String THEME_KEY = "theme";
     private static final String DEFAULT_TREE_EXCLUDES = ".git,target";
     private final TabPane tabs = new TabPane();
+    private ContextMenu tabContextMenu;
+    private boolean tabContextMenuOpen;
     private final TreeView<File> projectTree = new TreeView<>();
     private final ContextMenu treeMenu = new ContextMenu();
     private MenuItem renameTreeItem;
@@ -224,6 +227,7 @@ public final class App extends Application {
         root.setTop(createMenuBar(stage));
         root.setLeft(sidebar);
         bottomTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        installTabContextMenu();
         editorSplit.setOrientation(Orientation.VERTICAL);
         problems.setOnOpen(this::openProblem);
         references.setOnOpen(r -> openFile(r.file(), r.line(), r.column()));
@@ -238,6 +242,7 @@ public final class App extends Application {
         statusBar.setPadding(new Insets(4, 8, 4, 8));
         root.setBottom(statusBar);
         scene = new Scene(root, 1200, 760);
+        scene.addEventFilter(MouseEvent.MOUSE_PRESSED, this::dismissTabContextMenuOnOutsidePress);
         var css = getClass().getResource("/styles/editor.css");
         if (css != null) scene.getStylesheets().add(css.toExternalForm());
         installTheme();
@@ -980,6 +985,61 @@ public final class App extends Application {
     }
 
     private void closeCurrentTab() { Tab tab = tabs.getSelectionModel().getSelectedItem(); if (tab != null && confirmClose(tab)) tabs.getTabs().remove(tab); }
+
+    private void closeOtherTabs(Tab keep) {
+        if (!tabs.getTabs().contains(keep)) return;
+        List<Tab> others = TabHeaderTargets.others(tabs.getTabs(), keep);
+        for (Tab tab : others) {
+            if (!confirmClose(tab)) {
+                tabs.getSelectionModel().select(keep);
+                return;
+            }
+            tabs.getTabs().remove(tab);
+        }
+        tabs.getSelectionModel().select(keep);
+    }
+
+    /** Lets a tab be closed from its header without relying on which tab is currently selected. */
+    private void installTabContextMenu() {
+        tabs.addEventFilter(ContextMenuEvent.CONTEXT_MENU_REQUESTED, event -> {
+            Node header = event.getTarget() instanceof Node node ? tabHeader(node) : null;
+            if (header == null) return;
+            Node regionNode = tabs.lookup(".tab-header-area .headers-region");
+            if (!(regionNode instanceof Parent region)) return;
+            int index = region.getChildrenUnmodifiable().indexOf(header);
+            Tab target = TabHeaderTargets.at(tabs.getTabs(), index).orElse(null);
+            if (target == null) return;
+            MenuItem close = new MenuItem("Close this Tab");
+            close.setOnAction(e -> { if (confirmClose(target)) tabs.getTabs().remove(target); });
+            MenuItem closeOthers = new MenuItem("Close Other Tabs");
+            closeOthers.setOnAction(e -> closeOtherTabs(target));
+            ContextMenu menu = new ContextMenu(close, closeOthers);
+            menu.setConsumeAutoHidingEvents(true);
+            tabContextMenu = menu;
+            tabContextMenuOpen = true;
+            menu.setOnHidden(e -> Platform.runLater(() -> {
+                if (tabContextMenu == menu) {
+                    tabContextMenu = null;
+                    tabContextMenuOpen = false;
+                }
+            }));
+            menu.show(tabs, event.getScreenX(), event.getScreenY());
+            event.consume();
+        });
+    }
+
+    private void dismissTabContextMenuOnOutsidePress(MouseEvent event) {
+        if (!tabContextMenuOpen) return;
+        tabContextMenuOpen = false;
+        if (tabContextMenu != null && tabContextMenu.isShowing()) tabContextMenu.hide();
+        event.consume();
+    }
+
+    private Node tabHeader(Node node) {
+        for (Node current = node; current != null && current != tabs; current = current.getParent())
+            if (current.getStyleClass().contains("tab")) return current;
+        return null;
+    }
 
     private boolean confirmClose(Tab tab) {
         if (!Boolean.TRUE.equals(dirty.get(tab))) return true;
