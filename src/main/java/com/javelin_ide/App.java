@@ -49,6 +49,7 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.Clipboard;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -788,6 +789,7 @@ public final class App extends Application {
 
     private CodeArea createEditor() {
         CodeArea editor = new CodeArea();
+        installEditorContextMenu(editor);
         applyEditorPreferences(editor);
         editor.setOnKeyPressed(this::handleKeyPressed);
         // Filters, not handlers: they must run before RichTextFX's own key handling, and Tab also arrives as a separate
@@ -807,6 +809,48 @@ public final class App extends Application {
             }
         });
         return editor;
+    }
+
+    private void installEditorContextMenu(CodeArea editor) {
+        MenuItem copy = new MenuItem("Copy");
+        copy.setOnAction(event -> {
+            IndexRange selection = editor.getSelection();
+            if (selection.getLength() == 0) return;
+            ClipboardContent content = new ClipboardContent();
+            content.putString(editor.getText(selection.getStart(), selection.getEnd()));
+            Clipboard.getSystemClipboard().setContent(content);
+        });
+        MenuItem cut = new MenuItem("Cut");
+        cut.setOnAction(event -> {
+            IndexRange selection = editor.getSelection();
+            if (selection.getLength() == 0) return;
+            ClipboardContent content = new ClipboardContent();
+            content.putString(editor.getText(selection.getStart(), selection.getEnd()));
+            Clipboard.getSystemClipboard().setContent(content);
+            editor.replaceText(selection.getStart(), selection.getEnd(), "");
+        });
+        MenuItem paste = new MenuItem("Paste");
+        paste.setOnAction(event -> {
+            Clipboard clipboard = Clipboard.getSystemClipboard();
+            if (!clipboard.hasString()) return;
+            IndexRange selection = editor.getSelection();
+            editor.replaceText(selection.getStart(), selection.getEnd(), clipboard.getString());
+        });
+        ContextMenu menu = new ContextMenu(copy, cut, paste);
+        menu.setOnShowing(event -> {
+            boolean hasSelection = editor.getSelection().getLength() > 0;
+            copy.setDisable(!hasSelection);
+            cut.setDisable(!hasSelection);
+            paste.setDisable(!Clipboard.getSystemClipboard().hasString());
+        });
+        editor.setContextMenu(menu);
+        editor.addEventHandler(MouseEvent.MOUSE_PRESSED, event -> {
+            if (event.getButton() != MouseButton.SECONDARY) return;
+            IndexRange selection = editor.getSelection();
+            int hit = editor.hit(event.getX(), event.getY()).getInsertionIndex();
+            if (selection.getLength() > 0 && hit >= selection.getStart() && hit < selection.getEnd()) return;
+            editor.moveTo(hit);
+        });
     }
 
     /**
