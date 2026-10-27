@@ -46,15 +46,15 @@ class AppIconTest {
         BufferedImage icon = AppIcon.defaultIcon(256);
         assertEquals(0, alpha(icon, 0, 0));
         assertEquals(0, alpha(icon, 255, 255));
-        assertEquals(255, alpha(icon, 128, 20));   // body, above the mark
+        assertEquals(255, alpha(icon, 128, 38));   // body, above the mark and inside the safe margin
     }
 
-    @Test void builtInIconContainsALightMarkOnADarkBody() {
+    @Test void builtInIconContainsALightMarkOnAPurpleBody() {
         BufferedImage icon = AppIcon.defaultIcon(256);
-        int body = icon.getRGB(128, 20) & 0xFFFFFF, mark = icon.getRGB(51, 128) & 0xFFFFFF;   // 51,128 = the tip of the '<'
+        int body = icon.getRGB(128, 38) & 0xFFFFFF, mark = icon.getRGB(64, 128) & 0xFFFFFF;   // tip of the '<' after scaling
         assertNotEquals(body, mark);
         assertTrue((mark >> 16 & 0xFF) > 0xC0, "the mark is light");
-        assertTrue((body >> 16 & 0xFF) < 0x40, "the body is dark");
+        assertTrue((body & 0xFF) > (body >> 16 & 0xFF), "the body is purple");
     }
 
     @Test void builtInIconsAreOnePerSizeSmallestFirst() {

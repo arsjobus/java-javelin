@@ -20,7 +20,7 @@ import java.util.stream.Stream;
 public final class Themes {
     private Themes() {}
 
-    public static final String DEFAULT_ID = "light";
+    public static final String DEFAULT_ID = "light"; // PurpleBurple's Catppuccin Latte palette
     /** Every style class a theme may put on a root node, so they can all be cleared before applying another. */
     public static final List<String> ALL_CLASSES = List.of("theme-dark", "theme-hc", "theme-custom");
 
@@ -33,8 +33,8 @@ public final class Themes {
 
     public static List<Theme> builtIn() {
         return List.of(
-            new Theme("light", "Light", false, List.of(), null),
-            new Theme("dark", "Dark", true, List.of("theme-dark"), null),
+            new Theme("light", "PurpleBurple (Light)", false, List.of(), null),
+            new Theme("dark", "PurpleBurple (Dark)", true, List.of("theme-dark"), null),
             new Theme("high-contrast", "High Contrast", true, List.of("theme-dark", "theme-hc"), null));
     }
 

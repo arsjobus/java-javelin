@@ -11,7 +11,7 @@ public final class SettingsTemplates {
             # Remove the leading # from a line to enable it. Saving this file in the editor applies it immediately.
             # Project settings (<project>/.javelin-ide/settings.conf) override the editor.* values below.
 
-            # Theme: light, dark, high-contrast, or the name of a .css file in the themes folder next to this file.
+            # Theme: light (PurpleBurple), dark, high-contrast, or a .css file in themes/.
             #theme=light
 
             # Application icon: path to a PNG, JPEG or GIF (square, 512x512 or larger looks best). "~" is your home folder.

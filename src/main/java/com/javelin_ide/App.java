@@ -354,7 +354,7 @@ public final class App extends Application {
     // Everything is stored in plain files (see CUSTOMIZATION.md) and applied only on startup, after the Settings
     // dialog, or when a settings file is saved in the editor or reloaded explicitly.
 
-    /** Light is the default look; other themes add style classes (and, for custom themes, a stylesheet) to the scene root. */
+    /** PurpleBurple is the default look; other themes add style classes (and custom stylesheets) to the scene root. */
     private void installTheme() {
         // Dialogs open in their own scene, so they do not inherit this window's stylesheet or theme class.
         Window.getWindows().addListener((ListChangeListener<Window>) change -> {

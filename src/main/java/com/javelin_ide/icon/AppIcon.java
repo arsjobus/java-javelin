@@ -5,6 +5,7 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.GradientPaint;
 import java.awt.Graphics2D;
+import java.awt.RadialGradientPaint;
 import java.awt.RenderingHints;
 import java.awt.geom.Path2D;
 import java.awt.geom.RoundRectangle2D;
@@ -19,7 +20,7 @@ import java.util.List;
 import javax.imageio.ImageIO;
 
 /**
- * The application icon. The default is drawn in code (a rounded square with a {@code </>} mark), so it is compiled
+ * The application icon. The default is drawn in code (a purple rounded square with a {@code </>} mark), so it is compiled
  * in, needs no binary asset, looks the same on Windows, macOS and Linux, and is crisp at every size. The user can
  * replace it with their own image through the {@code app.icon} setting.
  *
@@ -48,14 +49,34 @@ public final class AppIcon {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
             double s = size;
-            g.setPaint(new GradientPaint(0, 0, new Color(0x2B6CB0), 0, size, new Color(0x1A365D)));
-            g.fill(new RoundRectangle2D.Double(s * 0.04, s * 0.04, s * 0.92, s * 0.92, s * 0.22, s * 0.22));
-            g.setColor(new Color(0xF7FAFC));
+            // Leave a Dock-style safe margin so the visible tile doesn't overpower neighboring app icons.
+            g.translate(s * 0.08, s * 0.08);
+            g.scale(0.84, 0.84);
+            RoundRectangle2D tile = new RoundRectangle2D.Double(s * 0.025, s * 0.025, s * 0.95, s * 0.95, s * 0.24, s * 0.24);
+            g.setPaint(new GradientPaint(0, 0, new Color(0x9C62E8), size, size, new Color(0x512DA8)));
+            g.fill(tile);
+            // A restrained violet glow and top sheen give the dark tile the soft depth of macOS Dock icons.
+            g.setComposite(AlphaComposite.SrcAtop);
+            g.setPaint(new RadialGradientPaint((float) (s * 0.52), (float) (s * 0.27), (float) (s * 0.78),
+                new float[] {0f, 0.52f, 1f}, new Color[] {
+                    new Color(128, 98, 196, 76), new Color(48, 35, 74, 30), new Color(28, 23, 36, 0)
+                }));
+            g.fill(tile);
+            g.setPaint(new GradientPaint(0, 0, new Color(255, 255, 255, 22), 0, (float) (s * 0.55), new Color(255, 255, 255, 0)));
+            g.fill(tile);
+            g.setComposite(AlphaComposite.SrcOver);
             g.setStroke(new BasicStroke((float) (s * 0.075), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             Path2D left = new Path2D.Double();   // <
             left.moveTo(s * 0.37, s * 0.30); left.lineTo(s * 0.20, s * 0.50); left.lineTo(s * 0.37, s * 0.70);
             Path2D right = new Path2D.Double();  // >
             right.moveTo(s * 0.63, s * 0.30); right.lineTo(s * 0.80, s * 0.50); right.lineTo(s * 0.63, s * 0.70);
+            g.setColor(new Color(20, 12, 30, 110));
+            g.translate(0, s * 0.009);
+            g.draw(left);
+            g.draw(right);
+            g.draw(new java.awt.geom.Line2D.Double(s * 0.55, s * 0.26, s * 0.45, s * 0.74));
+            g.translate(0, -s * 0.009);
+            g.setColor(new Color(0xFFF9FF));
             g.draw(left);
             g.draw(right);
             g.draw(new java.awt.geom.Line2D.Double(s * 0.55, s * 0.26, s * 0.45, s * 0.74));   // /
