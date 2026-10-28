@@ -140,7 +140,7 @@
     -fx-background-insets: 0 10 0 0;
 }
 
-/* PurpleBurple palettes (Catppuccin Latte by default, Mocha in dark mode). */
+/* BurpleNurple palettes (Catppuccin Latte by default, Mocha in dark mode). */
 .root {
     -fx-base: #e6e9ef;
     -fx-background: #eff1f5;
@@ -227,7 +227,7 @@
 .theme-dark:not(.theme-hc) .scroll-bar > .thumb { -fx-background-color: #585b70; }
 .theme-dark:not(.theme-hc) .scroll-bar > .thumb:hover { -fx-background-color: #6c7086; }
 
-/* Keep modal dialog actions on the PurpleBurple accent instead of JavaFX's platform blue. */
+/* Keep modal dialog actions on the BurpleNurple accent instead of JavaFX's platform blue. */
 .dialog-pane .button {
     -fx-background-color: #8839ef;
     -fx-text-fill: #ffffff;

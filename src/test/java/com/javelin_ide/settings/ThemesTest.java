@@ -22,6 +22,14 @@ class ThemesTest {
         assertTrue(Themes.ALL_CLASSES.containsAll(themes.get(2).styleClasses()));
     }
 
+    @Test void defaultThemeFamilyIsCalledBurpleNurple() {
+        List<Theme> themes = Themes.builtIn();
+        assertEquals("BurpleNurple (Light)", themes.get(0).name());
+        assertEquals("BurpleNurple (Dark)", themes.get(1).name());
+        assertTrue(themes.stream().noneMatch(t -> t.name().contains("PurpleBurple")));
+        assertEquals("light", Themes.DEFAULT_ID, "renaming the theme keeps the saved id, so existing settings still work");
+    }
+
     @Test void missingOrNullFolderGivesOnlyBuiltIns() {
         assertEquals(3, Themes.available(null).size());
         assertEquals(3, Themes.available(dir.resolve("nope")).size());

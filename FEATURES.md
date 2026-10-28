@@ -11,6 +11,7 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | Open, edit, save (atomic write), Save As, new document | File menu | `FileIOTest`, `ProjectWorkflowE2ETest.createEditSaveAndReopenAFile` |
 | Large files (warn at 1 MB, refuse above 32 MB) | automatic | `FileIOTest` |
 | Open a project folder, recent projects (last 8, missing folders hidden) | File > Open Project / Recent Projects, `javelin [dir]` | `RecentProjectsTest`, `LaunchArgumentsTest`, `ProjectWorkflowE2ETest.recentProjectsRememberWhatWasOpened` |
+| Switching to a different project first closes the previous project's files: each unsaved file asks Save / Discard / Cancel, and Cancel keeps the old project (and its remaining files) open. Reopening the same project leaves files alone | File > Open Project / Recent Projects | `ProjectChangeTest`, `ProjectSwitchE2ETest` |
 | One window per project, several at once | run `javelin` in each folder | `MultiInstanceTest`, `OpenRequestsTest` |
 | Opening a folder that another window already has asks first (Open Anyway / Cancel); a `javelin` window started only for such a folder closes on Cancel. A crashed window never leaves a project stuck | automatic | `ProjectInstancesTest`, `SameProjectTwiceE2ETest` (a real second process), `MultiInstanceTest` (wiring) |
 | Project tree: create, rename, move, delete (confined to the project) | right-click, drag | `ProjectFilesTest`, `TreeGesturesTest`, `ProjectWorkflowE2ETest` (rename/move/delete) |

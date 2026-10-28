@@ -378,7 +378,7 @@ public final class App extends Application {
     // Everything is stored in plain files (see CUSTOMIZATION.md) and applied only on startup, after the Settings
     // dialog, or when a settings file is saved in the editor or reloaded explicitly.
 
-    /** PurpleBurple is the default look; other themes add style classes (and custom stylesheets) to the scene root. */
+    /** BurpleNurple is the default look; other themes add style classes (and custom stylesheets) to the scene root. */
     private void installTheme() {
         // Dialogs open in their own scene, so they do not inherit this window's stylesheet or theme class.
         Window.getWindows().addListener((ListChangeListener<Window>) change -> {
@@ -776,6 +776,11 @@ public final class App extends Application {
     private boolean openProjectDirectory(File directory) {
         if (!directory.isDirectory()) { showError("Could not open project", "The selected directory no longer exists."); return false; }
         File nextProjectDirectory = directory.getAbsoluteFile();
+        // The previous project's files go first: each unsaved one is saved or discarded as the user chooses, then closed.
+        if (ProjectChange.replacesOpenProject(projectDirectory, nextProjectDirectory) && !closeAllTabs()) {
+            status.setText("Not opened: the previous project still has open files");
+            return false;
+        }
         if (!claimProject(nextProjectDirectory)) return false;
         ProjectChange.closeSessionsIfChanged(projectDirectory, nextProjectDirectory, terminals::closeAll);
         projectDirectory = nextProjectDirectory;
@@ -1135,6 +1140,11 @@ public final class App extends Application {
         if (result == save) { tabs.getSelectionModel().select(tab); saveCurrent(false); return !Boolean.TRUE.equals(dirty.get(tab)); }
         if (result == discard) { discardSnapshot(tab); return true; }
         return false;
+    }
+
+    /** Closes every tab, asking Save / Discard / Cancel for each unsaved one. Returns false (leaving the rest open) on Cancel. */
+    private boolean closeAllTabs() {
+        return ProjectChange.closeAllInOrder(tabs.getTabs(), this::confirmClose, tab -> tabs.getTabs().remove(tab));
     }
 
     private boolean confirmCloseDirtyTabs() { for (Tab tab : new ArrayList<>(tabs.getTabs())) if (!confirmClose(tab)) return false; return true; }
