@@ -115,7 +115,7 @@ Each open item above, with what would let it be ticked. Items marked *decision* 
 | Item | Already verified by | Still needed (proposed) |
 | --- | --- | --- |
 | Stable file/document model | `FileIOTest`, `RecoveryStoreTest`, `RecoverySessionTest` | Policy for non-UTF-8 files (today they cannot be opened); undo history and selection are not recovered (documented in BUGS.md) |
-| Stable project model | `ProjectFilesTest`, `ProjectWatcherTest`, `ProjectFinderTest`, `MultiInstanceTest` | Detect the same folder opened twice; instances share one settings file (last writer wins) |
+| Stable project model | `ProjectFilesTest`, `ProjectWatcherTest`, `ProjectFinderTest`, `MultiInstanceTest`, `ProjectInstancesTest`, `SameProjectTwiceE2ETest` (the same folder opened twice is detected) | Instances share one settings file (last writer wins) |
 | Reliable language integration | `LspTest`, `LanguageServiceTest`, `LanguageWorkflowE2ETest` (start, diagnostics, rename planned and applied to real files) | *Decision:* keep servers manual-start for 1.0 (documented) or add an explicit auto-start setting; `workspace/applyEdit` and code actions are listed as unsupported in BUGS.md |
 | Reliable build/run workflow | `BuildSystemTest`, `ProcessManagerTest`, `ProblemParserTest`, `BuildPipelineE2ETest` | A pipeline test per supported build tool that is installed on the CI machine; no PTY (documented limit) |
 | Git workflow | nothing (v0.6 was skipped) | *Decision:* build it, or move it out of 1.0 |
@@ -128,8 +128,8 @@ Each open item above, with what would let it be ticked. Items marked *decision* 
 tree, tabs, search, build/run, language and recovery). The rule in `AGENTS.md` is to keep UI wiring thin, so the order is
 logic first, wiring second, one slice per change, each with its own tests:
 
-1. Language: `TextEdits`, `RenamePlan` and `LanguageProblems` (done). Next: the completion-candidate maths in `showCompletions`.
+1. Language: `TextEdits`, `RenamePlan`, `LanguageProblems` and `Completions` (the completion-candidate maths) (done).
 2. Project tree: expanded-state and drop-target rules that do not need a `TreeItem`.
-3. Search and replace flow, go to line, bracket matching.
+3. Go to line and bracket matching: `LineNavigation` and `Brackets` (done). Still in `App`: the search and replace dialogs.
 4. Settings and themes application.
 5. Tabs and crash recovery wiring; then split `App` into a window class plus one controller per area.

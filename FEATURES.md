@@ -12,6 +12,7 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | Large files (warn at 1 MB, refuse above 32 MB) | automatic | `FileIOTest` |
 | Open a project folder, recent projects (last 8, missing folders hidden) | File > Open Project / Recent Projects, `javelin [dir]` | `RecentProjectsTest`, `LaunchArgumentsTest`, `ProjectWorkflowE2ETest.recentProjectsRememberWhatWasOpened` |
 | One window per project, several at once | run `javelin` in each folder | `MultiInstanceTest`, `OpenRequestsTest` |
+| Opening a folder that another window already has asks first (Open Anyway / Cancel); a `javelin` window started only for such a folder closes on Cancel. A crashed window never leaves a project stuck | automatic | `ProjectInstancesTest`, `SameProjectTwiceE2ETest` (a real second process), `MultiInstanceTest` (wiring) |
 | Project tree: create, rename, move, delete (confined to the project) | right-click, drag | `ProjectFilesTest`, `TreeGesturesTest`, `ProjectWorkflowE2ETest` (rename/move/delete) |
 | Tree follows outside changes (terminal, git, file manager) | automatic, ~2 s | `ProjectWatcherTest`, `ProjectWorkflowE2ETest.changesMadeOutsideTheEditorRefreshTheTree` |
 | Hide folders from tree and Go to File (`tree.exclude`) | settings | `NameListTest`, `ProjectWorkflowE2ETest.aProjectCanChangeWhatTheTreeHides` |
@@ -27,6 +28,9 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | Search, match case, replace | Edit menu | `TextSearchTest`, `ProjectWorkflowE2ETest.findAndReplaceAcrossASavedFile` |
 | Auto indentation, newline handling | typing | `IndentationTest`, `NewlineTest` |
 | Symbol under the caret (hover, definition, references, rename) | Language menu | `SymbolsTest`, `LanguageServiceTest` |
+| Go to Line (invalid numbers are refused); opening a Problem or Reference lands on the nearest valid line and column | Go to > Line | `LineNavigationTest`, `EditingWorkflowE2ETest` |
+| Matching bracket for `()`, `[]`, `{}` (selects both brackets; textual, see BUGS.md) | Go to > Matching Bracket | `BracketsTest`, `EditingWorkflowE2ETest.matchingABracketSelectsTheWholeBlock` |
+| Completion: the popup starts at the word before the caret; choosing replaces it plus anything typed since, and never uses a range outside the document | Language > Complete | `CompletionsTest`, `EditingWorkflowE2ETest` |
 
 ## Build, run, terminal
 

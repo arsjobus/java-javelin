@@ -84,7 +84,7 @@ javelin            # open the current folder as a project
 javelin ~/code/x   # open that folder
 ```
 
-Every call opens its own editor window (a new instance), so you can run `javelin` in several folders to edit several projects at once and switch between them with Cmd+Tab or the Dock. `packaging/macos/install.sh --uninstall` removes both.
+Every call opens its own editor window (a new instance), so you can run `javelin` in several folders to edit several projects at once and switch between them with Cmd+Tab or the Dock. If a folder is already open in another window you are asked before it is opened a second time (Cancel closes the new window). `packaging/macos/install.sh --uninstall` removes both.
 Settings are kept in `~/Library/Application Support/javelin-ide`.
 
 ## App icon

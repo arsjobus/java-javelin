@@ -86,5 +86,8 @@ Two rules keep customization from becoming ambient behavior: `theme` and `key.*`
 `App` is the JavaFX wiring and nothing else may be decided there that a test could decide. Logic that does not need a
 window lives in a JavaFX-free class and `App` calls it: `io.RecentProjects` (recent list), `io.ProjectFinder` (Go to
 File), `io.ProjectPaths` (display paths, URI to file), `editor.Symbols` (symbol under the caret) and
-`settings.NameList` (comma-separated settings). New behaviour follows the same rule, and `FEATURES.md` lists the test
+`settings.NameList` (comma-separated settings), `editor.Brackets` (bracket matching), `editor.LineNavigation` (Go to Line
+parsing and line/column clamping), `language.Completions` (where a completion goes, and where it lands after more typing)
+and `launch.ProjectInstances` (which folders other windows have open: one OS-locked file per project under
+`<config>/instances/`, so a crashed window never leaves a project marked open). New behaviour follows the same rule, and `FEATURES.md` lists the test
 that verifies it.

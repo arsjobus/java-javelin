@@ -1,7 +1,9 @@
 package com.javelin_ide;
 
 import com.javelin_ide.build.BuildSystem;
+import com.javelin_ide.editor.Brackets;
 import com.javelin_ide.editor.Indentation;
+import com.javelin_ide.editor.LineNavigation;
 import com.javelin_ide.editor.Symbols;
 import com.javelin_ide.editor.SyntaxHighlighter;
 import com.javelin_ide.editor.TextSearch;
@@ -21,6 +23,7 @@ import com.javelin_ide.build.Problem;
 import com.javelin_ide.build.ProblemParser;
 import com.javelin_ide.build.ProcessManager;
 import com.javelin_ide.build.ShellCommand;
+import com.javelin_ide.language.Completions;
 import com.javelin_ide.language.DiagnosticShifter;
 import com.javelin_ide.language.LanguageProblems;
 import com.javelin_ide.language.Languages;
@@ -37,6 +40,7 @@ import com.javelin_ide.settings.SettingsTemplates;
 import com.javelin_ide.settings.Themes;
 import com.javelin_ide.settings.Themes.Theme;
 import com.javelin_ide.launch.LaunchArguments;
+import com.javelin_ide.launch.ProjectInstances;
 import com.javelin_ide.ui.CompletionPopup;
 import com.javelin_ide.ui.Dialogs;
 import com.javelin_ide.ui.HoverPopup;
@@ -130,6 +134,9 @@ public final class App extends Application {
     // Notices files added, removed, renamed or moved outside the editor (terminal, build, git, file manager).
     private final ProjectWatcher treeWatcher = new ProjectWatcher(() -> this.treeExcludes, () -> Platform.runLater(this::refreshAfterOutsideChange));
     private File projectDirectory;
+    // Which folders other javelin IDE windows have open (see launch.ProjectInstances); this window's own claim is released when it switches project or exits.
+    private ProjectInstances instances;
+    private ProjectInstances.Claim projectClaim;
     private Scene scene;
     // v0.8 customization: plain-file settings (see CUSTOMIZATION.md). The java.util.prefs store still holds
     // recent projects, the last-used commands and, as a fallback for existing installs, the old theme choice.
@@ -273,7 +280,10 @@ public final class App extends Application {
     private void openFromCommandLine() {
         LaunchArguments.Result launch = LaunchArguments.parse(getParameters().getRaw(), Path.of("").toAbsolutePath());
         launch.problem().ifPresent(status::setText);
-        launch.directory().ifPresent(directory -> openProjectDirectory(directory.toFile()));
+        launch.directory().ifPresent(directory -> {
+            // A window started only to open a folder that is already open elsewhere has nothing else to show: close it.
+            if (!openProjectDirectory(directory.toFile()) && projectDirectory == null) Platform.exit();
+        });
     }
 
     /** Creates a menu item whose shortcut can be rebound: its id and default are registered with {@link #keys}. */
@@ -762,9 +772,11 @@ public final class App extends Application {
         File directory = Dialogs.guarded(() -> chooser.showDialog(stage)); if (directory != null) openProjectDirectory(directory);
     }
 
-    private void openProjectDirectory(File directory) {
-        if (!directory.isDirectory()) { showError("Could not open project", "The selected directory no longer exists."); return; }
+    /** Opens {@code directory} as this window's project. Returns false when nothing was opened (it is gone, or the user declined). */
+    private boolean openProjectDirectory(File directory) {
+        if (!directory.isDirectory()) { showError("Could not open project", "The selected directory no longer exists."); return false; }
         File nextProjectDirectory = directory.getAbsoluteFile();
+        if (!claimProject(nextProjectDirectory)) return false;
         ProjectChange.closeSessionsIfChanged(projectDirectory, nextProjectDirectory, terminals::closeAll);
         projectDirectory = nextProjectDirectory;
         String projectName = projectDirectory.getName();
@@ -774,6 +786,42 @@ public final class App extends Application {
         addRecentProject(projectDirectory);
         status.setText("Project: " + projectDirectory.getAbsolutePath());
         reportSettingsProblems(false);
+        return true;
+    }
+
+    /**
+     * Marks {@code directory} as open in this window. When another javelin IDE window already has it, asks before opening it
+     * a second time, because two windows would race on the same files. Never blocks opening because of a failure to check.
+     */
+    private boolean claimProject(File directory) {
+        if (projectClaim != null && projectClaim.project().equals(realPathOrSelf(directory))) return true; // reopening this window's own project
+        try {
+            if (instances == null) {
+                instances = new ProjectInstances(settings.userFile().getParent().resolve(ProjectInstances.DIRECTORY_NAME));
+                recoveryWriter.execute(() -> instances.prune(java.time.Duration.ofDays(30)));
+            }
+            Optional<ProjectInstances.Claim> claim = instances.claim(directory.toPath());
+            if (claim.isEmpty()) {
+                Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+                alert.setTitle("Project already open");
+                alert.setHeaderText(directory.getName() + " is already open in another javelin IDE window.");
+                alert.setContentText("Two windows on one folder can overwrite each other's changes. Open it here as well?");
+                ButtonType openAnyway = new ButtonType("Open Anyway"), cancel = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+                alert.getButtonTypes().setAll(openAnyway, cancel);
+                if (Dialogs.show(alert).orElse(cancel) != openAnyway) { status.setText("Not opened: already open in another window"); return false; }
+                if (projectClaim != null) { projectClaim.close(); projectClaim = null; } // this window no longer shows that project
+                return true; // and it does not own the new one: the other window keeps the claim
+            }
+            if (projectClaim != null) projectClaim.close();
+            projectClaim = claim.get();
+        } catch (IOException e) {
+            status.setText("Could not check whether the project is open in another window: " + e.getMessage());
+        }
+        return true;
+    }
+
+    private static Path realPathOrSelf(File directory) {
+        try { return directory.toPath().toRealPath(); } catch (IOException e) { return directory.toPath().toAbsolutePath().normalize(); }
     }
 
     private TreeItem<File> createTreeItem(File file) {
@@ -820,8 +868,8 @@ public final class App extends Application {
         Tab tab = tabs.getSelectionModel().getSelectedItem();
         if (tab == null || !file.equals(tab.getUserData())) return;
         currentEditor().ifPresent(a -> {
-            int paragraph = Math.max(0, Math.min(line - 1, a.getParagraphs().size() - 1));
-            a.moveTo(paragraph, Math.min(Math.max(0, column - 1), a.getParagraphLength(paragraph)));
+            LineNavigation.Position target = LineNavigation.clamp(line, column, a.getParagraphs().size(), a::getParagraphLength);
+            a.moveTo(target.paragraph(), target.column());
             a.requestFollowCaret(); a.requestFocus();
         });
     }
@@ -1169,11 +1217,9 @@ public final class App extends Application {
         currentEditor().ifPresent(a -> {
             TextInputDialog d = new TextInputDialog(String.valueOf(a.getCurrentParagraph() + 1));
             d.setTitle("Go to Line"); d.setHeaderText("Line number"); d.setContentText("Line:");
-            Dialogs.show(d).ifPresent(s -> {
-                try { int n = Integer.parseInt(s.trim()); if (n < 1 || n > a.getParagraphs().size()) throw new NumberFormatException();
-                    a.moveTo(n - 1, 0); a.requestFollowCaret(); status.setText("Line " + n);
-                } catch (NumberFormatException ex) { showError("Invalid line", "Enter a valid line number."); }
-            });
+            Dialogs.show(d).ifPresent(s -> LineNavigation.parseLine(s, a.getParagraphs().size()).ifPresentOrElse(
+                n -> { a.moveTo(n - 1, 0); a.requestFollowCaret(); status.setText("Line " + n); },
+                () -> showError("Invalid line", "Enter a valid line number.")));
         });
     }
 
@@ -1189,19 +1235,12 @@ public final class App extends Application {
 
     private void matchBracket() {
         currentEditor().ifPresent(a -> {
-            String s = a.getText(); int p = a.getCaretPosition();
-            int b = p < s.length() && "([{)]}".indexOf(s.charAt(p)) >= 0 ? p : (p > 0 && "([{)]}".indexOf(s.charAt(p - 1)) >= 0 ? p - 1 : -1);
-            if (b < 0) { status.setText("No bracket at caret"); return; }
-            char c = s.charAt(b), open = ")]}".indexOf(c) >= 0 ? "([{".charAt(")]}".indexOf(c)) : c;
-            char close = "([{".indexOf(c) >= 0 ? ")]}".charAt("([{".indexOf(c)) : c;
-            int dir = "([{".indexOf(c) >= 0 ? 1 : -1, depth = 0;
-            for (int i = b; i >= 0 && i < s.length(); i += dir) {
-                char x = s.charAt(i);
-                if (x == open) depth += dir;
-                else if (x == close) depth -= dir;
-                if (depth == 0) { a.selectRange(Math.min(b, i), Math.max(b, i) + 1); status.setText("Matching bracket"); return; }
-            }
-            status.setText("No matching bracket");
+            String text = a.getText();
+            OptionalInt at = Brackets.near(text, a.getCaretPosition());
+            if (at.isEmpty()) { status.setText("No bracket at caret"); return; }
+            Brackets.pair(text, at.getAsInt()).ifPresentOrElse(
+                pair -> { a.selectRange(pair.start(), pair.end()); status.setText("Matching bracket"); },
+                () -> status.setText("No matching bracket"));
         });
     }
 
@@ -1522,25 +1561,14 @@ public final class App extends Application {
         });
     }
 
-    private record Candidate(Lsp.CompletionItem item, int start, int end) {}
-
     private void showCompletions(CodeArea editor, List<Lsp.CompletionItem> items, int requestCaret) {
-        String text = editor.getText();
-        int wordStart = requestCaret;
-        while (wordStart > 0 && Character.isJavaIdentifierPart(text.charAt(wordStart - 1))) wordStart--;
+        Completions.Plan plan = Completions.plan(editor.getText(), requestCaret, items, position -> offsetOf(editor, position));
         List<CompletionPopup.Entry> entries = new ArrayList<>();
-        int popupStart = wordStart;
-        for (Lsp.CompletionItem item : items.stream().limit(500).toList()) {
-            int start = item.edit() != null ? offsetOf(editor, item.edit().range().start()) : wordStart;
-            int end = item.edit() != null ? offsetOf(editor, item.edit().range().end()) : requestCaret;
-            if (item.edit() != null) popupStart = start;
-            entries.add(new CompletionPopup.Entry(item.label(), item.detail(), item.filter(), new Candidate(item, start, end)));
-        }
-        completionPopup.show(editor, entries, popupStart, entry -> {
-            Candidate c = (Candidate) entry.payload();
-            int shift = editor.getCaretPosition() - requestCaret; // characters typed (or deleted) while the list was open
-            int end = Math.max(c.start(), Math.min(c.end() + shift, editor.getLength()));
-            editor.replaceText(Math.min(c.start(), editor.getLength()), end, c.item().text());
+        for (Completions.Candidate candidate : plan.candidates()) entries.add(new CompletionPopup.Entry(candidate.item().label(), candidate.item().detail(), candidate.item().filter(), candidate));
+        completionPopup.show(editor, entries, plan.popupStart(), entry -> {
+            // characters may have been typed (or deleted) while the list was open
+            Completions.Replacement change = Completions.replacement((Completions.Candidate) entry.payload(), requestCaret, editor.getCaretPosition(), editor.getLength());
+            editor.replaceText(change.start(), change.end(), change.text());
         }, this::popupStyler);
     }
 
@@ -1695,7 +1723,7 @@ public final class App extends Application {
 
     private void showError(String title, String message) { Alert a = new Alert(Alert.AlertType.ERROR); a.setTitle(title); a.setHeaderText(null); a.setContentText(message == null ? "Unknown error." : message); Dialogs.show(a); }
 
-    @Override public void stop() { treeWatcher.close(); if (autosave != null) autosave.stop(); recoveryWriter.shutdown(); language.stopAll(); processes.stopAll(); subscriptions.values().forEach(Subscription::unsubscribe); }
+    @Override public void stop() { if (projectClaim != null) projectClaim.close(); treeWatcher.close(); if (autosave != null) autosave.stop(); recoveryWriter.shutdown(); language.stopAll(); processes.stopAll(); subscriptions.values().forEach(Subscription::unsubscribe); }
 
     public static void main(String[] args) { launch(args); }
 }

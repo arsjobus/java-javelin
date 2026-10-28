@@ -42,4 +42,31 @@ class MultiInstanceTest {
         assertFalse(app.contains("OpenRequests"), "with several windows, whichever polled first would take the folder");
         assertFalse(app.contains("requestPoll"));
     }
+
+    @Test void theAppClaimsTheProjectBeforeOpeningItAndReleasesItOnExit() throws IOException {
+        String app = Files.readString(APP);
+        int open = app.indexOf("private boolean openProjectDirectory(File directory)");
+        assertTrue(open >= 0);
+        int claim = app.indexOf("claimProject(", open);
+        int assign = app.indexOf("projectDirectory = nextProjectDirectory", open);
+        assertTrue(claim > open && claim < assign, "the folder must be claimed before the window starts showing it");
+        assertTrue(app.contains("instances.claim("), "the check goes through launch.ProjectInstances");
+        int stop = app.indexOf("public void stop()");
+        assertTrue(app.indexOf("projectClaim.close()", stop) > stop, "a clean exit gives the project back at once");
+    }
+
+    @Test void aWindowStartedOnlyForAnAlreadyOpenFolderClosesWhenTheUserDeclines() throws IOException {
+        String app = Files.readString(APP);
+        int method = app.indexOf("private void openFromCommandLine()");
+        int exit = app.indexOf("Platform.exit()", method);
+        assertTrue(exit > method && exit < app.indexOf("private MenuItem bound(", method));
+    }
+
+    @Test void completionBracketAndLineLogicLivesOutsideTheWindowClass() throws IOException {
+        String app = Files.readString(APP);
+        assertTrue(app.contains("Completions.plan(") && app.contains("Completions.replacement("));
+        assertTrue(app.contains("Brackets.near(") && app.contains("Brackets.pair("));
+        assertTrue(app.contains("LineNavigation.parseLine(") && app.contains("LineNavigation.clamp("));
+        assertFalse(app.contains("\"([{)]}\""), "the bracket tables belong to editor.Brackets");
+    }
 }
