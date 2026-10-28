@@ -22,9 +22,12 @@ import com.javelin_ide.build.ProblemParser;
 import com.javelin_ide.build.ProcessManager;
 import com.javelin_ide.build.ShellCommand;
 import com.javelin_ide.language.DiagnosticShifter;
+import com.javelin_ide.language.LanguageProblems;
 import com.javelin_ide.language.Languages;
 import com.javelin_ide.language.LanguageService;
 import com.javelin_ide.language.Lsp;
+import com.javelin_ide.language.RenamePlan;
+import com.javelin_ide.language.TextEdits;
 import com.javelin_ide.settings.DefaultShortcuts;
 import com.javelin_ide.settings.EditorPreferences;
 import com.javelin_ide.settings.Keybindings;
@@ -1346,12 +1349,7 @@ public final class App extends Application {
             File file = toFile(uri);
             if (file == null) return;
             if (reported.isEmpty()) diagnostics.remove(file); else diagnostics.put(file, reported);
-            List<Problem> list = new ArrayList<>();
-            for (Lsp.Diagnostic d : reported) {
-                Problem.Severity severity = d.severity() == Lsp.Diagnostic.ERROR ? Problem.Severity.ERROR : Problem.Severity.WARNING;
-                String text = d.source() == null ? d.message() : d.message() + "  [" + d.source() + "]";
-                list.add(new Problem(severity, displayPath(file), d.range().start().line() + 1, d.range().start().character() + 1, text.replace('\n', ' ')));
-            }
+            List<Problem> list = LanguageProblems.toProblems(displayPath(file), reported);
             problems.replace("language:" + file.getPath(), list);
             CodeArea editor = editorFor(file);
             if (editor != null) highlight(editor);
@@ -1664,49 +1662,27 @@ public final class App extends Application {
     /** Shows the server's proposed edits and, on approval, applies them to editor tabs. Nothing is written to disk. */
     private void applyRename(String oldName, String newName, Lsp.WorkspaceEdit edit) {
         if (edit.unsupported()) { showError("Rename", "The language server also asked to create, rename or delete files, which javelin IDE never does automatically. Nothing was changed."); return; }
-        Map<File, List<Lsp.TextEdit>> byFile = new LinkedHashMap<>();
-        int skipped = 0;
-        for (Map.Entry<URI, List<Lsp.TextEdit>> e : edit.changes().entrySet()) {
-            File file = toFile(e.getKey());
-            if (file == null) skipped += e.getValue().size(); else byFile.put(file, e.getValue());
-        }
-        int total = byFile.values().stream().mapToInt(List::size).sum();
+        RenamePlan plan = RenamePlan.of(edit, App::toFile);
+        int total = plan.total();
         if (total == 0) { status.setText("The server proposed no changes"); return; }
-        StringBuilder summary = new StringBuilder("Rename " + oldName + " to " + newName + ": " + total + " edit(s) in " + byFile.size() + " file(s).\n\n");
-        int shown = 0;
-        for (Map.Entry<File, List<Lsp.TextEdit>> e : byFile.entrySet()) {
-            if (shown++ == 15) { summary.append("  ...\n"); break; }
-            summary.append("  ").append(displayPath(e.getKey())).append("  (").append(e.getValue().size()).append(")\n");
-        }
-        if (skipped > 0) summary.append("\n").append(skipped).append(" edit(s) in non-file locations will be skipped.\n");
-        summary.append("\nFiles that are not open will be opened in tabs. The changes stay unsaved, so you can review and undo them.");
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         ButtonType apply = new ButtonType("Apply"), cancel = ButtonType.CANCEL;
-        confirm.setTitle("Rename Symbol"); confirm.setHeaderText("Apply rename?"); confirm.setContentText(summary.toString());
+        confirm.setTitle("Rename Symbol"); confirm.setHeaderText("Apply rename?"); confirm.setContentText(plan.summary(oldName, newName, this::displayPath));
         confirm.getButtonTypes().setAll(apply, cancel);
         if (Dialogs.show(confirm).orElse(cancel) != apply) { status.setText("Rename cancelled"); return; }
-        for (Map.Entry<File, List<Lsp.TextEdit>> e : byFile.entrySet()) {
+        for (Map.Entry<File, List<Lsp.TextEdit>> e : plan.byFile().entrySet()) {
             openFile(e.getKey());
             CodeArea editor = editorFor(e.getKey());
             if (editor == null) continue;
-            List<int[]> spans = new ArrayList<>(); // {start, end, edit index}
-            List<Lsp.TextEdit> edits = e.getValue();
-            for (int i = 0; i < edits.size(); i++) spans.add(new int[] {offsetOf(editor, edits.get(i).range().start()), offsetOf(editor, edits.get(i).range().end()), i});
-            spans.sort((a, b) -> Integer.compare(b[0], a[0])); // bottom to top so earlier offsets stay valid
-            for (int[] span : spans) replaceMinimal(editor, span[0], span[1], edits.get(span[2]).newText());
+            for (TextEdits.Change c : TextEdits.resolve(editor.getText(), e.getValue())) replaceMinimal(editor, c.start(), c.end(), c.text());
         }
         status.setText("Renamed " + oldName + " to " + newName + " (" + total + " edit(s), unsaved)");
     }
  
     /** Replaces a range but leaves untouched the leading and trailing text that is identical, so whole-file edits stay small. */
     private void replaceMinimal(CodeArea editor, int start, int end, String replacement) {
-        String old = editor.getText(start, end);
-        int prefix = 0, max = Math.min(old.length(), replacement.length());
-        while (prefix < max && old.charAt(prefix) == replacement.charAt(prefix)) prefix++;
-        int suffix = 0;
-        while (suffix < max - prefix && old.charAt(old.length() - 1 - suffix) == replacement.charAt(replacement.length() - 1 - suffix)) suffix++;
-        if (prefix == old.length() && prefix == replacement.length()) return;
-        editor.replaceText(start + prefix, end - suffix, replacement.substring(prefix, replacement.length() - suffix));
+        TextEdits.Change c = TextEdits.minimal(editor.getText(start, end), replacement);
+        if (c != null) editor.replaceText(start + c.start(), start + c.end(), c.text());
     }
 
     private List<String> recentProjects() {

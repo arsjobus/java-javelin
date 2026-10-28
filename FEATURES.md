@@ -42,6 +42,8 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | Feature | Verified by |
 | --- | --- |
 | Diagnostics, completion, hover, definition, references, rename, signature help, symbols, formatting | `LspTest`, `LanguageServiceTest`, `JsonRpcTest`, `DiagnosticShifterTest`, `TextDocumentTest` (a real child process, `FakeLanguageServer`) |
+| Server diagnostics become Problems entries (errors stay errors, positions 1-based, source shown) | `LanguageProblemsTest`, `LanguageWorkflowE2ETest.diagnosticsReachTheProblemsPanelWithProjectRelativePaths` |
+| Rename: the proposed edits are grouped by file and summarized before anything changes, then applied as small replacements to editor tabs (unsaved). Several inserts at one position keep the server's order | `RenamePlanTest`, `TextEditsTest`, `LanguageWorkflowE2ETest.aRenameIsPlannedShownAndAppliedToEveryAffectedFile` |
 
 ## Customization
 

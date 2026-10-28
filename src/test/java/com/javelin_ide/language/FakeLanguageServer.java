@@ -14,7 +14,8 @@ import java.util.concurrent.CountDownLatch;
  * Every message it receives is appended to the log as {@code N <method> <params>} (notification),
  * {@code R <method>} (request) or {@code S <method> <result>} (the client's answer to a request it sent).
  * Modes: full, fullsync, syncobj, nosync, none, probe (full + server-initiated traffic), crash, die-on-init,
- * stubborn (initializes normally, then never answers shutdown and never exits).
+ * stubborn (initializes normally, then never answers shutdown and never exits), workspace (full; a rename answers with
+ * edits for the document itself and for a sibling B.java in the same folder, to be applied to real files).
  */
 public final class FakeLanguageServer {
     private static final String RANGE = "{\"start\":{\"line\":1,\"character\":2},\"end\":{\"line\":1,\"character\":5}}";
@@ -63,7 +64,10 @@ public final class FakeLanguageServer {
             case "textDocument/completion" -> { return Json.parse("{\"items\":[{\"label\":\"foo\",\"insertText\":\"foo($1)\",\"insertTextFormat\":2}]}"); }
             case "textDocument/hover" -> { return Json.parse("{\"contents\":{\"kind\":\"markdown\",\"value\":\"**hover** text\"}}"); }
             case "textDocument/definition", "textDocument/references" -> { return Json.parse("[{\"uri\":\"file:///def.java\",\"range\":" + RANGE + "}]"); }
-            case "textDocument/rename" -> { return Json.parse("{\"changes\":{\"file:///a.java\":[{\"range\":" + RANGE + ",\"newText\":\"" + Json.string(params, "newName") + "\"}]}}"); }
+            case "textDocument/rename" -> {
+                if (mode.equals("workspace")) return workspaceRename(params);
+                return Json.parse("{\"changes\":{\"file:///a.java\":[{\"range\":" + RANGE + ",\"newText\":\"" + Json.string(params, "newName") + "\"}]}}");
+            }
             case "textDocument/signatureHelp" -> { return Json.parse("{\"signatures\":[{\"label\":\"f(a)\",\"parameters\":[{\"label\":\"a\"}]}]}"); }
             case "textDocument/documentSymbol" -> { return Json.parse("[{\"name\":\"Main\",\"kind\":5,\"range\":" + RANGE + ",\"selectionRange\":" + RANGE + "}]"); }
             case "textDocument/formatting" -> { return Json.parse("[{\"range\":" + RANGE + ",\"newText\":\"formatted\"}]"); }
@@ -85,6 +89,16 @@ public final class FakeLanguageServer {
         for (String p : new String[] {"completionProvider", "hoverProvider", "definitionProvider", "referencesProvider", "renameProvider", "signatureHelpProvider", "documentSymbolProvider", "documentFormattingProvider"})
             caps.put(p, p.equals("hoverProvider") ? (Object) true : Json.obj());
         return caps;
+    }
+
+    /** The document's own occurrences plus a sibling file's, all at {@link #RANGE}, and a header line inserted at the top. */
+    private static Object workspaceRename(Object params) {
+        String uri = Json.string(Json.get(params, "textDocument"), "uri");
+        String sibling = uri.substring(0, uri.lastIndexOf('/') + 1) + "B.java";
+        String name = Json.string(params, "newName");
+        Object occurrence = Json.obj("range", Json.parse(RANGE), "newText", name);
+        Object header = Json.obj("range", Json.parse("{\"start\":{\"line\":0,\"character\":0},\"end\":{\"line\":0,\"character\":0}}"), "newText", "// renamed to " + name + "\n");
+        return Json.obj("changes", Json.obj(uri, List.of(occurrence, header), sibling, List.of(occurrence)));
     }
 
     /** Server-initiated traffic: requests the client must answer and notifications it must tolerate. */

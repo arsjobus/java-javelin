@@ -71,6 +71,8 @@ Prefer fewer dependencies.
 
 `com.javelin_ide.language` is JavaFX-free. `LanguageService` tracks open documents and routes them to user-started servers; `LanguageServerSession` owns one server process and the protocol handshake; `JsonRpc` and `Json` are a small stdio JSON-RPC client written against the JDK, because an LSP client needs very little JSON and the dependency rule asks for a reason to add one. `App` only translates between editor state and this package.
 
+The text and planning logic that used to sit inside `App` now lives here as small static helpers: `TextEdits` (line/character to offset, ordering and applying server edits, the minimal change between two strings), `RenamePlan` (a rename proposal grouped by local file, with the text of the confirmation) and `LanguageProblems` (diagnostics to Problems entries). `App` still decides when to call them and shows the result.
+
 Beyond the v0.5 roadmap items, `LanguageServerSession` also offers signature help, document symbols and whole-document formatting. Each is an explicit menu command under Language; formatting edits are applied to the editor buffer only (unsaved, undoable) and are discarded if the text changed while the server was working.
 
 ## Customization (v0.8)
