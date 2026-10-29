@@ -1190,7 +1190,7 @@ public final class App extends Application {
             d.getDialogPane().setContent(new VBox(8, new Label("Search:"), query, matchCase));
             d.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
             d.setResultConverter(button -> button == ButtonType.OK ? query.getText() : null);
-            d.setOnShown(e -> query.requestFocus());
+            d.setOnShown(e -> Platform.runLater(() -> { query.requestFocus(); query.selectAll(); }));
             Dialogs.show(d).filter(s -> !s.isEmpty()).ifPresent(q -> {
                 lastSearch = q;
                 boolean ignoreCase = !searchCaseSensitive;
@@ -1233,8 +1233,10 @@ public final class App extends Application {
             f.getDialogPane().setContent(new VBox(8, new Label("Find:"), findField, ignoreCase));
             f.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
             f.setResultConverter(button -> button == ButtonType.OK ? findField.getText() : null);
+            f.setOnShown(e -> Platform.runLater(() -> { findField.requestFocus(); findField.selectAll(); }));
             Optional<String> q = Dialogs.show(f); if (q.isEmpty() || q.get().isEmpty()) return;
             TextInputDialog r = new TextInputDialog(); r.setTitle("Replace"); r.setHeaderText("Replacement text"); r.setContentText("Replace with:");
+            r.setOnShown(e -> Platform.runLater(() -> { r.getEditor().requestFocus(); r.getEditor().selectAll(); }));
             Dialogs.show(r).ifPresent(v -> {
                 String original = a.getText();
                 String replaced = TextSearch.replace(original, q.get(), v, ignoreCase.isSelected());
