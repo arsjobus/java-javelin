@@ -39,6 +39,8 @@
     </dependencies>
 
     <build>
+        <!-- The jar keeps the product spelling (Javelin, capital J); packaging/macos/build-app.sh picks it up by this name. -->
+        <finalName>Javelin-IDE-${project.version}</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

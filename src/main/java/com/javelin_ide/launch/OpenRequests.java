@@ -12,13 +12,13 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 /**
- * How the {@code javelin} terminal command hands a folder to an editor window that is already running.
+ * How the {@code Javelin} terminal command hands a folder to an editor window that is already running.
  *
- * <p>macOS does not pass new command-line arguments to a running app, and javelin IDE never opens a network socket
+ * <p>macOS does not pass new command-line arguments to a running app, and Javelin IDE never opens a network socket
  * (see {@code OfflineGuardTest}), so the command drops a small file into a folder under the config directory and the
  * running app picks it up within a second. The file is named {@code <something>.request} and holds one line: the
  * absolute path of the directory to open. It is written under a temporary name and renamed, so the app never sees a
- * half-written request. {@code packaging/macos/javelin} writes the same format from the shell.
+ * half-written request. {@code packaging/macos/Javelin} writes the same format from the shell.
  */
 public final class OpenRequests {
     /** Name of the folder, inside the config directory, that holds pending requests. */

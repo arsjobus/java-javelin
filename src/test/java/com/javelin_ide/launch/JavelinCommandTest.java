@@ -17,10 +17,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Runs the real {@code packaging/macos/javelin} script with stand-ins for macOS's {@code open} and {@code pgrep}, so
+ * Runs the real {@code packaging/macos/Javelin} script with stand-ins for macOS's {@code open} and {@code pgrep}, so
  * what it hands to the app is checked on any Unix machine, and checks that every macOS packaging script is valid shell.
  */
-class JavalinCommandTest {
+class JavelinCommandTest {
     private static final Path SCRIPTS = Path.of("packaging", "macos");
 
     @TempDir Path work;
@@ -30,7 +30,7 @@ class JavalinCommandTest {
 
     @BeforeEach void setUp() throws IOException {
         assumeTrue(!System.getProperty("os.name").toLowerCase().contains("win"), "shell scripts");
-        assertTrue(Files.isRegularFile(SCRIPTS.resolve("javelin")), "run the tests from the project root");
+        assertTrue(Files.isRegularFile(SCRIPTS.resolve("Javelin")), "run the tests from the project root");
         stubs = Files.createDirectory(work.resolve("stubs"));
         log = work.resolve("open.log");
         config = work.resolve("config");
@@ -46,12 +46,12 @@ class JavalinCommandTest {
     }
 
     private Outcome run(Path cwd, Map<String, String> env, String... args) throws Exception {
-        List<String> command = new ArrayList<>(List.of("sh", SCRIPTS.resolve("javelin").toAbsolutePath().toString()));
+        List<String> command = new ArrayList<>(List.of("sh", SCRIPTS.resolve("Javelin").toAbsolutePath().toString()));
         command.addAll(List.of(args));
         ProcessBuilder pb = new ProcessBuilder(command).directory(cwd.toFile());
         pb.environment().put("PATH", stubs + ":/usr/bin:/bin");
         pb.environment().put("STUB_LOG", log.toString());
-        pb.environment().put("JAVALIN_IDE_CONFIG_DIR", config.toString());
+        pb.environment().put("JAVELIN_IDE_CONFIG_DIR", config.toString());
         pb.environment().putAll(env);
         pb.redirectOutput(work.resolve("stdout.txt").toFile()).redirectError(work.resolve("stderr.txt").toFile());
         Process p = pb.start();
@@ -64,7 +64,7 @@ class JavalinCommandTest {
     @Test void startsTheAppWithTheCurrentDirectoryWhenItIsNotRunning() throws Exception {
         Outcome o = run(project, Map.of());
         assertEquals(0, o.exit(), o.err());
-        assertEquals(List.of("-n", "-a", "javelin IDE", "--args", project.toRealPath().toString()), openCalls());
+        assertEquals(List.of("-n", "-a", "Javelin IDE", "--args", project.toRealPath().toString()), openCalls());
         assertFalse(Files.exists(config.resolve("open-requests")), "nothing to hand over: the argument carries it");
     }
 
@@ -72,13 +72,13 @@ class JavalinCommandTest {
         Files.createDirectories(work.resolve("a/b"));
         Outcome o = run(work.resolve("a"), Map.of(), "b/../b");
         assertEquals(0, o.exit(), o.err());
-        assertEquals(List.of("-n", "-a", "javelin IDE", "--args", work.resolve("a/b").toRealPath().toString()), openCalls());
+        assertEquals(List.of("-n", "-a", "Javelin IDE", "--args", work.resolve("a/b").toRealPath().toString()), openCalls());
     }
 
     @Test void aRunningAppIsNotReusedTheFolderGetsItsOwnInstance() throws Exception {
-        Outcome o = run(project, Map.of("STUB_RUNNING", "1"));   // pgrep says javelin IDE is already running
+        Outcome o = run(project, Map.of("STUB_RUNNING", "1"));   // pgrep says Javelin IDE is already running
         assertEquals(0, o.exit(), o.err());
-        assertEquals(List.of("-n", "-a", "javelin IDE", "--args", project.toRealPath().toString()), openCalls(),
+        assertEquals(List.of("-n", "-a", "Javelin IDE", "--args", project.toRealPath().toString()), openCalls(),
             "-n starts a new instance; without it macOS would drop --args for a running app and show the old window");
         assertFalse(Files.exists(config.resolve("open-requests")), "no request file: the running window is not involved");
     }
@@ -90,9 +90,9 @@ class JavalinCommandTest {
         assertEquals(0, run(second, Map.of("STUB_RUNNING", "1")).exit());   // the first instance is up by now
         assertEquals(0, run(work, Map.of("STUB_RUNNING", "1"), "third").exit());
         assertEquals(List.of(
-            "-n", "-a", "javelin IDE", "--args", project.toRealPath().toString(),
-            "-n", "-a", "javelin IDE", "--args", second.toRealPath().toString(),
-            "-n", "-a", "javelin IDE", "--args", third.toRealPath().toString()), openCalls());
+            "-n", "-a", "Javelin IDE", "--args", project.toRealPath().toString(),
+            "-n", "-a", "Javelin IDE", "--args", second.toRealPath().toString(),
+            "-n", "-a", "Javelin IDE", "--args", third.toRealPath().toString()), openCalls());
     }
 
     @Test void aFileOrMissingPathIsRefused() throws Exception {
@@ -116,7 +116,7 @@ class JavalinCommandTest {
         for (String flag : List.of("-h", "--help")) {
             Outcome o = run(work, Map.of(), flag);
             assertEquals(0, o.exit());
-            assertTrue(o.out().startsWith("usage: javelin [directory]"), o.out());
+            assertTrue(o.out().startsWith("usage: Javelin [directory]"), o.out());
         }
         assertEquals(List.of(), openCalls());
     }
@@ -128,7 +128,7 @@ class JavalinCommandTest {
     }
 
     @Test void everyPackagingScriptIsValidShellAndTheCommandIsExecutable() throws Exception {
-        for (String name : List.of("javelin", "build-app.sh", "install.sh")) {
+        for (String name : List.of("Javelin", "build-app.sh", "install.sh")) {
             Path script = SCRIPTS.resolve(name);
             assertTrue(Files.isExecutable(script), name + " must be executable");
             Process p = new ProcessBuilder("sh", "-n", script.toString()).redirectErrorStream(true).start();

@@ -18,14 +18,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Running {@code javelin} twice in one folder: the second window must find out that the first one has the project,
+ * Running {@code Javelin} twice in one folder: the second window must find out that the first one has the project,
  * and must be able to have it once the first window is gone, however that window ended. The "first window" is a real
  * separate process, because the lock that carries this between windows is an operating-system lock.
  */
 class SameProjectTwiceE2ETest {
     @TempDir Path home;
 
-    /** What the first javelin IDE window does: claim the project, then stay open until killed. */
+    /** What the first Javelin IDE window does: claim the project, then stay open until killed. */
     public static final class FirstWindow {
         public static void main(String[] args) throws Exception {
             ProjectInstances.Claim claim = new ProjectInstances(Path.of(args[0])).claim(Path.of(args[1])).orElseThrow();

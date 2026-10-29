@@ -1,5 +1,6 @@
 package com.javelin_ide.language;
 
+import com.javelin_ide.Branding;
 import com.javelin_ide.build.ShellCommand;
 import com.javelin_ide.build.ShellEnvironment;
 
@@ -102,7 +103,7 @@ public final class LanguageServerSession {
         // applyEdit stays off: edits proposed by a server are never applied without the user seeing them first.
         Map<String, Object> workspace = Json.obj("workspaceFolders", true, "configuration", false, "applyEdit", false);
         List<Object> folders = root == null ? List.of() : List.of(Json.obj("uri", rootUri.toString(), "name", root.getName()));
-        return Json.obj("processId", ProcessHandle.current().pid(), "clientInfo", Json.obj("name", "javelin IDE"),
+        return Json.obj("processId", ProcessHandle.current().pid(), "clientInfo", Json.obj("name", Branding.FULL_NAME),
             "rootUri", rootUri == null ? null : rootUri.toString(), "workspaceFolders", root == null ? null : folders,
             "capabilities", Json.obj("textDocument", textDocument, "workspace", workspace));
     }
@@ -227,7 +228,7 @@ public final class LanguageServerSession {
                 return answers;
             }
             case "workspace/workspaceFolders" -> { return root == null ? null : List.of(Json.obj("uri", root.toURI().toString(), "name", root.getName())); }
-            case "workspace/applyEdit" -> { return Json.obj("applied", false, "failureReason", "javelin IDE applies edits only when the user asks for them."); }
+            case "workspace/applyEdit" -> { return Json.obj("applied", false, "failureReason", Branding.FULL_NAME + " applies edits only when the user asks for them."); }
             case "client/registerCapability", "client/unregisterCapability", "window/workDoneProgress/create", "window/showMessageRequest" -> { return null; }
             default -> throw new JsonRpc.RpcException(-32601, "Method not supported: " + method);
         }

@@ -8,13 +8,13 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 /**
- * Running {@code javelin} in several folders must give several independent editor windows. The windows themselves
+ * Running {@code Javelin} in several folders must give several independent editor windows. The windows themselves
  * have no automated tests (see HARDENING.md), so these check the wiring that makes that safe, in the same way
  * {@code DialogOwnershipTest} checks the dialog wiring.
  */
 class MultiInstanceTest {
     private static final Path APP = Path.of("src", "main", "java", "com", "javelin_ide", "App.java");
-    private static final Path COMMAND = Path.of("packaging", "macos", "javelin");
+    private static final Path COMMAND = Path.of("packaging", "macos", "Javelin");
 
     @Test void theCommandAlwaysStartsANewInstance() throws IOException {
         String script = Files.readString(COMMAND);

@@ -1,5 +1,6 @@
 package com.javelin_ide.io;
 
+import com.javelin_ide.Branding;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -31,7 +32,7 @@ public final class CrashLog {
         for (int n = 1; Files.exists(file); n++) file = directory.resolve("crash-" + STAMP.format(now) + "-" + n + ".log");
         StringWriter trace = new StringWriter();
         error.printStackTrace(new PrintWriter(trace));
-        Files.writeString(file, "javelin IDE crash report\n"
+        Files.writeString(file, Branding.FULL_NAME + " crash report\n"
             + "time: " + now + "\nthread: " + threadName + "\n"
             + "java: " + System.getProperty("java.version") + " (" + System.getProperty("java.vendor") + ")\n"
             + "os: " + System.getProperty("os.name") + " " + System.getProperty("os.version") + " " + System.getProperty("os.arch") + "\n\n"

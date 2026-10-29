@@ -1,18 +1,18 @@
 #!/bin/sh
-# javelin - open a directory as a project in javelin IDE (macOS).
+# Javelin - open a directory as a project in Javelin IDE (macOS).
 #
-#   javelin            open the current directory
-#   javelin path/to/x  open that directory
+#   Javelin            open the current directory
+#   Javelin path/to/x  open that directory
 #
-# Every call starts its own javelin IDE instance (open -n) with the directory as its argument, so running 'javelin'
+# Every call starts its own Javelin IDE instance (open -n) with the directory as its argument, so running 'Javelin'
 # in several folders gives one editor window per project, each with its own Dock icon and Cmd+Tab entry to switch
 # between. macOS passes --args to a new instance only, which is why a running instance is never reused.
 set -eu
 
-APP_NAME="${JAVALIN_IDE_APP_NAME:-javelin IDE}"
+APP_NAME="${JAVELIN_IDE_APP_NAME:-Javelin IDE}"
 
 usage() {
-  echo "usage: javelin [directory]"
+  echo "usage: Javelin [directory]"
   echo "Opens the directory (default: the current one) as a project in $APP_NAME."
 }
 
@@ -21,22 +21,22 @@ case "${1-}" in
 esac
 
 if [ "$#" -gt 1 ]; then
-  echo "javelin: expected at most one directory" >&2
+  echo "Javelin: expected at most one directory" >&2
   usage >&2
   exit 2
 fi
 
 target="${1:-.}"
 if [ ! -d "$target" ]; then
-  echo "javelin: not a directory: $target" >&2
+  echo "Javelin: not a directory: $target" >&2
   exit 1
 fi
 dir=$(cd "$target" && pwd -P)
 
 not_installed() {
-  echo "javelin: could not open $APP_NAME. Is it installed? (packaging/macos/install.sh)" >&2
+  echo "Javelin: could not open $APP_NAME. Is it installed? (packaging/macos/install.sh)" >&2
   exit 1
 }
 
-# -n: always a new instance, even when javelin IDE is already running (one instance per project).
+# -n: always a new instance, even when Javelin IDE is already running (one instance per project).
 open -n -a "$APP_NAME" --args "$dir" || not_installed

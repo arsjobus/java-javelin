@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -201,6 +202,26 @@ class SettingsTest {
             System.setProperty("os.name", "Linux");
             Path linux = Settings.defaultUserDirectory();
             assertTrue(linux.endsWith("javelin-ide"));
+        } finally { System.setProperty("os.name", os); System.setProperty("user.home", home); }
+    }
+
+    @Test void theConfigFolderVariableIsSpelledJavelinAndOutranksTheOldMisspelling() {
+        assertEquals(Path.of("/custom"), Settings.defaultUserDirectory(Map.of("JAVELIN_IDE_CONFIG_DIR", "/custom")::get));
+        assertEquals(Path.of("/old"), Settings.defaultUserDirectory(Map.of("JAVALIN_IDE_CONFIG_DIR", "/old")::get),
+            "setups made with the misspelled name keep working");
+        assertEquals(Path.of("/new"), Settings.defaultUserDirectory(Map.of("JAVELIN_IDE_CONFIG_DIR", "/new", "JAVALIN_IDE_CONFIG_DIR", "/old")::get));
+        assertEquals("JAVELIN_IDE_CONFIG_DIR", Settings.CONFIG_DIR_VARIABLE);
+    }
+
+    @Test void blankVariablesAreIgnoredAndXdgAndAppDataStillApply() {
+        String os = System.getProperty("os.name"), home = System.getProperty("user.home");
+        try {
+            System.setProperty("user.home", "/home/u");
+            System.setProperty("os.name", "Linux");
+            assertEquals(Path.of("/home/u", ".config", "javelin-ide"), Settings.defaultUserDirectory(Map.of("JAVELIN_IDE_CONFIG_DIR", "  ")::get));
+            assertEquals(Path.of("/xdg", "javelin-ide"), Settings.defaultUserDirectory(Map.of("XDG_CONFIG_HOME", "/xdg")::get));
+            System.setProperty("os.name", "Windows 11");
+            assertEquals(Path.of("C:/roaming", "javelin-ide"), Settings.defaultUserDirectory(Map.of("APPDATA", "C:/roaming")::get));
         } finally { System.setProperty("os.name", os); System.setProperty("user.home", home); }
     }
 

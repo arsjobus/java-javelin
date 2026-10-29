@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Layered, human-readable settings: built-in defaults (supplied by the caller), then the user file, then the
@@ -43,19 +44,38 @@ public final class Settings {
         reload();
     }
 
-    /** Where the user's settings live. {@code JAVALIN_IDE_CONFIG_DIR} overrides the platform default. */
+    /** Environment variable that moves the user settings folder. */
+    public static final String CONFIG_DIR_VARIABLE = "JAVELIN_IDE_CONFIG_DIR";
+
+    /** The misspelled name that earlier builds read; still honoured so existing setups keep working. */
+    static final String LEGACY_CONFIG_DIR_VARIABLE = "JAVALIN_IDE_CONFIG_DIR";
+
+    /** Where the user's settings live. {@code JAVELIN_IDE_CONFIG_DIR} overrides the platform default. */
     public static Path defaultUserDirectory() {
-        String override = System.getenv("JAVALIN_IDE_CONFIG_DIR");
-        if (override != null && !override.isBlank()) return Path.of(override);
+        return defaultUserDirectory(System::getenv);
+    }
+
+    /** Same, reading environment variables through {@code env} so tests need not change the real environment. */
+    static Path defaultUserDirectory(Function<String, String> env) {
+        String override = firstSet(env, CONFIG_DIR_VARIABLE, LEGACY_CONFIG_DIR_VARIABLE);
+        if (override != null) return Path.of(override);
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         String home = System.getProperty("user.home", ".");
         if (os.contains("mac")) return Path.of(home, "Library", "Application Support", "javelin-ide");
         if (os.contains("win")) {
-            String appData = System.getenv("APPDATA");
-            return appData != null && !appData.isBlank() ? Path.of(appData, "javelin-ide") : Path.of(home, "AppData", "Roaming", "javelin-ide");
+            String appData = firstSet(env, "APPDATA");
+            return appData != null ? Path.of(appData, "javelin-ide") : Path.of(home, "AppData", "Roaming", "javelin-ide");
         }
-        String xdg = System.getenv("XDG_CONFIG_HOME");
-        return xdg != null && !xdg.isBlank() ? Path.of(xdg, "javelin-ide") : Path.of(home, ".config", "javelin-ide");
+        String xdg = firstSet(env, "XDG_CONFIG_HOME");
+        return xdg != null ? Path.of(xdg, "javelin-ide") : Path.of(home, ".config", "javelin-ide");
+    }
+
+    private static String firstSet(Function<String, String> env, String... names) {
+        for (String name : names) {
+            String value = env.apply(name);
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
     }
 
     /** Keys that only the user file may set. */

@@ -34,7 +34,7 @@ Before sending source code externally, the user should know:
 
 ## Language servers
 
-javelin IDE itself sends nothing over the network for language features. It talks to a language server over that process's stdin/stdout, and only after the user has chosen to start one. What the server does beyond that (for example downloading indexes) is up to the server the user selected.
+Javelin IDE itself sends nothing over the network for language features. It talks to a language server over that process's stdin/stdout, and only after the user has chosen to start one. What the server does beyond that (for example downloading indexes) is up to the server the user selected.
 
 ## Diagnostics
 

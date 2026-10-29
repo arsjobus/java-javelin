@@ -12,7 +12,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 /**
- * javelin IDE is local-first: it has no telemetry, no update check and no cloud calls. This test makes that a rule the
+ * Javelin IDE is local-first: it has no telemetry, no update check and no cloud calls. This test makes that a rule the
  * build enforces. If a future feature genuinely needs the network (for example an optional local-model integration),
  * add it here deliberately, with a comment saying why, in the same change.
  */

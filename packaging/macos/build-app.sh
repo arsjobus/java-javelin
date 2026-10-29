@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds "javelin IDE.app" into <project>/dist using jpackage. macOS only. Needs JDK 21+ (with jpackage) and Maven.
+# Builds "Javelin IDE.app" into <project>/dist using jpackage. macOS only. Needs JDK 21+ (with jpackage) and Maven.
 #
 #   packaging/macos/build-app.sh                run the tests, then build
 #   SKIP_TESTS=1 packaging/macos/build-app.sh   build without running the tests
@@ -8,7 +8,7 @@
 # The app is built for the architecture of the JDK you run this with (Apple Silicon JDK -> Apple Silicon app).
 set -eu
 
-APP_NAME="javelin IDE"
+APP_NAME="Javelin IDE"
 # jpackage refuses a macOS app version that starts with 0, so the bundle version is kept apart from the Maven one.
 APP_VERSION="${APP_VERSION:-1.0.0}"
 
@@ -31,7 +31,7 @@ else
 fi
 
 version=$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout)
-jar="javelin_ide-$version.jar"
+jar="Javelin-IDE-$version.jar"
 
 rm -rf target/dist
 mkdir -p target/dist
@@ -56,4 +56,4 @@ jpackage \
 
 echo
 echo "Built: $root/dist/$APP_NAME.app"
-echo "Install it, and the 'javelin' terminal command, with: packaging/macos/install.sh"
+echo "Install it, and the Javelin terminal command, with: packaging/macos/install.sh"

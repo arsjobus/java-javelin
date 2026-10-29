@@ -6,7 +6,7 @@ public final class SettingsTemplates {
 
     public static String user(Keybindings keys) {
         return """
-            # javelin IDE user settings.
+            # Javelin IDE user settings.
             # Format: one key=value per line, UTF-8. Lines starting with # are comments; values are taken as written.
             # Remove the leading # from a line to enable it. Saving this file in the editor applies it immediately.
             # Project settings (<project>/.javelin-ide/settings.conf) override the editor.* values below.
@@ -34,7 +34,7 @@ public final class SettingsTemplates {
 
     public static String project() {
         return """
-            # javelin IDE project settings. Same format as the user settings file.
+            # Javelin IDE project settings. Same format as the user settings file.
             # These values override the user's for this project only. Commit this file to share them,
             # or ignore the .javelin-ide folder. Remove the leading # from a line to enable it.
 

@@ -135,7 +135,7 @@ public final class App extends Application {
     // Notices files added, removed, renamed or moved outside the editor (terminal, build, git, file manager).
     private final ProjectWatcher treeWatcher = new ProjectWatcher(() -> this.treeExcludes, () -> Platform.runLater(this::refreshAfterOutsideChange));
     private File projectDirectory;
-    // Which folders other javelin IDE windows have open (see launch.ProjectInstances); this window's own claim is released when it switches project or exits.
+    // Which folders other Javelin IDE windows have open (see launch.ProjectInstances); this window's own claim is released when it switches project or exits.
     private ProjectInstances instances;
     private ProjectInstances.Claim projectClaim;
     private Scene scene;
@@ -166,7 +166,7 @@ public final class App extends Application {
             status.setText(report == null ? "An unexpected error occurred." : "An unexpected error occurred; a report was saved to " + report)));
         this.primaryStage = stage;
         Dialogs.setOwner(stage);
-        stage.setTitle("Javelin IDE");
+        stage.setTitle(Branding.FULL_NAME);
         applyIcon();
         projectTree.setShowRoot(true);
         projectTree.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
@@ -273,10 +273,10 @@ public final class App extends Application {
         openFromCommandLine();
     }
 
-    // ---- started from the terminal: `javelin [directory]` (see packaging/macos) ----
+    // ---- started from the terminal: `Javelin [directory]` (see packaging/macos) ----
 
     /**
-     * Opens the directory given on the command line. The {@code javelin} command starts a new instance of this app for
+     * Opens the directory given on the command line. The {@code Javelin} command starts a new instance of this app for
      * every folder ({@code open -n}), so each window has exactly one project and nothing is handed to a running window.
      */
     private void openFromCommandLine() {
@@ -449,7 +449,7 @@ public final class App extends Application {
             if (item == null) continue;
             String binding = keys.binding(action.id());
             var combination = Shortcuts.parse(binding);
-            if (!binding.isEmpty() && combination == null) keyProblems.add("key." + action.id() + ": '" + binding + "' is not a shortcut javelin IDE understands");
+            if (!binding.isEmpty() && combination == null) keyProblems.add("key." + action.id() + ": '" + binding + "' is not a shortcut " + Branding.FULL_NAME + " understands");
             item.setAccelerator(combination);
         }
     }
@@ -787,7 +787,7 @@ public final class App extends Application {
         ProjectChange.closeSessionsIfChanged(projectDirectory, nextProjectDirectory, terminals::closeAll);
         projectDirectory = nextProjectDirectory;
         String projectName = projectDirectory.getName();
-        primaryStage.setTitle("Javelin IDE - " + (projectName.isBlank() ? projectDirectory.getAbsolutePath() : projectName));
+        primaryStage.setTitle(Branding.windowTitle(projectName.isBlank() ? projectDirectory.getAbsolutePath() : projectName));
         settings.setProject(projectDirectory.toPath()); // reads <project>/.javelin-ide/settings.conf if there is one
         applySettings();
         addRecentProject(projectDirectory);
@@ -797,7 +797,7 @@ public final class App extends Application {
     }
 
     /**
-     * Marks {@code directory} as open in this window. When another javelin IDE window already has it, asks before opening it
+     * Marks {@code directory} as open in this window. When another Javelin IDE window already has it, asks before opening it
      * a second time, because two windows would race on the same files. Never blocks opening because of a failure to check.
      */
     private boolean claimProject(File directory) {
@@ -811,7 +811,7 @@ public final class App extends Application {
             if (claim.isEmpty()) {
                 Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
                 alert.setTitle("Project already open");
-                alert.setHeaderText(directory.getName() + " is already open in another javelin IDE window.");
+                alert.setHeaderText(directory.getName() + " is already open in another " + Branding.FULL_NAME + " window.");
                 alert.setContentText("Two windows on one folder can overwrite each other's changes. Open it here as well?");
                 ButtonType openAnyway = new ButtonType("Open Anyway"), cancel = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
                 alert.getButtonTypes().setAll(openAnyway, cancel);
@@ -1423,7 +1423,7 @@ public final class App extends Application {
     // ---- crash recovery: unsaved buffers are copied to the user's own disk every few seconds and removed once saved or discarded ----
 
     private void startCrashRecovery() {
-        // Other javelin IDE instances (one per project) share the recovery folder: claim our own snapshots first, so
+        // Other Javelin IDE instances (one per project) share the recovery folder: claim our own snapshots first, so
         // their unsaved work is never offered to this window and ours is never offered to them.
         try { recovery.startSession(); } catch (IOException e) { status.setText("Crash recovery is not shared safely with other windows: " + e.getMessage()); }
         recoveryWriter.execute(() -> recovery.purgeOlderThan(java.time.Duration.ofDays(30)));
@@ -1434,7 +1434,7 @@ public final class App extends Application {
         if (leftovers.isEmpty()) return;
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Recover unsaved work");
-        alert.setHeaderText(leftovers.size() + (leftovers.size() == 1 ? " document was" : " documents were") + " not saved when javelin IDE last closed unexpectedly.");
+        alert.setHeaderText(leftovers.size() + (leftovers.size() == 1 ? " document was" : " documents were") + " not saved when " + Branding.FULL_NAME + " last closed unexpectedly.");
         alert.setContentText("Restore " + (leftovers.size() == 1 ? "it" : "them") + " into editor tabs? Choosing Discard deletes the recovered copies.");
         ButtonType restore = new ButtonType("Restore"), discard = new ButtonType("Discard");
         alert.getButtonTypes().setAll(restore, discard);
@@ -1701,7 +1701,7 @@ public final class App extends Application {
 
     /** Shows the server's proposed edits and, on approval, applies them to editor tabs. Nothing is written to disk. */
     private void applyRename(String oldName, String newName, Lsp.WorkspaceEdit edit) {
-        if (edit.unsupported()) { showError("Rename", "The language server also asked to create, rename or delete files, which javelin IDE never does automatically. Nothing was changed."); return; }
+        if (edit.unsupported()) { showError("Rename", "The language server also asked to create, rename or delete files, which " + Branding.FULL_NAME + " never does automatically. Nothing was changed."); return; }
         RenamePlan plan = RenamePlan.of(edit, App::toFile);
         int total = plan.total();
         if (total == 0) { status.setText("The server proposed no changes"); return; }

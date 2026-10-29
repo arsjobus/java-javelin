@@ -18,15 +18,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Knows which project folders are open in a running javelin IDE window, so that opening the same folder a second time can
- * be noticed. Every window is its own process (see {@code packaging/macos/javelin}), and javelin IDE never opens a
+ * Knows which project folders are open in a running Javelin IDE window, so that opening the same folder a second time can
+ * be noticed. Every window is its own process (see {@code packaging/macos/Javelin}), and Javelin IDE never opens a
  * network socket (see {@code OfflineGuardTest}), so the answer lives in the file system: a window that opens a project
  * locks a small file in this folder, named after the project's real path, for as long as it keeps the project open.
  * The operating system drops the lock when the process ends, however it ends, so a crash never leaves a project
  * "open"; stale files are harmless and {@link #prune(Duration)} removes old ones.
  *
  * <p>Two copies of the editor on one folder do not corrupt anything, but they race on the same files, so the window
- * asks before it does that. The check is advisory and covers javelin IDE windows only (not a terminal or another IDE).
+ * asks before it does that. The check is advisory and covers Javelin IDE windows only (not a terminal or another IDE).
  */
 public final class ProjectInstances {
     /** Name of the folder, inside the config directory, that holds the lock files. */

@@ -7,8 +7,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Reads the command line the app was started with, for example {@code open -a "javelin IDE" --args /path/to/project},
- * which is what the {@code javelin} terminal command runs. The first plain argument is the project directory.
+ * Reads the command line the app was started with, for example {@code open -a "Javelin IDE" --args /path/to/project},
+ * which is what the {@code Javelin} terminal command runs. The first plain argument is the project directory.
  * JavaFX-free so it can be unit tested.
  */
 public final class LaunchArguments {

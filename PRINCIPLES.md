@@ -2,7 +2,7 @@
 
 ## Purpose
 
-javelin IDE exists to help a person create software with a computer. It should not attempt to become a social platform, cloud workspace, content feed, or autonomous development environment.
+Javelin IDE exists to help a person create software with a computer. It should not attempt to become a social platform, cloud workspace, content feed, or autonomous development environment.
 
 ## Local ownership
 

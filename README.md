@@ -70,21 +70,22 @@ mvn clean package
 
 ## Install on macOS
 
-Build a real app that starts without a Terminal window, and install the `javelin` command:
+Build a real app that starts without a Terminal window, and install the `Javelin` command:
 
 ```
-packaging/macos/build-app.sh      # needs JDK 21+ (with jpackage) and Maven; writes dist/javelin IDE.app
-packaging/macos/install.sh        # copies the app to /Applications and `javelin` to /usr/local/bin (or ~/.local/bin)
+packaging/macos/build-app.sh      # needs JDK 21+ (with jpackage) and Maven; writes dist/Javelin IDE.app
+packaging/macos/install.sh        # copies the app to /Applications and `Javelin` to /usr/local/bin (or ~/.local/bin)
 ```
 
 Then, in any folder in the terminal:
 
 ```
-javelin            # open the current folder as a project
-javelin ~/code/x   # open that folder
+Javelin            # open the current folder as a project
+Javelin ~/code/x   # open that folder
 ```
 
-Every call opens its own editor window (a new instance), so you can run `javelin` in several folders to edit several projects at once and switch between them with Cmd+Tab or the Dock. If a folder is already open in another window you are asked before it is opened a second time (Cancel closes the new window). `packaging/macos/install.sh --uninstall` removes both.
+Every call opens its own editor window (a new instance), so you can run `Javelin` in several folders to edit several projects at once and switch between them with Cmd+Tab or the Dock. If a folder is already open in another window you are asked before it is opened a second time (Cancel closes the new window). `packaging/macos/install.sh --uninstall` removes both. The command is installed as `Javelin`, and nothing is installed under a lowercase name any more; an older lowercase command is replaced. macOS volumes are usually case-insensitive, so the command also answers to its name typed in lowercase.
+To install somewhere else, set `JAVELIN_APPS_DIR` and `JAVELIN_BIN_DIR` (for example `JAVELIN_APPS_DIR=~/Applications`).
 Settings are kept in `~/Library/Application Support/javelin-ide`.
 
 ## App icon
@@ -116,7 +117,7 @@ javelin_ide/
 ├── SECURITY.md
 ├── CUSTOMIZATION.md
 ├── BUGS.md
-├── packaging/macos/   (build-app.sh, install.sh, the javelin command)
+├── packaging/macos/   (build-app.sh, install.sh, the Javelin command)
 └── src/
     ├── main/java/com/javelin_ide/App.java
     ├── main/java/com/javelin_ide/build/   (process, build, and diagnostics services)

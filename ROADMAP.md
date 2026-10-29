@@ -120,7 +120,7 @@ Each open item above, with what would let it be ticked. Items marked *decision* 
 | Reliable build/run workflow | `BuildSystemTest`, `ProcessManagerTest`, `ProblemParserTest`, `BuildPipelineE2ETest` | A pipeline test per supported build tool that is installed on the CI machine; no PTY (documented limit) |
 | Git workflow | nothing (v0.6 was skipped) | *Decision:* build it, or move it out of 1.0 |
 | Explicit local AI workflow | nothing (v0.7 is documentation only) | *Decision:* build it, or move it out of 1.0 |
-| Release packaging | `packaging/macos/` recipe | Signed and notarized macOS build; a Windows and a Linux recipe, or state macOS as the only 1.0 platform |
+| Release packaging | `packaging/macos/` recipe, `InstallPipelineE2ETest` (build, install, launch, uninstall with the real scripts), `BrandingTest` | Signed and notarized macOS build; a Windows and a Linux recipe, or state macOS as the only 1.0 platform |
 
 ### Maintainability: taking logic out of `App`
 
@@ -133,3 +133,5 @@ logic first, wiring second, one slice per change, each with its own tests:
 3. Go to line and bracket matching: `LineNavigation` and `Brackets` (done). Still in `App`: the search and replace dialogs.
 4. Settings and themes application.
 5. Tabs and crash recovery wiring; then split `App` into a window class plus one controller per area.
+
+Done alongside: the product name lives in `Branding` (window titles, dialogs, crash report, language-server client info), so the build scripts, the app and `BrandingTest` share one spelling.

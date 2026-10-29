@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * {@code javelin} starts one editor instance per project, and all of them share the recovery folder. These tests
+ * {@code Javelin} starts one editor instance per project, and all of them share the recovery folder. These tests
  * check that an instance's live unsaved work is never offered to, or deleted by, another instance, and that it is
  * offered again once the instance that wrote it is gone, including when it was killed.
  */
@@ -113,7 +113,7 @@ class RecoverySessionTest {
         assertEquals(2, lockFiles(), "the live instance's own lock stays");
     }
 
-    /** What another javelin IDE process does: lock a session, write unsaved work, then wait to be killed. */
+    /** What another Javelin IDE process does: lock a session, write unsaved work, then wait to be killed. */
     public static final class Holder {
         public static void main(String[] args) throws Exception {
             RecoveryStore store = new RecoveryStore(Path.of(args[0]));

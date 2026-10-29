@@ -22,7 +22,7 @@ import java.util.function.Predicate;
  * {@code /usr/bin:/bin:/usr/sbin:/sbin}), so tools installed through Homebrew, SDKMAN, nvm or a JDK installer
  * (mvn, java, git, node ...) are not found by the terminal, by builds or by language servers. An app started from
  * a terminal inherits the shell's environment and works, which is the difference reported as "it only works when I
- * run javelin from a terminal".
+ * run Javelin from a terminal".
  *
  * <p>This asks the user's login shell for its whole environment once (PATH, JAVA_HOME, SDKMAN_DIR, NVM_DIR ...),
  * caches it, and layers it over the inherited one. If the shell cannot be asked (it fails, hangs or prints

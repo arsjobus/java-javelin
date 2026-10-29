@@ -22,7 +22,7 @@ class CrashLogTest {
         Path report = CrashLog.write(dir.resolve("crashes"), "JavaFX Application Thread", error);
         String text = Files.readString(report);
         assertTrue(report.getFileName().toString().matches("crash-\\d{8}-\\d{6}-\\d{3}\\.log"));
-        assertTrue(text.startsWith("javelin IDE crash report\ntime: "));
+        assertTrue(text.startsWith("Javelin IDE crash report\ntime: "));
         assertTrue(text.contains("thread: JavaFX Application Thread"));
         assertTrue(text.contains("java: " + System.getProperty("java.version")));
         assertTrue(text.contains("os: " + System.getProperty("os.name")));

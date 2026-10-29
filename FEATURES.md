@@ -10,16 +10,24 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | --- | --- | --- |
 | Open, edit, save (atomic write), Save As, new document | File menu | `FileIOTest`, `ProjectWorkflowE2ETest.createEditSaveAndReopenAFile` |
 | Large files (warn at 1 MB, refuse above 32 MB) | automatic | `FileIOTest` |
-| Open a project folder, recent projects (last 8, missing folders hidden) | File > Open Project / Recent Projects, `javelin [dir]` | `RecentProjectsTest`, `LaunchArgumentsTest`, `ProjectWorkflowE2ETest.recentProjectsRememberWhatWasOpened` |
+| Open a project folder, recent projects (last 8, missing folders hidden) | File > Open Project / Recent Projects, `Javelin [dir]` | `RecentProjectsTest`, `LaunchArgumentsTest`, `ProjectWorkflowE2ETest.recentProjectsRememberWhatWasOpened` |
 | Switching to a different project first closes the previous project's files: each unsaved file asks Save / Discard / Cancel, and Cancel keeps the old project (and its remaining files) open. Reopening the same project leaves files alone | File > Open Project / Recent Projects | `ProjectChangeTest`, `ProjectSwitchE2ETest` |
-| One window per project, several at once | run `javelin` in each folder | `MultiInstanceTest`, `OpenRequestsTest` |
-| Opening a folder that another window already has asks first (Open Anyway / Cancel); a `javelin` window started only for such a folder closes on Cancel. A crashed window never leaves a project stuck | automatic | `ProjectInstancesTest`, `SameProjectTwiceE2ETest` (a real second process), `MultiInstanceTest` (wiring) |
+| One window per project, several at once | run `Javelin` in each folder | `MultiInstanceTest`, `OpenRequestsTest` |
+| Opening a folder that another window already has asks first (Open Anyway / Cancel); a `Javelin` window started only for such a folder closes on Cancel. A crashed window never leaves a project stuck | automatic | `ProjectInstancesTest`, `SameProjectTwiceE2ETest` (a real second process), `MultiInstanceTest` (wiring) |
 | Project tree: create, rename, move, delete (confined to the project) | right-click, drag | `ProjectFilesTest`, `TreeGesturesTest`, `ProjectWorkflowE2ETest` (rename/move/delete) |
 | Tree follows outside changes (terminal, git, file manager) | automatic, ~2 s | `ProjectWatcherTest`, `ProjectWorkflowE2ETest.changesMadeOutsideTheEditorRefreshTheTree` |
 | Hide folders from tree and Go to File (`tree.exclude`) | settings | `NameListTest`, `ProjectWorkflowE2ETest.aProjectCanChangeWhatTheTreeHides` |
 | Go to File (exact name, skips excluded folders) | Go to > File | `ProjectFinderTest`, `ProjectWorkflowE2ETest.goToFileFindsFilesButSkipsExcludedFolders` |
 | Image viewer: PNG, JPEG, GIF, BMP, fit / 100% / zoom | open an image | `ImageFilesTest` |
 | Crash recovery of unsaved tabs | offered at next start | `RecoveryStoreTest`, `RecoverySessionTest`, `ProjectWorkflowE2ETest.unsavedWorkSurvivesACrashAndIsGoneOnceSaved` |
+
+## Packaging and naming (macOS)
+
+| Feature | How | Verified by |
+| --- | --- | --- |
+| The product is spelled **Javelin** (capital J) wherever it is built, installed or launched: the app bundle `Javelin IDE.app`, the jar `Javelin-IDE-<version>.jar`, the terminal command `Javelin`, window titles, dialogs, crash reports. `Branding` holds the spelling; no source, script or document may write the name with a lowercase j | automatic | `BrandingTest` (reads the real scripts, POM and docs) |
+| Build, install, launch, uninstall as one chain: `build-app.sh` writes the bundle that `install.sh` looks for and that `Javelin` opens; an older lowercase command is replaced; uninstall removes everything and keeps settings. `JAVELIN_APPS_DIR` / `JAVELIN_BIN_DIR` pick other target folders | `packaging/macos/build-app.sh`, `install.sh`, `Javelin [dir]` | `InstallPipelineE2ETest` (real scripts, stand-ins for `mvn`, `jpackage`, `open`), `JavelinCommandTest`, `MultiInstanceTest` |
+| The settings folder can be moved with `JAVELIN_IDE_CONFIG_DIR` (the old misspelled `JAVALIN_IDE_CONFIG_DIR` still works, the new name wins) | environment | `SettingsTest` |
 
 ## Editing
 
@@ -41,7 +49,7 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | Problems from javac, Maven, gcc/clang, tsc, Kotlin, Go, rustc, Python | Problems panel | `ProblemParserTest`, `BuildPipelineE2ETest` |
 | Process management, Stop All | Run menu | `ProcessManagerTest` |
 | Terminal tabs, history, completion, venv display | Terminal panel | `TerminalSessionTest`, `TerminalCompletionTest`, `ShellCommandTest`, `AnsiTest` |
-| Your dev tools work however the app was started: terminals, builds and language servers get the environment of your login shell (PATH, `JAVA_HOME`, SDKMAN, nvm ...), so `mvn`, `java`, `git` and friends are found when the app is opened from Applications, the Dock or Spotlight, not only from `javelin` in a terminal. If the login shell cannot be read, the inherited PATH plus Homebrew's directories is used | automatic | `ShellEnvironmentTest`, `FinderLaunchEnvironmentE2ETest` (a fake login shell and a fake `mvn`, through a real process and a real terminal session), `ProcessManagerTest` |
+| Your dev tools work however the app was started: terminals, builds and language servers get the environment of your login shell (PATH, `JAVA_HOME`, SDKMAN, nvm ...), so `mvn`, `java`, `git` and friends are found when the app is opened from Applications, the Dock or Spotlight, not only from `Javelin` in a terminal. If the login shell cannot be read, the inherited PATH plus Homebrew's directories is used | automatic | `ShellEnvironmentTest`, `FinderLaunchEnvironmentE2ETest` (a fake login shell and a fake `mvn`, through a real process and a real terminal session), `ProcessManagerTest` |
 
 ## Language intelligence (LSP, started by you)
 
