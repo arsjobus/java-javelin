@@ -22,9 +22,8 @@ import java.util.Set;
  * file; an unterminated block comment runs to the end of the text (as in most editors); text blocks
  * ({@code """}) may span lines.
  *
- * <p>Three lexical families are understood, and {@link #spans(String, File)} leaves files of any other kind (shell,
- * Markdown, plain text, ...) unstyled instead of colouring an apostrophe in prose or a {@code #} comment as if it were
- * Java:
+ * <p>Four lexical families are understood, and {@link #spans(String, File)} leaves files of any other kind (shell,
+ * plain text, ...) unstyled instead of colouring an apostrophe in prose or a {@code #} comment as if it were Java:
  * <ul>
  *   <li><b>C-family</b> ({@code //} and {@code /* *}{@code /} comments, double and single quoted literals): Java,
  *       Kotlin, JavaScript, TypeScript, C, C++, Go, Rust, PHP and JSON.
@@ -36,6 +35,7 @@ import java.util.Set;
  *       tag is ever coloured, so an apostrophe in the prose between tags stays plain. In HTML the content of a
  *       {@code <script>} element is highlighted as JavaScript and the content of a {@code <style>} element is left
  *       alone.
+ *   <li><b>Markdown</b>: headings, fenced and inline code, emphasis, links, blockquotes and list markers.
  * </ul>
  *
  * <p>Keywords and well-known types come from a per-{@link Language} list chosen by the file's extension, so
@@ -50,10 +50,10 @@ public final class SyntaxHighlighter {
     public record Span(int start, int end, String style) {}
 
     /** The languages the scanner knows. Each one follows the lexical rules of one {@link Syntax}. */
-    public enum Language { JAVA, KOTLIN, JAVASCRIPT, TYPESCRIPT, C, CPP, GO, RUST, PHP, JSON, PYTHON, HTML, XML }
+    public enum Language { JAVA, KOTLIN, JAVASCRIPT, TYPESCRIPT, C, CPP, GO, RUST, PHP, JSON, PYTHON, HTML, XML, MARKDOWN }
 
-    /** How a language is tokenised: C-style comments and strings, Python's {@code #} and triple quotes, or angle-bracket markup. */
-    private enum Syntax { C_FAMILY, PYTHON, MARKUP }
+    /** How a language is tokenised: C-style comments and strings, Python, angle-bracket markup or Markdown. */
+    private enum Syntax { C_FAMILY, PYTHON, MARKUP, MARKDOWN }
 
     /** What counts as a keyword or a type in one language, and whether {@code @name} is an annotation or decorator. */
     private record Lexicon(Set<String> keywords, Set<String> types, boolean annotations, Syntax syntax) {}
@@ -110,6 +110,7 @@ public final class SyntaxHighlighter {
         // Markup colours tags and attributes by position, not by word, so it needs no keyword or type list.
         define(Language.HTML, "", "", false, Syntax.MARKUP);
         define(Language.XML, "", "", false, Syntax.MARKUP);
+        define(Language.MARKDOWN, "", "", false, Syntax.MARKDOWN);
     }
 
     /** The prefixes (lower case) that may precede the quote of a Python string literal. */
@@ -133,13 +134,13 @@ public final class SyntaxHighlighter {
         Map.entry("html", Language.HTML), Map.entry("htm", Language.HTML), Map.entry("xhtml", Language.HTML),
         Map.entry("xml", Language.XML), Map.entry("xsd", Language.XML), Map.entry("xsl", Language.XML), Map.entry("xslt", Language.XML),
         Map.entry("svg", Language.XML), Map.entry("fxml", Language.XML), Map.entry("plist", Language.XML), Map.entry("rss", Language.XML),
-        Map.entry("atom", Language.XML), Map.entry("wsdl", Language.XML));
+        Map.entry("atom", Language.XML), Map.entry("wsdl", Language.XML), Map.entry("md", Language.MARKDOWN), Map.entry("markdown", Language.MARKDOWN));
 
     private SyntaxHighlighter() {}
 
     /**
      * The language whose rules the file gets: {@link Language#JAVA} for an untitled buffer (the editor is
-     * Java-oriented), the language of a known extension (C-family, Python, HTML or XML), and {@code null} for any other
+     * Java-oriented), the language of a known extension (C-family, Python, HTML, XML or Markdown), and {@code null} for any other
      * file or a file without an extension, which is shown as plain text.
      */
     public static Language languageOf(File file) {
@@ -170,8 +171,203 @@ public final class SyntaxHighlighter {
         List<Span> spans = new ArrayList<>();
         if (tooLarge(text.length())) return spans;
         if (lexicon.syntax() == Syntax.MARKUP) markup(text, language == Language.HTML, spans);
+        else if (lexicon.syntax() == Syntax.MARKDOWN) markdown(text, spans);
         else code(text, lexicon, language == Language.RUST, spans);
         return spans;
+    }
+
+    /** Finds Markdown block and inline tokens one line at a time; prose remains in the editor's normal text colour. */
+    private static void markdown(String text, List<Span> spans) {
+        int n = text.length();
+        int lineStart = 0;
+        char fence = 0;
+        int fenceLength = 0;
+        while (lineStart < n) {
+            int newline = text.indexOf('\n', lineStart);
+            int lineEnd = newline < 0 ? n : newline;
+            int contentEnd = lineEnd > lineStart && text.charAt(lineEnd - 1) == '\r' ? lineEnd - 1 : lineEnd;
+
+            int indent = lineStart;
+            while (indent < contentEnd && indent - lineStart < 4 && text.charAt(indent) == ' ') indent++;
+            int markerLength = markdownRun(text, indent, contentEnd);
+            char marker = indent < contentEnd ? text.charAt(indent) : 0;
+            if (fence != 0) {
+                if (marker == fence && markerLength >= fenceLength && text.substring(indent + markerLength, contentEnd).isBlank()) {
+                    add(spans, lineStart, contentEnd, "annotation");
+                    fence = 0;
+                } else {
+                    add(spans, lineStart, contentEnd, "string");
+                }
+            } else if (indent - lineStart <= 3 && (marker == '`' || marker == '~') && markerLength >= 3
+                && (marker != '`' || text.substring(indent + markerLength, contentEnd).indexOf('`') < 0)) {
+                add(spans, lineStart, contentEnd, "annotation");
+                fence = marker;
+                fenceLength = markerLength;
+            } else {
+                int headingEnd = markdownHeadingEnd(text, indent, contentEnd);
+                if (headingEnd >= 0) {
+                    add(spans, indent, headingEnd, "annotation");
+                    markdownInline(text, headingEnd, contentEnd, "keyword", spans);
+                } else if (isMarkdownRule(text, indent, contentEnd)) {
+                    add(spans, indent, contentEnd, "comment");
+                } else {
+                    int body = indent;
+                    if (body < contentEnd && text.charAt(body) == '>') {
+                        int quoteEnd = body + 1;
+                        if (quoteEnd < contentEnd && text.charAt(quoteEnd) == ' ') quoteEnd++;
+                        add(spans, body, quoteEnd, "comment");
+                        body = quoteEnd;
+                    } else {
+                        int listEnd = markdownListMarkerEnd(text, body, contentEnd);
+                        if (listEnd > body) {
+                            add(spans, body, listEnd, Character.isDigit(text.charAt(body)) ? "number" : "keyword");
+                            body = listEnd;
+                            if (body + 2 < contentEnd && text.charAt(body) == '['
+                                && (text.charAt(body + 1) == ' ' || text.charAt(body + 1) == 'x' || text.charAt(body + 1) == 'X')
+                                && text.charAt(body + 2) == ']') {
+                                add(spans, body, body + 3, "annotation");
+                                body += 3;
+                            }
+                        }
+                    }
+                    markdownInline(text, body, contentEnd, null, spans);
+                }
+            }
+            lineStart = newline < 0 ? n : newline + 1;
+        }
+    }
+
+    /** Highlights inline code, links and emphasis, with an optional style for otherwise plain heading text. */
+    private static void markdownInline(String text, int start, int end, String plainStyle, List<Span> spans) {
+        int i = start;
+        int plainStart = start;
+        boolean codeSearchDead = false, linkSearchDead = false, boldSearchDead = false, italicSearchDead = false;
+        int linkSearchFrom = start, linkClose = -1;
+        while (i < end) {
+            char c = text.charAt(i);
+            int tokenEnd = -1;
+            if (c == '`' && !codeSearchDead) {
+                int ticks = markdownRun(text, i, end);
+                int close = findMarkdownRun(text, i + ticks, end, '`', ticks);
+                if (close >= 0) tokenEnd = close + ticks;
+                else codeSearchDead = true;
+                if (tokenEnd > i) {
+                    addMarkdownPlain(spans, plainStart, i, plainStyle);
+                    add(spans, i, tokenEnd, "string");
+                }
+            } else if (c == '[' && !linkSearchDead) {
+                int closeLabel = -1;
+                if (i >= linkSearchFrom) {
+                    if (linkClose < i + 1) linkClose = text.indexOf(']', i + 1);
+                    closeLabel = linkClose;
+                }
+                if (closeLabel < 0 || closeLabel >= end) {
+                    if (i >= linkSearchFrom) linkSearchDead = true;
+                } else if (closeLabel + 1 >= end || text.charAt(closeLabel + 1) != '(') {
+                    linkSearchFrom = closeLabel + 1;
+                    linkClose = -1;
+                } else {
+                    int closeUrl = text.indexOf(')', closeLabel + 2);
+                    if (closeUrl < 0 || closeUrl >= end) linkSearchDead = true;
+                    else {
+                        tokenEnd = closeUrl + 1;
+                        addMarkdownPlain(spans, plainStart, i, plainStyle);
+                        add(spans, i, i + 1, "annotation");
+                        add(spans, i + 1, closeLabel, "type");
+                        add(spans, closeLabel, closeLabel + 2, "annotation");
+                        add(spans, closeLabel + 2, closeUrl, "string");
+                        add(spans, closeUrl, tokenEnd, "annotation");
+                    }
+                }
+            } else if ((c == '*' || c == '_') && i + 1 < end) {
+                int run = markdownRun(text, i, end);
+                if (run >= 2 && !boldSearchDead) {
+                    int close = text.indexOf(text.substring(i, i + 2), i + 2);
+                    if (close < 0 || close + 2 > end) boldSearchDead = true;
+                    else {
+                        tokenEnd = close + 2;
+                        addMarkdownPlain(spans, plainStart, i, plainStyle);
+                        add(spans, i, i + 2, "annotation");
+                        add(spans, i + 2, close, "type");
+                        add(spans, close, tokenEnd, "annotation");
+                    }
+                }
+                if (tokenEnd < 0 && run == 1 && !italicSearchDead) {
+                    int close = text.indexOf(c, i + 1);
+                    if (close < 0 || close >= end) italicSearchDead = true;
+                    else {
+                        tokenEnd = close + 1;
+                        addMarkdownPlain(spans, plainStart, i, plainStyle);
+                        add(spans, i, i + 1, "annotation");
+                        add(spans, i + 1, close, "type");
+                        add(spans, close, tokenEnd, "annotation");
+                    }
+                }
+            }
+            if (tokenEnd > i) {
+                i = tokenEnd;
+                plainStart = i;
+            } else {
+                i++;
+            }
+        }
+        addMarkdownPlain(spans, plainStart, end, plainStyle);
+    }
+
+    private static void addMarkdownPlain(List<Span> spans, int start, int end, String style) {
+        if (style != null) add(spans, start, end, style);
+    }
+
+    private static int markdownHeadingEnd(String text, int start, int end) {
+        int hashes = markdownRun(text, start, end);
+        if (hashes < 1 || hashes > 6 || start + hashes < end && text.charAt(start + hashes) != ' ') return -1;
+        int content = start + hashes;
+        while (content < end && text.charAt(content) == ' ') content++;
+        return content;
+    }
+
+    private static int markdownListMarkerEnd(String text, int start, int end) {
+        if (start >= end) return start;
+        int i = start;
+        if (text.charAt(i) == '-' || text.charAt(i) == '+' || text.charAt(i) == '*') i++;
+        else if (Character.isDigit(text.charAt(i))) {
+            while (i < end && Character.isDigit(text.charAt(i))) i++;
+            if (i < end && text.charAt(i) == '.') i++;
+            else return start;
+        } else return start;
+        return i < end && text.charAt(i) == ' ' ? i + 1 : start;
+    }
+
+    private static boolean isMarkdownRule(String text, int start, int end) {
+        char marker = 0;
+        int count = 0;
+        for (int i = start; i < end; i++) {
+            char c = text.charAt(i);
+            if (c == ' ') continue;
+            if (marker == 0) marker = c;
+            if (c != marker || (marker != '-' && marker != '_' && marker != '*')) return false;
+            count++;
+        }
+        return count >= 3;
+    }
+
+    private static int markdownRun(String text, int start, int end) {
+        if (start >= end) return 0;
+        char c = text.charAt(start);
+        if (c != '`' && c != '~' && c != '#' && c != '*' && c != '_') return 0;
+        int i = start + 1;
+        while (i < end && text.charAt(i) == c) i++;
+        return i - start;
+    }
+
+    private static int findMarkdownRun(String text, int from, int end, char marker, int length) {
+        for (int i = from; i < end; i++) {
+            if (text.charAt(i) != marker) continue;
+            int run = markdownRun(text, i, end);
+            if (run == length) return i;
+            i += run - 1;
+        }
+        return -1;
     }
 
     /**

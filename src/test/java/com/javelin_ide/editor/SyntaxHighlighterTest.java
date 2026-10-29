@@ -109,11 +109,11 @@ class SyntaxHighlighterTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"A.java", "a.JAVA", "a.kt", "a.kts", "a.js", "a.mjs", "a.cjs", "a.jsx", "a.ts", "a.tsx", "a.c", "a.h", "a.cpp", "a.cc", "a.cxx", "a.hpp", "a.hh",
-        "a.go", "a.rs", "a.php", "a.json", "archive.tar.java", "dir.py/Main.java"})
+        "a.go", "a.rs", "a.php", "a.json", "a.md", "a.markdown", "archive.tar.java", "dir.py/Main.java"})
     void cFamilyFilesAreHighlighted(String name) { assertTrue(SyntaxHighlighter.appliesTo(new File(name)), name); }
 
     @ParameterizedTest
-    @ValueSource(strings = {"a.rb", "a.sh", "a.bash", "a.md", "a.txt", "a.yml", "a.properties", "README", "Makefile", ".bashrc", "trailing.", "a.java.bak", "dir.java/notes"})
+    @ValueSource(strings = {"a.rb", "a.sh", "a.bash", "a.txt", "a.yml", "a.properties", "README", "Makefile", ".bashrc", "trailing.", "a.java.bak", "dir.java/notes"})
     void otherFilesAreShownAsPlainText(String name) { assertFalse(SyntaxHighlighter.appliesTo(new File(name)), name); }
 
     @Test void anUntitledBufferIsHighlighted() { assertTrue(SyntaxHighlighter.appliesTo(null)); }
@@ -149,17 +149,17 @@ class SyntaxHighlighterTest {
     @ParameterizedTest
     @CsvSource({"A.java,JAVA", "a.JAVA,JAVA", "a.kt,KOTLIN", "a.kts,KOTLIN", "a.js,JAVASCRIPT", "a.mjs,JAVASCRIPT", "a.cjs,JAVASCRIPT", "a.jsx,JAVASCRIPT",
         "a.ts,TYPESCRIPT", "a.tsx,TYPESCRIPT", "a.c,C", "a.h,CPP", "a.cpp,CPP", "a.cc,CPP", "a.cxx,CPP", "a.hpp,CPP", "a.hh,CPP", "a.go,GO", "a.rs,RUST",
-        "a.php,PHP", "a.json,JSON", "dir.py/Main.java,JAVA"})
+        "a.php,PHP", "a.json,JSON", "a.md,MARKDOWN", "a.markdown,MARKDOWN", "dir.py/Main.java,JAVA"})
     void eachExtensionMapsToItsLanguage(String name, Language expected) { assertEquals(expected, SyntaxHighlighter.languageOf(new File(name)), name); }
 
     @ParameterizedTest
-    @CsvSource({"a.rb", "a.md", "a.txt", "README", "Makefile", ".bashrc", "trailing.", "a.java.bak", "dir.java/notes"})
+    @CsvSource({"a.rb", "a.txt", "README", "Makefile", ".bashrc", "trailing.", "a.java.bak", "dir.java/notes"})
     void otherFilesHaveNoLanguage(String name) { assertNull(SyntaxHighlighter.languageOf(new File(name)), name); }
 
     @Test void anUntitledBufferIsJava() { assertEquals(Language.JAVA, SyntaxHighlighter.languageOf(null)); }
 
     @Test void appliesToAgreesWithLanguageOf() {
-        for (String name : List.of("A.java", "a.rs", "a.json", "a.py", "README", "a.txt")) {
+        for (String name : List.of("A.java", "a.rs", "a.json", "a.py", "a.md", "README", "a.txt")) {
             File file = new File(name);
             assertEquals(SyntaxHighlighter.languageOf(file) != null, SyntaxHighlighter.appliesTo(file), name);
         }
@@ -353,6 +353,22 @@ class SyntaxHighlighterTest {
     @CsvSource({"a.py,PYTHON", "a.PY,PYTHON", "a.pyi,PYTHON", "a.pyw,PYTHON", "a.html,HTML", "a.HTM,HTML", "a.htm,HTML", "a.xhtml,HTML", "a.xml,XML", "pom.xml,XML",
         "a.xsd,XML", "a.xsl,XML", "a.xslt,XML", "a.svg,XML", "a.fxml,XML", "a.plist,XML", "a.rss,XML", "a.atom,XML", "a.wsdl,XML"})
     void pythonHtmlAndXmlExtensionsMapToTheirLanguage(String name, Language expected) { assertEquals(expected, SyntaxHighlighter.languageOf(new File(name)), name); }
+
+    @Test void markdownFilesHighlightBlockAndInlineFormatting() {
+        String markdown = "# Heading\n\n- **bold** and *italic* with `code` and [link](https://example.test)\n> quoted\n```java\nclass Example {}\n```\n";
+        assertEquals(List.of(
+            "annotation:# ", "keyword:Heading",
+            "keyword:- ", "annotation:**", "type:bold", "annotation:**", "annotation:*", "type:italic", "annotation:*",
+            "string:`code`", "annotation:[", "type:link", "annotation:](", "string:https://example.test", "annotation:)",
+            "comment:> ", "annotation:```java", "string:class Example {}", "annotation:```"),
+            styled(markdown, "README.md"));
+    }
+
+    @Test void markdownLookalikesAndUnclosedInlineMarkersStayPlain() {
+        assertEquals(List.of(), styled("ordinary prose with *unclosed emphasis and [link", "notes.md"));
+        assertEquals(List.of("annotation:# ", "keyword:title"), styled("# title", "notes.markdown"));
+        assertEquals(List.of(), styled("#not a heading", "notes.md"));
+    }
 
     @Test void filesOfTheNewLanguagesGetNonEmptySpans() {
         assertFalse(SyntaxHighlighter.spans("def f(): pass", new File("main.py")).isEmpty());
