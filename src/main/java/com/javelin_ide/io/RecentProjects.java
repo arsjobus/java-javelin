@@ -44,4 +44,9 @@ public final class RecentProjects {
             else store.remove(KEY_PREFIX + i);
         }
     }
+
+    /** Forgets every remembered project. */
+    public void clear() {
+        for (int i = 0; i < MAX; i++) store.remove(KEY_PREFIX + i);
+    }
 }

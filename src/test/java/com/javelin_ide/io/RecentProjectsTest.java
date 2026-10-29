@@ -86,4 +86,21 @@ class RecentProjectsTest {
         assertEquals(List.of(a.getAbsolutePath()), recent.list());
         assertEquals("", store.get("recent.project.1", ""), "stale slots are cleared");
     }
+
+    @Test void clearingForgetsEveryRecentProjectAndAllowsNewOnes() throws IOException {
+        Preferences store = new MemoryPreferences();
+        RecentProjects recent = new RecentProjects(store);
+        recent.add(folder("a"));
+        recent.add(folder("b"));
+
+        recent.clear();
+
+        assertEquals(List.of(), recent.list());
+        assertEquals("", store.get("recent.project.0", ""));
+        assertEquals("", store.get("recent.project.1", ""));
+
+        File next = folder("next");
+        recent.add(next);
+        assertEquals(List.of(next.getAbsolutePath()), recent.list());
+    }
 }

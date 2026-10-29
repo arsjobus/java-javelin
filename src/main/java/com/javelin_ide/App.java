@@ -758,15 +758,34 @@ public final class App extends Application {
 
     private Menu createRecentProjectsMenu() {
         Menu recent = new Menu("Recent Projects");
-        List<String> projects = recentProjects();
-        if (projects.isEmpty()) { MenuItem empty = new MenuItem("No recent projects"); empty.setDisable(true); recent.getItems().add(empty); return recent; }
-        for (String path : projects) {
-            File directory = new File(path);
-            MenuItem item = new MenuItem(directory.getName().isBlank() ? directory.getAbsolutePath() : directory.getName());
-            item.setOnAction(e -> openProjectDirectory(directory));
-            recent.getItems().add(item);
-        }
+        recent.setOnShowing(e -> populateRecentProjectsMenu(recent));
+        populateRecentProjectsMenu(recent);
         return recent;
+    }
+
+    private void populateRecentProjectsMenu(Menu recent) {
+        recent.getItems().clear();
+        List<String> projects = recentProjects();
+        if (projects.isEmpty()) {
+            MenuItem empty = new MenuItem("No recent projects");
+            empty.setDisable(true);
+            recent.getItems().add(empty);
+        } else {
+            for (String path : projects) {
+                File directory = new File(path);
+                MenuItem item = new MenuItem(directory.getName().isBlank() ? directory.getAbsolutePath() : directory.getName());
+                item.setOnAction(e -> openProjectDirectory(directory));
+                recent.getItems().add(item);
+            }
+            recent.getItems().add(new SeparatorMenuItem());
+        }
+        MenuItem clear = new MenuItem("Clear Recent Projects");
+        clear.setDisable(projects.isEmpty());
+        clear.setOnAction(e -> {
+            recentStore.clear();
+            populateRecentProjectsMenu(recent);
+        });
+        recent.getItems().add(clear);
     }
 
     private void chooseProjectDirectory(Stage stage) {
