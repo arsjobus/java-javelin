@@ -1,6 +1,7 @@
 package com.javelin_ide.language;
 
 import com.javelin_ide.build.ShellCommand;
+import com.javelin_ide.build.ShellEnvironment;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -58,7 +59,7 @@ public final class LanguageServerSession {
     public CompletableFuture<Void> whenReady() { return ready; }
 
     void start() throws IOException {
-        ProcessBuilder builder = new ProcessBuilder(ShellCommand.wrap(command));
+        ProcessBuilder builder = ShellEnvironment.apply(new ProcessBuilder(ShellCommand.wrap(command)));
         if (root != null) builder.directory(root);
         process = builder.start();
         rpc = new JsonRpc(process.getInputStream(), process.getOutputStream(), this::onNotification, this::onServerRequest, this::onConnectionClosed);

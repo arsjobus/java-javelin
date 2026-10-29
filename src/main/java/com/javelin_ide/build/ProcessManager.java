@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 /**
  * Starts, tracks, and stops child processes. Nothing is started unless a caller asks for it,
@@ -28,20 +29,30 @@ public final class ProcessManager {
 
     private static final long GRACE_MILLIS = 3000;
     private final Launcher launcher;
+    private final Supplier<Map<String, String>> baseEnvironment;
     private final AtomicLong ids = new AtomicLong();
     private final Map<Long, ManagedProcess> running = new ConcurrentHashMap<>();
 
-    public ProcessManager() { this(ProcessBuilder::start); }
+    /** Processes get the environment a terminal would give them (see {@link ShellEnvironment}), not launchd's minimal one. */
+    public ProcessManager() { this(ProcessBuilder::start, ShellEnvironment::environment); }
 
-    ProcessManager(Launcher launcher) { this.launcher = launcher; }
+    ProcessManager(Launcher launcher) { this(launcher, Map::of); }
+
+    /** @param baseEnvironment variables layered over the editor's own environment for every process, before the per-call ones */
+    public ProcessManager(Supplier<Map<String, String>> baseEnvironment) { this(ProcessBuilder::start, baseEnvironment); }
+
+    ProcessManager(Launcher launcher, Supplier<Map<String, String>> baseEnvironment) {
+        this.launcher = launcher; this.baseEnvironment = baseEnvironment;
+    }
 
     public ManagedProcess start(String name, List<String> command, File directory, Listener listener) throws IOException {
         return start(name, command, directory, Map.of(), listener);
     }
 
-    /** As above, with extra environment variables layered over the editor's own environment. */
+    /** As above, with extra environment variables layered over the base environment. */
     public ManagedProcess start(String name, List<String> command, File directory, Map<String, String> environment, Listener listener) throws IOException {
         ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
+        builder.environment().putAll(baseEnvironment.get());
         builder.environment().putAll(environment);
         if (directory != null) builder.directory(directory);
         Process process = launcher.start(builder);

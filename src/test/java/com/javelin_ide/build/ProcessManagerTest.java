@@ -19,7 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class ProcessManagerTest {
     @TempDir Path dir;
-    private final ProcessManager manager = new ProcessManager();
+    private final ProcessManager manager = new ProcessManager(java.util.Map::of);
     private final List<String> lines = new CopyOnWriteArrayList<>();
     private final CountDownLatch exited = new CountDownLatch(1);
     private volatile int exitCode = Integer.MIN_VALUE;

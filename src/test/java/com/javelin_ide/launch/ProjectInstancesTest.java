@@ -58,6 +58,23 @@ class ProjectInstancesTest {
         }
     }
 
+    @Test void aFolderSpelledThroughASymbolicLinkedParentAndAMissingFolderIsTheSameProject() throws IOException {
+        // the macOS situation: temp and home folders sit below a link (/var -> /private/var)
+        Path real = Files.createDirectories(home.resolve("real"));
+        Path linkedParent = Files.createSymbolicLink(home.resolve("parentLink"), real);
+        Path demo = Files.createDirectories(real.resolve("demo"));
+        try (ProjectInstances.Claim first = instances().claim(demo).orElseThrow()) {
+            assertTrue(instances().claim(linkedParent.resolve("missing").resolve("..").resolve("demo")).isEmpty(), "link above a missing folder and ..");
+            assertEquals(demo.toRealPath(), first.project());
+        }
+    }
+
+    @Test void aProjectThatDoesNotExistYetIsResolvedBelowItsExistingParent() throws IOException {
+        Path real = Files.createDirectories(home.resolve("real"));
+        Path linkedParent = Files.createSymbolicLink(home.resolve("parentLink"), real);
+        assertEquals(real.toRealPath().resolve("a").resolve("b"), ProjectInstances.realPath(linkedParent.resolve("a").resolve("x").resolve("..").resolve("b")));
+    }
+
     @Test void closingGivesTheProjectBackAndClosingTwiceIsHarmless() throws IOException {
         Path demo = project("demo");
         ProjectInstances.Claim first = instances().claim(demo).orElseThrow();
@@ -72,7 +89,7 @@ class ProjectInstancesTest {
     @Test void aFolderThatDoesNotExistYetStillHasAnIdentity() throws IOException {
         Path future = home.resolve("not-created-yet");
         try (ProjectInstances.Claim claim = instances().claim(future).orElseThrow()) {
-            assertEquals(future.toAbsolutePath().normalize(), claim.project());
+            assertEquals(home.toRealPath().resolve("not-created-yet"), claim.project()); // below its real parent: macOS temp is a link
             assertTrue(instances().claim(future).isEmpty());
         }
     }

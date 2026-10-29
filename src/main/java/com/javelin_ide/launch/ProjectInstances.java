@@ -118,7 +118,18 @@ public final class ProjectInstances {
         }
     }
 
-    private static Path realPath(Path project) {
-        try { return project.toRealPath(); } catch (IOException missing) { return project.toAbsolutePath().normalize(); }
+    /**
+     * The one spelling every window agrees on. When the folder (or a part of the spelling such as {@code other/..})
+     * does not exist, {@code toRealPath} fails; the nearest existing parent is then resolved, so a symbolic link
+     * above it still counts (macOS keeps temp folders under {@code /var}, a link to {@code /private/var}).
+     */
+    static Path realPath(Path project) {
+        try { return project.toRealPath(); } catch (IOException missing) { /* resolve what exists below */ }
+        Path absolute = project.toAbsolutePath().normalize();
+        Path existing = absolute;
+        while (existing != null && !Files.exists(existing)) existing = existing.getParent();
+        if (existing == null) return absolute;
+        try { return existing.toRealPath().resolve(existing.relativize(absolute)).normalize(); }
+        catch (IOException unreadable) { return absolute; }
     }
 }

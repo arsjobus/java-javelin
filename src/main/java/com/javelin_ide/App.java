@@ -23,6 +23,7 @@ import com.javelin_ide.build.Problem;
 import com.javelin_ide.build.ProblemParser;
 import com.javelin_ide.build.ProcessManager;
 import com.javelin_ide.build.ShellCommand;
+import com.javelin_ide.build.ShellEnvironment;
 import com.javelin_ide.language.Completions;
 import com.javelin_ide.language.DiagnosticShifter;
 import com.javelin_ide.language.LanguageProblems;
@@ -160,6 +161,7 @@ public final class App extends Application {
     private Stage primaryStage;
 
     @Override public void start(Stage stage) {
+        ShellEnvironment.warmUp(); // read the login shell's PATH etc. in the background: Finder-launched apps start with launchd's
         CrashLog.install(settings.userFile().getParent().resolve("crashes"), report -> Platform.runLater(() ->
             status.setText(report == null ? "An unexpected error occurred." : "An unexpected error occurred; a report was saved to " + report)));
         this.primaryStage = stage;

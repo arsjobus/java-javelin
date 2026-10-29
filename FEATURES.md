@@ -41,6 +41,7 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | Problems from javac, Maven, gcc/clang, tsc, Kotlin, Go, rustc, Python | Problems panel | `ProblemParserTest`, `BuildPipelineE2ETest` |
 | Process management, Stop All | Run menu | `ProcessManagerTest` |
 | Terminal tabs, history, completion, venv display | Terminal panel | `TerminalSessionTest`, `TerminalCompletionTest`, `ShellCommandTest`, `AnsiTest` |
+| Your dev tools work however the app was started: terminals, builds and language servers get the environment of your login shell (PATH, `JAVA_HOME`, SDKMAN, nvm ...), so `mvn`, `java`, `git` and friends are found when the app is opened from Applications, the Dock or Spotlight, not only from `javelin` in a terminal. If the login shell cannot be read, the inherited PATH plus Homebrew's directories is used | automatic | `ShellEnvironmentTest`, `FinderLaunchEnvironmentE2ETest` (a fake login shell and a fake `mvn`, through a real process and a real terminal session), `ProcessManagerTest` |
 
 ## Language intelligence (LSP, started by you)
 

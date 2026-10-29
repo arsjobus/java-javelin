@@ -21,7 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
 /** The whole Run > Build path with a real compiler: command -> process -> output lines -> parsed problems. */
 class BuildPipelineE2ETest {
     @TempDir Path dir;
-    private final ProcessManager processes = new ProcessManager();
+    private final ProcessManager processes = new ProcessManager(java.util.Map::of);
 
     @AfterEach void tearDown() { processes.stopAll(); }
 

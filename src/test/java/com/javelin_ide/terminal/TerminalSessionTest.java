@@ -19,7 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 /** Drives a real /bin/sh: the session exists to manage a live process, so mocking it would prove little. */
 class TerminalSessionTest {
     @TempDir Path dir;
-    private final ProcessManager processes = new ProcessManager();
+    private final ProcessManager processes = new ProcessManager(java.util.Map::of);
     private final List<String> output = new CopyOnWriteArrayList<>();
     private final AtomicInteger stateChanges = new AtomicInteger();
     private TerminalSession session;
