@@ -8,6 +8,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,9 +19,14 @@ import org.junit.jupiter.api.io.TempDir;
 class ProjectFilesTest {
     @TempDir Path dir;
     Path project;
+    /** A real recycle bin laid out like the Linux desktop trash, so tests can look inside it. */
+    Path trashDir;
+    Trash.Bin bin;
 
     @BeforeEach void setUp() throws IOException {
         project = Files.createDirectory(dir.resolve("project"));
+        trashDir = dir.resolve("trash");
+        bin = Trash.freedesktop(trashDir, Clock.fixed(Instant.parse("2026-10-31T12:00:00Z"), ZoneOffset.UTC));
     }
 
     private static void link(Path link, Path target) {
@@ -163,32 +171,54 @@ class ProjectFilesTest {
         assertFalse(ProjectFiles.isInside(project.resolve("src"), project));
     }
 
-    // ---- delete ----
+    // ---- delete: everything goes to the recycle bin, nothing is removed for good ----
 
-    @Test void deletesAFile() throws IOException {
-        Path f = Files.createFile(project.resolve("gone.txt"));
-        ProjectFiles.delete(project, f);
+    @Test void trashesAFileAndKeepsItsContent() throws IOException {
+        Path f = Files.writeString(project.resolve("gone.txt"), "still here");
+        ProjectFiles.trash(project, f, bin);
         assertFalse(Files.exists(f));
         assertTrue(Files.isDirectory(project));
+        assertEquals("still here", Files.readString(trashDir.resolve("files/gone.txt")), "the file is in the bin, not destroyed");
+        assertTrue(Files.readString(trashDir.resolve("info/gone.txt.trashinfo")).contains("Path=" + Trash.encode(f.toString())), "the bin remembers where it came from");
     }
 
-    @Test void deletesAnEmptyFolder() throws IOException {
+    @Test void aBinThatCannotTakeTheEntryLeavesItWhereItWas() throws IOException {
+        Path f = Files.writeString(project.resolve("stay.txt"), "x");
+        Path folder = Files.createDirectory(project.resolve("folder"));
+        Files.writeString(folder.resolve("inside.txt"), "y");
+        Trash.Bin broken = path -> { throw new IOException("the bin is full"); };
+        assertEquals("the bin is full", assertThrows(IOException.class, () -> ProjectFiles.trash(project, f, broken)).getMessage());
+        assertThrows(IOException.class, () -> ProjectFiles.trash(project, folder, broken));
+        assertEquals("x", Files.readString(f), "nothing is deleted when there is nowhere to put it");
+        assertEquals("y", Files.readString(folder.resolve("inside.txt")));
+    }
+
+    @Test void trashingTheSameNameTwiceKeepsBothCopies() throws IOException {
+        ProjectFiles.trash(project, Files.writeString(project.resolve("same.txt"), "first"), bin);
+        ProjectFiles.trash(project, Files.writeString(project.resolve("same.txt"), "second"), bin);
+        assertEquals("first", Files.readString(trashDir.resolve("files/same.txt")));
+        assertEquals("second", Files.readString(trashDir.resolve("files/same.txt.2")));
+    }
+
+    @Test void trashesAnEmptyFolder() throws IOException {
         Path d = Files.createDirectory(project.resolve("empty"));
-        ProjectFiles.delete(project, d);
+        ProjectFiles.trash(project, d, bin);
         assertFalse(Files.exists(d));
     }
 
-    @Test void deletesAFolderWithEverythingInIt() throws IOException {
+    @Test void trashesAFolderWithEverythingInIt() throws IOException {
         Path deep = Files.createDirectories(project.resolve("a/b/c"));
         Files.writeString(deep.resolve("x.txt"), "x");
         Files.writeString(project.resolve("a/y.txt"), "y");
         Files.writeString(project.resolve("sibling.txt"), "stay");
-        ProjectFiles.delete(project, project.resolve("a"));
+        ProjectFiles.trash(project, project.resolve("a"), bin);
         assertFalse(Files.exists(project.resolve("a")));
         assertEquals("stay", Files.readString(project.resolve("sibling.txt")));
+        assertEquals("x", Files.readString(trashDir.resolve("files/a/b/c/x.txt")), "the whole folder, with its contents, is in the bin");
+        assertEquals("y", Files.readString(trashDir.resolve("files/a/y.txt")));
     }
 
-    @Test void multipleSelectedFilesAndFoldersCanBeDeletedTogether() throws IOException {
+    @Test void multipleSelectedFilesAndFoldersCanBeTrashedTogether() throws IOException {
         Path folder = Files.createDirectories(project.resolve("src/nested"));
         Path nestedFile = Files.createFile(folder.resolve("Main.java"));
         Path otherFile = Files.createFile(project.resolve("notes.txt"));
@@ -196,7 +226,7 @@ class ProjectFilesTest {
         Files.createFile(otherFolder.resolve("logo.png"));
 
         for (Path target : ProjectFiles.topLevelTargets(List.of(nestedFile, otherFile, project.resolve("src"), otherFolder)))
-            ProjectFiles.delete(project, target);
+            ProjectFiles.trash(project, target, bin);
 
         assertFalse(Files.exists(project.resolve("src")));
         assertFalse(Files.exists(otherFile));
@@ -212,63 +242,64 @@ class ProjectFilesTest {
         assertEquals(List.of(sibling, folder), ProjectFiles.topLevelTargets(List.of(nestedFile, sibling, folder)));
     }
 
-    @Test void deletesWhenGivenAnUnnormalizedPath() throws IOException {
+    @Test void trashesWhenGivenAnUnnormalizedPath() throws IOException {
         Files.createDirectories(project.resolve("a"));
         Path f = Files.createFile(project.resolve("a/f.txt"));
-        ProjectFiles.delete(project, project.resolve("a/../a/f.txt"));
+        ProjectFiles.trash(project, project.resolve("a/../a/f.txt"), bin);
         assertFalse(Files.exists(f));
     }
 
-    @Test void refusesToDeleteTheProjectFolderItself() throws IOException {
+    @Test void refusesToTrashTheProjectFolderItself() throws IOException {
         Files.createFile(project.resolve("keep.txt"));
-        IOException ex = assertThrows(IOException.class, () -> ProjectFiles.delete(project, project));
+        IOException ex = assertThrows(IOException.class, () -> ProjectFiles.trash(project, project, bin));
         assertTrue(ex.getMessage().contains("project folder itself"), ex.getMessage());
-        assertThrows(IOException.class, () -> ProjectFiles.delete(project, project.resolve("sub/..")));
+        assertThrows(IOException.class, () -> ProjectFiles.trash(project, project.resolve("sub/.."), bin));
         assertTrue(Files.exists(project.resolve("keep.txt")));
     }
 
-    @Test void refusesToDeleteAnythingOutsideTheProject() throws IOException {
+    @Test void refusesToTrashAnythingOutsideTheProject() throws IOException {
         Path outside = Files.writeString(dir.resolve("outside.txt"), "safe");
         Path sibling = Files.createDirectory(dir.resolve("project-two"));
         Files.createFile(sibling.resolve("x"));
-        assertThrows(IOException.class, () -> ProjectFiles.delete(project, outside));
-        assertThrows(IOException.class, () -> ProjectFiles.delete(project, project.resolve("../outside.txt")));
-        assertThrows(IOException.class, () -> ProjectFiles.delete(project, sibling)); // shares a name prefix, is not inside
-        assertThrows(IOException.class, () -> ProjectFiles.delete(project, dir));
+        assertThrows(IOException.class, () -> ProjectFiles.trash(project, outside, bin));
+        assertThrows(IOException.class, () -> ProjectFiles.trash(project, project.resolve("../outside.txt"), bin));
+        assertThrows(IOException.class, () -> ProjectFiles.trash(project, sibling, bin)); // shares a name prefix, is not inside
+        assertThrows(IOException.class, () -> ProjectFiles.trash(project, dir, bin));
         assertEquals("safe", Files.readString(outside));
         assertTrue(Files.exists(sibling.resolve("x")));
     }
 
     @Test void reportsAFileThatIsAlreadyGone() {
-        NoSuchFileException ex = assertThrows(NoSuchFileException.class, () -> ProjectFiles.delete(project, project.resolve("ghost.txt")));
+        NoSuchFileException ex = assertThrows(NoSuchFileException.class, () -> ProjectFiles.trash(project, project.resolve("ghost.txt"), bin));
         assertTrue(ex.getMessage().contains("ghost.txt"), ex.getMessage());
     }
 
-    @Test void deletingALinkRemovesTheLinkAndNotWhatItPointsAt() throws IOException {
+    @Test void trashingALinkMovesTheLinkAndNotWhatItPointsAt() throws IOException {
         Path outside = Files.createDirectories(dir.resolve("outside"));
         Path precious = Files.writeString(outside.resolve("precious.txt"), "safe");
         link(project.resolve("link"), outside);
-        ProjectFiles.delete(project, project.resolve("link"));
+        ProjectFiles.trash(project, project.resolve("link"), bin);
         assertFalse(Files.exists(project.resolve("link"), java.nio.file.LinkOption.NOFOLLOW_LINKS));
+        assertTrue(Files.isSymbolicLink(trashDir.resolve("files/link")), "the link itself is what was trashed");
         assertEquals("safe", Files.readString(precious));
     }
 
-    @Test void deletingAFolderThatContainsALinkLeavesTheLinkTargetAlone() throws IOException {
+    @Test void trashingAFolderThatContainsALinkLeavesTheLinkTargetAlone() throws IOException {
         Path outside = Files.createDirectories(dir.resolve("outside"));
         Path precious = Files.writeString(outside.resolve("precious.txt"), "safe");
         Path folder = Files.createDirectory(project.resolve("folder"));
         link(folder.resolve("link"), outside);
         Files.createFile(folder.resolve("own.txt"));
-        ProjectFiles.delete(project, folder);
+        ProjectFiles.trash(project, folder, bin);
         assertFalse(Files.exists(folder));
         assertEquals("safe", Files.readString(precious));
     }
 
-    @Test void deletingThroughALinkThatLeadsOutsideIsRefused() throws IOException {
+    @Test void trashingThroughALinkThatLeadsOutsideIsRefused() throws IOException {
         Path outside = Files.createDirectories(dir.resolve("outside"));
         Path precious = Files.writeString(outside.resolve("precious.txt"), "safe");
         link(project.resolve("link"), outside);
-        IOException ex = assertThrows(IOException.class, () -> ProjectFiles.delete(project, project.resolve("link/precious.txt")));
+        IOException ex = assertThrows(IOException.class, () -> ProjectFiles.trash(project, project.resolve("link/precious.txt"), bin));
         assertTrue(ex.getMessage().contains("not inside the project"), ex.getMessage());
         assertEquals("safe", Files.readString(precious));
     }
@@ -277,17 +308,17 @@ class ProjectFilesTest {
         Path real = Files.createDirectories(project.resolve("real"));
         Path f = Files.writeString(real.resolve("f.txt"), "x");
         link(project.resolve("alias"), real);
-        ProjectFiles.delete(project, project.resolve("alias/f.txt"));
+        ProjectFiles.trash(project, project.resolve("alias/f.txt"), bin);
         assertFalse(Files.exists(f));
     }
 
-    @Test void createThenDeleteRoundTrip() throws IOException {
+    @Test void createThenTrashRoundTrip() throws IOException {
         Path folder = ProjectFiles.createFolder(project, "pkg");
         Path file = ProjectFiles.createFile(folder, "A.java");
         assertEquals(new Contents(1, 0), ProjectFiles.contents(folder));
-        ProjectFiles.delete(project, file);
+        ProjectFiles.trash(project, file, bin);
         assertEquals(new Contents(0, 0), ProjectFiles.contents(folder));
-        ProjectFiles.delete(project, folder);
+        ProjectFiles.trash(project, folder, bin);
         try (var s = Files.list(project)) { assertEquals(0, s.count()); }
     }
 

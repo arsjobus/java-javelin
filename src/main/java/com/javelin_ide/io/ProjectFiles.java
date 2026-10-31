@@ -112,10 +112,12 @@ public final class ProjectFiles {
     }
 
     /**
-     * Deletes a file, or a folder with everything in it. Refuses the project folder itself and anything that is not
-     * inside {@code projectRoot}. Symbolic links are removed, never followed.
+     * Moves a file, or a folder with everything in it, into the recycle bin ({@link Trash#system()} in the app); nothing is ever
+     * deleted for good. Refuses the project folder itself and anything that is not inside
+     * {@code projectRoot}, including paths that escape it through a symbolic link; a symbolic link is trashed
+     * itself, never followed. If the bin cannot take the entry this fails and the entry stays where it was.
      */
-    public static void delete(Path projectRoot, Path target) throws IOException {
+    public static void trash(Path projectRoot, Path target, Trash.Bin bin) throws IOException {
         Path root = projectRoot.toAbsolutePath().normalize();
         Path victim = target.toAbsolutePath().normalize();
         if (victim.equals(root)) throw new IOException("The project folder itself cannot be deleted from here.");
@@ -123,13 +125,7 @@ public final class ProjectFiles {
         if (!Files.exists(victim, LinkOption.NOFOLLOW_LINKS)) throw new NoSuchFileException(victim.toString(), null, victim.getFileName() + " no longer exists.");
         // A symbolic link in the middle of the path could lead out of the project; check where the parent really is.
         if (!victim.getParent().toRealPath().startsWith(root.toRealPath())) throw new IOException(victim.getFileName() + " is not inside the project, so it will not be deleted.");
-        Files.walkFileTree(victim, new SimpleFileVisitor<>() {
-            @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException { Files.delete(file); return FileVisitResult.CONTINUE; }
-            @Override public FileVisitResult postVisitDirectory(Path dir, IOException ex) throws IOException { // if listing failed, the delete below fails loudly too
-                Files.delete(dir);
-                return FileVisitResult.CONTINUE;
-            }
-        });
+        bin.moveToTrash(victim);
     }
 
     /** Gives {@code source} a new name, keeping it in the same folder. Never overwrites; see {@link #move}. */

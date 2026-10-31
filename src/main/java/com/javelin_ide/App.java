@@ -18,6 +18,7 @@ import com.javelin_ide.io.RecentProjects;
 import com.javelin_ide.io.ProjectChange;
 import com.javelin_ide.io.ProjectWatcher;
 import com.javelin_ide.io.RecoveryStore;
+import com.javelin_ide.io.Trash;
 import com.javelin_ide.build.ManagedProcess;
 import com.javelin_ide.build.Problem;
 import com.javelin_ide.build.ProblemParser;
@@ -218,7 +219,7 @@ public final class App extends Application {
                 setContextMenu(empty || file == null ? null : treeMenu);
             }
         });
-        MenuItem newFile = new MenuItem("New File..."), newFolder = new MenuItem("New Folder..."), rename = new MenuItem("Rename..."), delete = new MenuItem("Delete...");
+        MenuItem newFile = new MenuItem("New File..."), newFolder = new MenuItem("New Folder..."), rename = new MenuItem("Rename..."), delete = new MenuItem("Delete");
         renameTreeItem = rename;
         newFile.setOnAction(e -> createInTree(false));
         newFolder.setOnAction(e -> createInTree(true));
@@ -646,7 +647,7 @@ public final class App extends Application {
         }
     }
 
-    /** Deletes the selected files and folders after asking. This is permanent: it does not go to a trash. */
+    /** Moves the selected files and folders straight to the recycle bin, without asking. Nothing is deleted for good. */
     private void deleteFromTree() {
         if (!requireProject("Delete")) return;
         List<TreeItem<File>> selected = new ArrayList<>(projectTree.getSelectionModel().getSelectedItems());
@@ -655,29 +656,19 @@ public final class App extends Application {
         List<Path> targets = ProjectFiles.topLevelTargets(selected.stream().map(item -> item.getValue().toPath()).toList());
         List<Tab> open = new ArrayList<>();
         for (Tab tab : tabs.getTabs()) if (tab.getUserData() instanceof File f && targets.stream().anyMatch(path -> ProjectFiles.isInside(path, f.toPath()))) open.add(tab);
-        long unsaved = open.stream().filter(t -> Boolean.TRUE.equals(dirty.get(t))).count();
-        String names = targets.stream().map(path -> "\"" + path.getFileName() + "\"").reduce((a, b) -> a + ", " + b).orElse("");
-        StringBuilder message = new StringBuilder("Delete " + names + "?");
-        long folderCount = targets.stream().filter(Files::isDirectory).count();
-        if (folderCount > 0) message.append("\nFolders and everything inside them will be deleted.");
-        message.append("\n\nThis cannot be undone; the files are not moved to a trash.");
-        if (!open.isEmpty()) message.append("\n\n").append(open.size()).append(open.size() == 1 ? " open tab will be closed" : " open tabs will be closed")
-            .append(unsaved == 0 ? "." : ", and " + unsaved + (unsaved == 1 ? " has unsaved changes that will be lost." : " have unsaved changes that will be lost."));
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
-        ButtonType delete = new ButtonType("Delete", ButtonBar.ButtonData.OK_DONE), cancel = ButtonType.CANCEL;
-        confirm.setTitle("Delete"); confirm.setHeaderText(null); confirm.setContentText(message.toString());
-        confirm.getButtonTypes().setAll(delete, cancel);
-        if (Dialogs.show(confirm).orElse(cancel) != delete) return;
+        String bin = Trash.name();
         List<String> failures = new ArrayList<>();
+        Trash.Bin recycleBin = Trash.system();
         for (Path path : targets) try {
-            ProjectFiles.delete(projectDirectory.toPath(), path);
+            ProjectFiles.trash(projectDirectory.toPath(), path, recycleBin);
         } catch (IOException ex) {
             failures.add(path.getFileName() + ": " + ex.getMessage());
         }
-        for (Tab tab : open) if (!Files.exists(((File) tab.getUserData()).toPath())) tabs.getTabs().remove(tab);
+        // Like any IDE: an open file that was moved to the bin closes with its unsaved text, which is not kept anywhere.
+        for (Tab tab : open) if (!Files.exists(((File) tab.getUserData()).toPath())) { tabs.getTabs().remove(tab); forgetTab(tab); }
         refreshProjectTree();
-        if (failures.isEmpty()) status.setText("Deleted " + targets.size() + (targets.size() == 1 ? " item." : " items."));
-        else showError("Could not delete everything", String.join("\n", failures));
+        if (failures.isEmpty()) status.setText("Moved " + targets.size() + (targets.size() == 1 ? " item" : " items") + " to the " + bin + ".");
+        else showError("Could not move everything to the " + bin, String.join("\n", failures));
     }
 
     /** The row that was dragged, if the drag carries the path of something inside the project. */
@@ -872,11 +863,23 @@ public final class App extends Application {
         for (Tab tab : tabs.getTabs()) if (file.equals(tab.getUserData())) { tabs.getSelectionModel().select(tab); return; }
         if (ImageFiles.isImage(file.toPath())) { openImage(file); return; }
         try {
-            CodeArea editor = createEditor(); editor.replaceText(FileIO.readText(file.toPath())); editor.moveTo(0);
+            CodeArea editor = createEditor(); editor.replaceText(FileIO.readText(file.toPath()));
             Tab tab = createTab(file.getName(), editor, file); tabs.getTabs().add(tab); tabs.getSelectionModel().select(tab);
             dirty.put(tab, false); language.open(file, editor.getText()); highlight(editor);
+            showFromTop(editor);
             status.setText((SyntaxHighlighter.tooLarge(editor.getLength()) ? "Opened (large file, syntax highlighting is off): " : "Opened: ") + file.getAbsolutePath());
         } catch (IOException ex) { showError("Could not open file", ex.getMessage()); }
+    }
+
+    /**
+     * Makes a freshly opened file start at its first line. Replacing the text leaves the caret at the end, and the
+     * editor scrolls to the caret when it is first laid out, so a file would open at the bottom; this puts the caret
+     * and the viewport back at the top now and once more after the layout pass.
+     */
+    private static void showFromTop(CodeArea editor) {
+        Runnable top = () -> { editor.moveTo(0); editor.scrollXToPixel(0); editor.scrollYToPixel(0); };
+        top.run();
+        Platform.runLater(top);
     }
 
     /** Pictures open in a read-only viewer tab: no text buffer, no language server, nothing to save. */

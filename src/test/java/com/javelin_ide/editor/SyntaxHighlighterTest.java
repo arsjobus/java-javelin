@@ -109,11 +109,11 @@ class SyntaxHighlighterTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"A.java", "a.JAVA", "a.kt", "a.kts", "a.js", "a.mjs", "a.cjs", "a.jsx", "a.ts", "a.tsx", "a.c", "a.h", "a.cpp", "a.cc", "a.cxx", "a.hpp", "a.hh",
-        "a.go", "a.rs", "a.php", "a.json", "a.md", "a.markdown", "archive.tar.java", "dir.py/Main.java"})
+        "a.go", "a.rs", "a.php", "a.json", "a.md", "a.markdown", "a.yml", "a.yaml", "archive.tar.java", "dir.py/Main.java"})
     void cFamilyFilesAreHighlighted(String name) { assertTrue(SyntaxHighlighter.appliesTo(new File(name)), name); }
 
     @ParameterizedTest
-    @ValueSource(strings = {"a.rb", "a.sh", "a.bash", "a.txt", "a.yml", "a.properties", "README", "Makefile", ".bashrc", "trailing.", "a.java.bak", "dir.java/notes"})
+    @ValueSource(strings = {"a.rb", "a.sh", "a.bash", "a.txt", "a.toml", "a.properties", "README", "Makefile", ".bashrc", "trailing.", "a.java.bak", "dir.java/notes"})
     void otherFilesAreShownAsPlainText(String name) { assertFalse(SyntaxHighlighter.appliesTo(new File(name)), name); }
 
     @Test void anUntitledBufferIsHighlighted() { assertTrue(SyntaxHighlighter.appliesTo(null)); }
@@ -149,7 +149,7 @@ class SyntaxHighlighterTest {
     @ParameterizedTest
     @CsvSource({"A.java,JAVA", "a.JAVA,JAVA", "a.kt,KOTLIN", "a.kts,KOTLIN", "a.js,JAVASCRIPT", "a.mjs,JAVASCRIPT", "a.cjs,JAVASCRIPT", "a.jsx,JAVASCRIPT",
         "a.ts,TYPESCRIPT", "a.tsx,TYPESCRIPT", "a.c,C", "a.h,CPP", "a.cpp,CPP", "a.cc,CPP", "a.cxx,CPP", "a.hpp,CPP", "a.hh,CPP", "a.go,GO", "a.rs,RUST",
-        "a.php,PHP", "a.json,JSON", "a.md,MARKDOWN", "a.markdown,MARKDOWN", "dir.py/Main.java,JAVA"})
+        "a.php,PHP", "a.json,JSON", "a.md,MARKDOWN", "a.markdown,MARKDOWN", "a.yml,YAML", "a.YAML,YAML", "dir.py/Main.java,JAVA"})
     void eachExtensionMapsToItsLanguage(String name, Language expected) { assertEquals(expected, SyntaxHighlighter.languageOf(new File(name)), name); }
 
     @ParameterizedTest
@@ -375,6 +375,90 @@ class SyntaxHighlighterTest {
         assertFalse(SyntaxHighlighter.spans("<p class=\"x\">", new File("index.html")).isEmpty());
         assertFalse(SyntaxHighlighter.spans("<?xml version=\"1.0\"?><a/>", new File("pom.xml")).isEmpty());
         assertEquals(SyntaxHighlighter.spansIn("def f(): pass", Language.PYTHON), SyntaxHighlighter.spans("def f(): pass", new File("main.py")));
+    }
+
+    // YAML
+
+    @Test void yamlKeysScalarsCommentsAndMarkersAreColoured() {
+        String yaml = "---\n# settings\nname: \"My App\"  # trailing\nport: 8080\nratio: -0.5e3\ndebug: true\nnothing: ~\nhome: /usr/local\n...\n";
+        assertEquals(List.of("annotation:---", "comment:# settings", "type:name", "string:\"My App\"", "comment:# trailing", "type:port", "number:8080",
+            "type:ratio", "number:-0.5e3", "type:debug", "keyword:true", "type:nothing", "keyword:~", "type:home", "annotation:..."), styled(yaml, "app.yml"));
+    }
+
+    @Test void yamlSequencesNestedMappingsAndQuotedKeys() {
+        String yaml = "steps:\n  - name: build\n    run: mvn verify\n  - - nested\n  - \"quoted key\": 1\n";
+        assertEquals(List.of("type:steps", "type:name", "type:run", "type:\"quoted key\"", "number:1"), styled(yaml, "ci.yaml"));
+    }
+
+    @Test void yamlAnchorsAliasesAndTags() {
+        String yaml = "base: &base\n  a: 1\nderived:\n  <<: *base\n  id: !!str 42\n";
+        assertEquals(List.of("type:base", "annotation:&base", "type:a", "number:1", "type:derived", "type:<<", "annotation:*base", "type:id", "annotation:!!str", "number:42"),
+            styled(yaml, "a.yml"));
+    }
+
+    @Test void yamlFlowCollectionsColourKeysValuesAndStrings() {
+        assertEquals(List.of("type:list", "number:1", "keyword:true", "string:\"s\""), styled("list: [a, 1, true, \"s\"]", "a.yml"));
+        assertEquals(List.of("type:map", "type:k", "type:n", "keyword:null", "type:'q'", "number:2"), styled("map: {k: v, n: null, 'q': 2}", "a.yml"));
+        assertEquals(List.of("type:k", "number:1"), styled("{k: 1}", "a.yml"), "a flow mapping that opens the line");
+        assertEquals(List.of("type:a"), styled("{a: [b, c]", "a.yml"), "an unclosed flow collection stays harmless");
+        assertEquals(List.of("number:1"), styled("[1]]", "a.yml"), "a stray closing bracket is ignored");
+    }
+
+    @Test void yamlBlockScalarsAreStringsUntilTheIndentationEnds() {
+        String yaml = "script: |\n  echo \"# not a comment\"\n  key: value\n\n  more\nnext: 1\nfolded: >-  # about it\n  some text\nlast: false\n";
+        assertEquals(List.of("type:script", "annotation:|", "string:echo \"# not a comment\"", "string:key: value", "string:more", "type:next", "number:1",
+            "type:folded", "annotation:>-", "comment:# about it", "string:some text", "type:last", "keyword:false"), styled(yaml, "a.yml"));
+    }
+
+    @Test void yamlBlockScalarsInSequencesAndAfterAnchorsOrTags() {
+        assertEquals(List.of("annotation:|", "string:text", "number:1"), styled("- |\n  text\n- 1\n", "a.yml"));
+        assertEquals(List.of("type:k", "annotation:&a", "annotation:|2+", "string:x", "type:j"), styled("k: &a |2+\n    x\nj:\n", "a.yml"));
+        assertEquals(List.of("type:k", "annotation:!!str", "annotation:>", "string:body"), styled("k: !!str >\n  body", "a.yml"));
+    }
+
+    @Test void yamlLookalikesStayPlain() {
+        assertEquals(List.of("type:url"), styled("url: http://example.com/a#b", "a.yml"), "# without a space before it is part of the text");
+        assertEquals(List.of("type:plain text with a"), styled("plain text with a: colon:inside and 1.2.3 and yes", "a.yml"), "only the text before the colon is a key");
+        assertEquals(List.of("keyword:Null", "keyword:TRUE"), styled("[Null, TRUE]", "a.yml"));
+        assertEquals(List.of(), styled("[yes, no, on, off, truthy, nullable, 1.2.3, 12ab, -, +]", "a.yml"), "only the YAML 1.2 literals and real numbers are coloured");
+        assertEquals(List.of("type:a"), styled("a: | not a header", "a.yml"), "text after | makes it plain text, not a block scalar");
+        assertEquals(List.of("type:a"), styled("a: b:c", "a.yml"), "a colon without a space after it is part of the value");
+        assertEquals(List.of(), styled("---not a marker", "a.yml"));
+        assertEquals(List.of(), styled("- notalist-item", "a.yml"));
+        assertEquals(List.of("annotation:&"), styled("&", "a.yml"));
+        assertEquals(List.of("annotation:%YAML 1.2"), styled("%YAML 1.2", "a.yml"), "a directive only counts in the first column");
+        assertEquals(List.of(), styled("  %not a directive", "a.yml"));
+    }
+
+    @Test void yamlNumbersInAllTheirForms() {
+        for (String number : new String[] {"0", "42", "-7", "+3", "3.14", ".5", "5.", "1e3", "1.5E-3", "2e+8", "0x1F", "0o17", ".inf", "-.inf", "+.Inf", ".NaN", ".NAN", ".nan"})
+            assertEquals(List.of("number:" + number), styled("[" + number + "]", "a.yml"), number);
+        for (String notNumber : new String[] {"-", ".", "1e", "1e+", "0x", "0xZZ", "0o9", "0o", "-.nan", "1.2.3", "abc", "1_000x"})
+            assertEquals(List.of(), styled("[" + notNumber + "]", "a.yml"), notNumber);
+    }
+
+    @Test void yamlQuotedStringsEndWithTheirQuoteOrTheLine() {
+        assertEquals(List.of("type:a", "string:'it''s'", "comment:# c"), styled("a: 'it''s' # c", "a.yml"));
+        assertEquals(List.of("type:a", "string:\"say \\\"hi\\\"\"", "number:2"), styled("a: \"say \\\"hi\\\"\" 2", "a.yml"));
+        assertEquals(List.of("type:a", "string:\"never closed"), styled("a: \"never closed", "a.yml"));
+        assertEquals(List.of("string:'also never closed"), styled("'also never closed", "a.yml"));
+        assertEquals(List.of("type:it's", "string:'x'"), styled("it's: 'x'", "a.yml"), "an apostrophe inside a plain key is not a quote");
+    }
+
+    @Test void yamlHandlesWindowsLineEndingsBlankLinesAndEmptyInput() {
+        assertEquals(List.of("type:a", "number:1", "type:b", "keyword:true"), styled("a: 1\r\n\r\n   \r\nb: true\r\n", "a.yml"));
+        assertEquals(List.of(), styled("", "a.yml"));
+        assertEquals(List.of(), styled("\n\n", "a.yml"));
+        assertEquals(List.of("type:k", "annotation:|", "string:x"), styled("k: |\r\n  x", "a.yml"), "a block scalar can end the file without a final newline");
+        assertEquals(List.of("type:a", "comment:#c"), styled("a: #c", "a.yml"));
+    }
+
+    @Test void yamlStaysFastOnLongLinesAndIsOffForHugeFiles() {
+        String long1 = "k: " + "x ".repeat(200_000) + "\n" + "[".repeat(100_000) + "\n" + "\"".repeat(100_000);
+        long start = System.nanoTime();
+        SyntaxHighlighter.spans(long1, new File("big.yml"));
+        assertTrue((System.nanoTime() - start) / 1_000_000 < 5_000);
+        assertTrue(SyntaxHighlighter.spansIn("a: 1\n".repeat(SyntaxHighlighter.MAX_CHARS / 4), Language.YAML).isEmpty());
     }
 
     // Python

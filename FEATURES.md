@@ -14,7 +14,8 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | Switching to a different project first closes the previous project's files: each unsaved file asks Save / Discard / Cancel, and Cancel keeps the old project (and its remaining files) open. Reopening the same project leaves files alone | File > Open Project / Recent Projects | `ProjectChangeTest`, `ProjectSwitchE2ETest` |
 | One window per project, several at once | run `Javelin` in each folder | `MultiInstanceTest`, `OpenRequestsTest` |
 | Opening a folder that another window already has asks first (Open Anyway / Cancel); a `Javelin` window started only for such a folder closes on Cancel. A crashed window never leaves a project stuck | automatic | `ProjectInstancesTest`, `SameProjectTwiceE2ETest` (a real second process), `MultiInstanceTest` (wiring) |
-| Project tree: create, rename, move, delete (confined to the project) | right-click, drag | `ProjectFilesTest`, `TreeGesturesTest`, `ProjectWorkflowE2ETest` (rename/move/delete) |
+| Project tree: create, rename, move (confined to the project) | right-click, drag | `ProjectFilesTest`, `TreeGesturesTest`, `ProjectWorkflowE2ETest` (rename/move) |
+| Delete moves files and folders to the Recycle Bin / Trash, never removes them for good; if the bin cannot take an entry it stays where it was. Restorable from the system bin (Linux and macOS fallbacks keep the desktop layout) | right-click > Delete, Delete key; no confirmation, open tabs of deleted files close without asking | `ProjectFilesTest`, `TrashTest`, `ProjectWorkflowE2ETest.deletingIsConfinedToTheProjectAndGoesToTheBin` |
 | Tree follows outside changes (terminal, git, file manager) | automatic, ~2 s | `ProjectWatcherTest`, `ProjectWorkflowE2ETest.changesMadeOutsideTheEditorRefreshTheTree` |
 | Hide folders from tree and Go to File (`tree.exclude`) | settings | `NameListTest`, `ProjectWorkflowE2ETest.aProjectCanChangeWhatTheTreeHides` |
 | Go to File (exact name, skips excluded folders) | Go to > File | `ProjectFinderTest`, `ProjectWorkflowE2ETest.goToFileFindsFilesButSkipsExcludedFolders` |
@@ -33,7 +34,9 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 
 | Feature | How | Verified by |
 | --- | --- | --- |
-| Syntax highlighting (Java, Kotlin, JS/TS, C/C++, Go, Rust, PHP, JSON, Python, HTML, XML) | by extension | `SyntaxHighlighterTest` |
+| Syntax highlighting (Java, Kotlin, JS/TS, C/C++, Go, Rust, PHP, JSON, Python, HTML, XML, Markdown, YAML) | by extension | `SyntaxHighlighterTest` |
+| YAML (`.yml`, `.yaml`) colours comments, keys, quoted strings, block scalars, numbers, true/false/null, anchors, aliases, tags and `---` markers, also inside `[...]` and `{...}` | by extension | `SyntaxHighlighterTest` (`yaml*`) |
+| A file opens at its first line, not scrolled to the bottom | automatic | manual check, see HARDENING.md |
 | Search, match case, replace | Edit menu | `TextSearchTest`, `ProjectWorkflowE2ETest.findAndReplaceAcrossASavedFile` |
 | Auto indentation, newline handling | typing | `IndentationTest`, `NewlineTest` |
 | Symbol under the caret (hover, definition, references, rename) | Language menu | `SymbolsTest`, `LanguageServiceTest` |

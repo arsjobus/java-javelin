@@ -94,6 +94,8 @@
                         <exclude>com/javelin_ide/App*</exclude>
                         <exclude>com/javelin_ide/Launcher*</exclude>
                         <exclude>com/javelin_ide/ui/**</exclude>
+                        <!-- Asks the JDK to use the operating system's trash; needs a desktop session. Everything around it is covered. -->
+                        <exclude>com/javelin_ide/io/DesktopTrash*</exclude>
                     </excludes>
                 </configuration>
                 <executions>

@@ -11,6 +11,7 @@ import com.javelin_ide.io.ProjectPaths;
 import com.javelin_ide.io.ProjectWatcher;
 import com.javelin_ide.io.RecentProjects;
 import com.javelin_ide.io.RecoveryStore;
+import com.javelin_ide.io.Trash;
 import com.javelin_ide.settings.NameList;
 import com.javelin_ide.settings.Settings;
 import java.io.File;
@@ -34,6 +35,7 @@ import org.junit.jupiter.api.io.TempDir;
  */
 class ProjectWorkflowE2ETest {
     @TempDir Path home;
+    private Trash.Bin bin;
     Path project;
     final AtomicInteger treeRefreshes = new AtomicInteger();
     ProjectWatcher watcher;
@@ -56,6 +58,7 @@ class ProjectWorkflowE2ETest {
 
     @BeforeEach void openProject() throws IOException {
         project = Files.createDirectories(home.resolve("demo"));
+        bin = Trash.freedesktop(home.resolve("trash"), java.time.Clock.systemUTC());
         settings = new Settings(home.resolve("user").resolve(Settings.FILE_NAME));
         settings.setProject(project);
         settings.reload();
@@ -120,14 +123,15 @@ class ProjectWorkflowE2ETest {
         assertEquals(Path.of("model", "New.java").toString(), ProjectPaths.display(project.toFile(), moved.toFile()));
     }
 
-    @Test void deletingIsConfinedToTheProject() throws IOException {
+    @Test void deletingIsConfinedToTheProjectAndGoesToTheBin() throws IOException {
         Path file = ProjectFiles.createFile(project, "Scratch.txt");
         Path outside = Files.writeString(home.resolve("precious.txt"), "keep");
 
-        assertThrows(IOException.class, () -> ProjectFiles.delete(project, outside));
-        assertThrows(IOException.class, () -> ProjectFiles.delete(project, project), "the project folder itself is refused");
-        ProjectFiles.delete(project, file);
+        assertThrows(IOException.class, () -> ProjectFiles.trash(project, outside, bin));
+        assertThrows(IOException.class, () -> ProjectFiles.trash(project, project, bin), "the project folder itself is refused");
+        ProjectFiles.trash(project, file, bin);
         assertFalse(Files.exists(file));
+        assertTrue(Files.exists(home.resolve("trash/files/Scratch.txt")), "deleted files can be restored from the bin");
         assertEquals("keep", Files.readString(outside));
     }
 
