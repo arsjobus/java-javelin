@@ -119,9 +119,9 @@ javelin_ide/
 ├── BUGS.md
 ├── packaging/macos/   (build-app.sh, install.sh, the Javelin command)
 └── src/
-    ├── main/java/com/javelin_ide/App.java
-    ├── main/java/com/javelin_ide/build/   (process, build, and diagnostics services)
-    ├── main/java/com/javelin_ide/ui/      (output, problems, and terminal panels)
+    ├── main/java/com/javelin_ide/App.java (creates and connects the window's features)
+    ├── main/java/com/javelin_ide/build/   (process, build, and diagnostics services; likewise editor, io, language, launch, settings, terminal: JavaFX-free)
+    ├── main/java/com/javelin_ide/ui/      (JavaFX: panels and dialogs, plus one package per feature: shell, editor, project, language, run, customize, recovery, menu)
     └── main/resources/styles/editor.css
 ```
 

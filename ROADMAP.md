@@ -124,14 +124,15 @@ Each open item above, with what would let it be ticked. Items marked *decision* 
 
 ### Maintainability: taking logic out of `App`
 
-`App.java` is the one class the coverage gate cannot see (about 1,700 lines of window wiring, menus, themes, the project
-tree, tabs, search, build/run, language and recovery). The rule in `AGENTS.md` is to keep UI wiring thin, so the order is
-logic first, wiring second, one slice per change, each with its own tests:
+`App.java` used to be the one class the coverage gate cannot see (about 1,700 lines of window wiring, menus, themes, the
+project tree, tabs, search, build/run, language and recovery). The rule in `AGENTS.md` is to keep UI wiring thin, so the
+order was logic first, wiring second, one slice per change, each with its own tests:
 
 1. Language: `TextEdits`, `RenamePlan`, `LanguageProblems` and `Completions` (the completion-candidate maths) (done).
 2. Project tree: expanded-state and drop-target rules that do not need a `TreeItem`.
 3. Go to line and bracket matching: `LineNavigation` and `Brackets` (done). Still in `App`: the search and replace dialogs.
 4. Settings and themes application.
-5. Tabs and crash recovery wiring; then split `App` into a window class plus one controller per area.
+5. Tabs and crash recovery wiring; then split `App` into a window class plus one controller per area (done: `App` is about
+   130 lines of wiring, one `ui.<feature>` package per area, and `ArchitectureTest` keeps it that way).
 
 Done alongside: the product name lives in `Branding` (window titles, dialogs, crash report, language-server client info), so the build scripts, the app and `BrandingTest` share one spelling.

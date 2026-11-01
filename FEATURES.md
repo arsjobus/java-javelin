@@ -68,6 +68,17 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | --- | --- |
 | User and project settings, themes, rebindable shortcuts, editor preferences | `SettingsTest`, `ThemesTest`, `KeybindingsTest`, `DefaultShortcutsTest`, `EditorPreferencesTest` |
 
+## Architecture guarantees
+
+| Guarantee | Verified by |
+| --- | --- |
+| Core packages (build, editor, io, language, launch, settings, terminal, icon) never touch JavaFX, the window or `App`, and have no cycles | `ArchitectureTest.coreDoesNotKnowTheToolkit`, `ArchitectureTest.coreDoesNotKnowTheWindow`, `ArchitectureTest.corePackagesAreFreeOfCycles` |
+| Only `ui` and `App` use JavaFX; nothing depends on `App` | `ArchitectureTest.onlyTheWindowTouchesTheToolkit`, `ArchitectureTest.nothingDependsOnTheBootstrap` |
+| Window features talk to each other only through `ui.shell` and `ui.editor` | `ArchitectureTest.theEditorKnowsOnlyTheShell`, `ArchitectureTest.languageKnowsOnlyTheShellAndTheEditor`, `ArchitectureTest.uiFeaturePackagesAreFreeOfCycles` |
+| `App` stays a wiring list (200 lines at most) and no source file passes 900 lines | `ArchitectureTest.theApplicationClassStaysAWiringList`, `ArchitectureTest.noSourceFileGrowsBeyondWhatCanBeReviewed` |
+| Every feature in this document names a test that exists | `FeaturesDocTest.everyFeatureNamesATestThatExists` |
+| Language diagnostics are kept per file and move with edits | `DiagnosticStoreTest`, `DiagnosticShifterTest` |
+
 ## Privacy and offline guarantees
 
 | Guarantee | Verified by |

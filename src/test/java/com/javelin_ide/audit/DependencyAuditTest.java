@@ -19,7 +19,7 @@ import org.w3c.dom.NodeList;
  */
 class DependencyAuditTest {
     /** groupId:artifactId (scope) for everything the project may depend on directly. */
-    private static final Set<String> ALLOWED = Set.of("org.openjfx:javafx-controls (compile)", "org.fxmisc.richtext:richtextfx (compile)", "org.junit.jupiter:junit-jupiter (test)");
+    private static final Set<String> ALLOWED = Set.of("org.openjfx:javafx-controls (compile)", "org.fxmisc.richtext:richtextfx (compile)", "org.junit.jupiter:junit-jupiter (test)", "com.tngtech.archunit:archunit (test)");
 
     private static Document pom() throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();

@@ -98,5 +98,5 @@ Run these on each operating system before a release; the JavaFX parts cannot be 
 2. **Unsaved tab.** Open `scratch.txt`, type something without saving, delete it. The tab closes without asking, the file is in the bin, and the unsaved text is gone (it is not kept in crash recovery either).
 3. **Several at once.** Select two files and a folder and delete them together: all three are in the bin.
 4. **Same name twice.** Trash a new `scratch.txt` again: the bin holds both copies.
-5. **Opens at the top.** Open a file of a few thousand lines (for example `App.java`) from the tree, from Go to File and from Recent: it shows line 1 with the caret at the start, in a new tab and when the tab was opened in the background.
+5. **Opens at the top.** Open the longest source file in the project (for example `SyntaxHighlighter.java`) from the tree, from Go to File and from Recent: it shows line 1 with the caret at the start, in a new tab and when the tab was opened in the background.
 6. **YAML colours.** Open `.github/workflows/*.yml` or `pom.xml`-style YAML: keys, strings, comments and `|` blocks have distinct colours in both themes.

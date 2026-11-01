@@ -1,4 +1,4 @@
-package com.javelin_ide;
+package com.javelin_ide.ui.editor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;

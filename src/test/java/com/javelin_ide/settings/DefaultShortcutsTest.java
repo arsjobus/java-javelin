@@ -129,14 +129,14 @@ class DefaultShortcutsTest {
     // ---- guards against the defaults drifting back to hard-coded Ctrl strings ----
 
     @Test void appRegistersEveryDefaultFromTheConstants() throws IOException {
-        String app = Files.readString(Path.of("src/main/java/com/javelin_ide/App.java"));
+        String app = Files.readString(Path.of("src/main/java/com/javelin_ide/ui/menu/MainMenu.java"));
         List<String> literals = new ArrayList<>();
         var matcher = Pattern.compile("\"((?:Ctrl|Control|Meta|Cmd|Command|Alt|Shortcut)\\+[^\"]*)\"").matcher(app);
         while (matcher.find()) literals.add(matcher.group(1));
-        assertTrue(literals.isEmpty(), "App.java hard-codes shortcut strings instead of DefaultShortcuts: " + literals);
+        assertTrue(literals.isEmpty(), "MainMenu hard-codes shortcut strings instead of DefaultShortcuts: " + literals);
         DefaultShortcuts.ALL.keySet().forEach(id ->
             assertTrue(Pattern.compile("\"" + Pattern.quote(id) + "\",\\s*DefaultShortcuts\\.[A-Z_]+").matcher(app).find(),
-                "App does not register " + id + " from DefaultShortcuts"));
+                "MainMenu does not register " + id + " from DefaultShortcuts"));
     }
 
     @Test void customizationDocTableMatchesTheDefaults() throws IOException {

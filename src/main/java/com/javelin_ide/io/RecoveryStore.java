@@ -31,7 +31,7 @@ import java.util.stream.Stream;
  * its snapshot, so any snapshot found at the next start belongs to a session that did not end cleanly. The directory
  * is created owner-only where the file system supports it, because snapshots hold text the user has not chosen to save.
  *
- * <p>Several editor instances can run at once (one per project, see {@code packaging/macos/javelin}) and share this
+ * <p>Several editor instances can run at once (one per project, see {@code packaging/macos/Javelin}) and share this
  * directory. An instance calls {@link #startSession()} to lock a small file for as long as it lives; the snapshots it
  * writes carry its session in their id. Other instances leave those snapshots alone while the lock is held, so a
  * second window never offers (or deletes) a first window's live unsaved work. The operating system drops the lock

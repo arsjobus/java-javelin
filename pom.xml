@@ -15,6 +15,7 @@
         <maven.compiler.release>21</maven.compiler.release>
         <javafx.version>21.0.6</javafx.version>
         <junit.version>5.11.4</junit.version>
+        <archunit.version>1.4.1</archunit.version>
         <!-- Filled in by the JaCoCo agent when it runs; empty otherwise so surefire's @{argLine} always resolves. -->
         <argLine></argLine>
     </properties>
@@ -34,6 +35,13 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Test only: ArchitectureTest turns the package rules in ARCHITECTURE.md into failing tests. -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <version>${archunit.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

@@ -1,4 +1,4 @@
-package com.javelin_ide;
+package com.javelin_ide.ui.editor;
 
 import java.util.List;
 import java.util.Optional;
