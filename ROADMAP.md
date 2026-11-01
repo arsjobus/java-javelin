@@ -135,4 +135,6 @@ order was logic first, wiring second, one slice per change, each with its own te
 5. Tabs and crash recovery wiring; then split `App` into a window class plus one controller per area (done: `App` is about
    130 lines of wiring, one `ui.<feature>` package per area, and `ArchitectureTest` keeps it that way).
 
+Done alongside: theme colours are covered by `ThemeContrastTest` (readable text in every built-in theme; High Contrast must really be high contrast and must stay after the dark rules in `editor.css`).
+
 Done alongside: the product name lives in `Branding` (window titles, dialogs, crash report, language-server client info), so the build scripts, the app and `BrandingTest` share one spelling.

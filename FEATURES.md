@@ -67,6 +67,7 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | Feature | Verified by |
 | --- | --- |
 | User and project settings, themes, rebindable shortcuts, editor preferences | `SettingsTest`, `ThemesTest`, `KeybindingsTest`, `DefaultShortcutsTest`, `EditorPreferencesTest` |
+| Built-in themes keep text readable: BurpleNurple Light and Dark at 4.5:1 or better for every text colour (editor, syntax tokens, line numbers, terminal, problems, popups, dialogs, selections), High Contrast at 7:1 or better on pure black and white with a yellow focus and white borders. High Contrast is its own look, not the dark theme with a different name | View > Theme | `ThemeContrastTest`, `EditorCssTest`, `ThemesTest` |
 
 ## Architecture guarantees
 

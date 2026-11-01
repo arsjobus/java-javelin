@@ -54,7 +54,9 @@ View > Zoom In / Zoom Out / Reset Zoom change the font size for the current sess
 
 ## Themes
 
-Built in: Light, Dark and High Contrast (View > Theme). To add your own, put a `.css` file in the `themes` folder next to
+Built in: BurpleNurple Light, BurpleNurple Dark and High Contrast (View > Theme). Every text colour in the built-in themes
+has a contrast ratio of at least 4.5:1 against the surface it is drawn on (7:1 in High Contrast, which is pure white on
+pure black with yellow focus and selection); `ThemeContrastTest` checks this against `editor.css`. To add your own, put a `.css` file in the `themes` folder next to
 the user settings file; its name (without `.css`) becomes the theme name, and you select it from View > Theme or with
 `theme=<name>`. Saving a theme file inside Javelin IDE re-applies it.
 
@@ -70,6 +72,12 @@ A custom theme is an ordinary JavaFX stylesheet loaded after Javelin IDE's own, 
 
 Style classes you can rely on: `.code-area` with `.keyword`, `.type`, `.string`, `.comment`, `.annotation`, `.number`,
 `.lineno`, `.diag-error`, `.diag-warning`; `.problem-error`, `.problem-warning`; `.popup-pane`. See `editor.css`.
+
+When you write a theme, remember how JavaFX picks between rules: the more specific selector wins, and between two
+selectors that are equally specific the one later in the file wins. Javelin IDE's own sheet relies on this too (the High
+Contrast rules are last in `editor.css` on purpose). Colour looked-up values as well as nodes: `-fx-text-inner-color`
+for text fields and the Output panel, `-fx-selection-bar` with `-fx-selection-bar-text` for selected rows and menu
+items, and `-fx-highlight-fill` with `-fx-highlight-text-fill` for selected text in a field.
 
 ## Keybindings
 
