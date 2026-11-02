@@ -37,7 +37,7 @@ class BrandingTest {
     private static List<Path> textFiles() throws IOException {
         List<Path> files = new ArrayList<>();
         try (Stream<Path> walk = Files.walk(ROOT)) {
-            walk.filter(Files::isRegularFile)
+            walk.filter(p -> Files.isRegularFile(p) && !p.getFileName().toString().startsWith("._") && !p.getFileName().toString().equals(".DS_Store"))
                 .filter(p -> !p.toString().contains(".git" + java.io.File.separator) && !p.startsWith("target") && !p.startsWith("dist"))
                 .filter(p -> p.toString().matches(".*\\.(java|md|xml|sh|css|command)$") || SCRIPTS.equals(p.getParent()))
                 .forEach(files::add);
@@ -88,7 +88,7 @@ class BrandingTest {
         List<String> offenders = new ArrayList<>();
         for (Path file : textFiles()) {
             if (file.getFileName().toString().equals("BrandingTest.java")) continue;   // this file has to name the wrong spelling
-            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+            List<String> lines = List.of(new String(Files.readAllBytes(file), StandardCharsets.UTF_8).split("\\R", -1));   // lenient: see PackageNameTest
             for (int i = 0; i < lines.size(); i++) {
                 if (lines.get(i).contains("legacy-name")) continue;   // deliberate: cleaning up what an older install left
                 if (LOWERCASE_NAME.matcher(lines.get(i)).find()) offenders.add(file + ":" + (i + 1) + ": " + lines.get(i).strip());
