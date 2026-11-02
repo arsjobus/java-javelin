@@ -95,7 +95,7 @@ settings to a PNG, JPEG or GIF (see `CUSTOMIZATION.md`). To get the built-in ico
 
 ```
 mvn compile
-java -cp target/classes com.javelin_ide.icon.IconExporter packaging/icons
+java -cp target/classes com.javelin.icon.IconExporter packaging/icons
 ```
 
 This writes `icon.ico` (Windows), `icon.icns` (macOS) and `icon.png` (Linux).
@@ -103,7 +103,7 @@ This writes `icon.ico` (Windows), `icon.icns` (macOS) and `icon.png` (Linux).
 ## Project structure
 
 ```text
-javelin_ide/
+java-javelin/
 ├── pom.xml
 ├── README.md
 ├── PRINCIPLES.md
@@ -119,9 +119,9 @@ javelin_ide/
 ├── BUGS.md
 ├── packaging/macos/   (build-app.sh, install.sh, the Javelin command)
 └── src/
-    ├── main/java/com/javelin_ide/App.java (creates and connects the window's features)
-    ├── main/java/com/javelin_ide/build/   (process, build, and diagnostics services; likewise editor, io, language, launch, settings, terminal: JavaFX-free)
-    ├── main/java/com/javelin_ide/ui/      (JavaFX: panels and dialogs, plus one package per feature: shell, editor, project, language, run, customize, recovery, menu)
+    ├── main/java/com/javelin/App.java (creates and connects the window's features)
+    ├── main/java/com/javelin/build/   (process, build, and diagnostics services; likewise editor, io, language, launch, settings, terminal: JavaFX-free)
+    ├── main/java/com/javelin/ui/      (JavaFX: panels and dialogs, plus one package per feature: shell, editor, project, language, run, customize, recovery, menu)
     └── main/resources/styles/editor.css
 ```
 

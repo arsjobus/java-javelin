@@ -4,7 +4,7 @@
 
 Javelin IDE is a local-first Java desktop editor built with JavaFX and Maven. Keep changes small and understandable, prefer JDK and JavaFX features over new dependencies, and follow the product rules in `QUICK_RULES.md` and the architecture notes in `ARCHITECTURE.md` when a change affects design or behavior.
 
-Main code is under `src/main/java/com/javelin_ide`. `App.java` only creates and connects the window's features (see the layers in `ARCHITECTURE.md`); supporting packages include the JavaFX-free `build`, `editor`, `icon`, `io`, `language`, `launch`, `settings` and `terminal`, and `ui` with one sub-package per window feature (`shell`, `editor`, `project`, `language`, `run`, `customize`, `recovery`, `menu`). `ArchitectureTest` enforces the dependency rules and `FeaturesDocTest` checks that every row of `FEATURES.md` names a test that exists; add a row with the test for each feature. Automated tests are under `src/test/java` and generally mirror those packages.
+Main code is under `src/main/java/com/javelin`. `App.java` only creates and connects the window's features (see the layers in `ARCHITECTURE.md`); supporting packages include the JavaFX-free `build`, `editor`, `icon`, `io`, `language`, `launch`, `settings` and `terminal`, and `ui` with one sub-package per window feature (`shell`, `editor`, `project`, `language`, `run`, `customize`, `recovery`, `menu`). `ArchitectureTest` enforces the dependency rules and `FeaturesDocTest` checks that every row of `FEATURES.md` names a test that exists; add a row with the test for each feature. Automated tests are under `src/test/java` and generally mirror those packages.
 
 ## After each change
 

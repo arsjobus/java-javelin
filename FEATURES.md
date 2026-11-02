@@ -34,8 +34,10 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 
 | Feature | How | Verified by |
 | --- | --- | --- |
-| Syntax highlighting (Java, Kotlin, JS/TS, C/C++, Go, Rust, PHP, JSON, Python, HTML, XML, Markdown, YAML) | by extension | `SyntaxHighlighterTest` |
+| Syntax highlighting (Java, Kotlin, JS/TS, C/C++, Go, Rust, PHP, JSON, Python, HTML, XML, Markdown, YAML, shell) | by extension | `SyntaxHighlighterTest` |
 | YAML (`.yml`, `.yaml`) colours comments, keys, quoted strings, block scalars, numbers, true/false/null, anchors, aliases, tags and `---` markers, also inside `[...]` and `{...}` | by extension | `SyntaxHighlighterTest` (`yaml*`) |
+| Shell scripts (`.sh`, `.bash`, `.zsh`, `.ksh`, `.command`) colour comments (`#` only at the start of a word, so `$#` and `a#b` are not comments), single, double, `$'...'` and `$"..."` strings (a `$(...)` inside double quotes may hold quotes of its own), here-document bodies and delimiters, variables (`$x`, `${x}`, `$1`, `$@`, `NAME=` in assignments), reserved words and builtins only where a command can start (so `echo done` leaves `done` plain), and numbers | by extension | `ShellSyntaxTest`, `SyntaxHighlighterTest.cFamilyFilesAreHighlighted`, `EditingWorkflowE2ETest.aShellScriptIsHighlightedAfterItIsSavedAndReopened` |
+| Highlighting never stalls on hostile input: lines of stray quotes, `$(`, `${`, `<<"` in a shell script stay linear, and a quote without a partner colours only its own line | automatic | `ShellSyntaxTest.longLinesOfStrayQuotesStayFast`, `ShellSyntaxTest.aQuoteWithNoPartnerColoursOnlyItsLine` |
 | A file opens at its first line, not scrolled to the bottom | automatic | manual check, see HARDENING.md |
 | Search, match case, replace | Edit menu | `TextSearchTest`, `ProjectWorkflowE2ETest.findAndReplaceAcrossASavedFile` |
 | Auto indentation, newline handling | typing | `IndentationTest`, `NewlineTest` |
@@ -43,6 +45,13 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | Go to Line (invalid numbers are refused); opening a Problem or Reference lands on the nearest valid line and column | Go to > Line | `LineNavigationTest`, `EditingWorkflowE2ETest` |
 | Matching bracket for `()`, `[]`, `{}` (selects both brackets; textual, see BUGS.md) | Go to > Matching Bracket | `BracketsTest`, `EditingWorkflowE2ETest.matchingABracketSelectsTheWholeBlock` |
 | Completion: the popup starts at the word before the caret; choosing replaces it plus anything typed since, and never uses a range outside the document | Language > Complete | `CompletionsTest`, `EditingWorkflowE2ETest` |
+
+## Window layout
+
+| Feature | How | Verified by |
+| --- | --- | --- |
+| The project sidebar is resized by dragging its border, with the same divider control as the one above the terminal. It keeps the width you gave it when the window grows or shrinks (the editors take the difference), stops at a minimum width and leaves the editors a minimum width, and gets the same width back after View > Focus Mode hides and shows it | drag the divider between the sidebar and the editors | `WorkAreaTest` (real `SplitPane` and mouse events; skipped without a display), `WorkAreaTest.theWidthStaysBetweenTheMinimumAndWhatLeavesRoomForTheEditors` (always runs) |
+| Sidebar and terminal together: with both showing, the terminal is exactly as wide as the editors above it, dragging one divider does not move the other, and resizing the window keeps the sidebar's width while the editors and the terminal share the height | drag either divider, resize the window | `WorkAreaTest.theSidebarAndTheTerminalResizeTogetherAndIndependently` |
 
 ## Build, run, terminal
 
@@ -77,6 +86,7 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | Only `ui` and `App` use JavaFX; nothing depends on `App` | `ArchitectureTest.onlyTheWindowTouchesTheToolkit`, `ArchitectureTest.nothingDependsOnTheBootstrap` |
 | Window features talk to each other only through `ui.shell` and `ui.editor` | `ArchitectureTest.theEditorKnowsOnlyTheShell`, `ArchitectureTest.languageKnowsOnlyTheShellAndTheEditor`, `ArchitectureTest.uiFeaturePackagesAreFreeOfCycles` |
 | `App` stays a wiring list (200 lines at most) and no source file passes 900 lines | `ArchitectureTest.theApplicationClassStaysAWiringList`, `ArchitectureTest.noSourceFileGrowsBeyondWhatCanBeReviewed` |
+| All code lives in the package `com.javelin` (no `javelin_ide` package, directory or import is left, and the POM, the packaging scripts and the docs point at the new name) | `PackageNameTest` |
 | Every feature in this document names a test that exists | `FeaturesDocTest.everyFeatureNamesATestThatExists` |
 | Language diagnostics are kept per file and move with edits | `DiagnosticStoreTest`, `DiagnosticShifterTest` |
 
@@ -88,5 +98,6 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 
 ## Checked by hand (needs a display)
 
-Window layout, dialogs, tab context menu, drag and drop in the tree, image zoom, theme switching, Dock behaviour on
-macOS. The checklist is in `HARDENING.md`.
+Dialogs, tab context menu, drag and drop in the tree, image zoom, theme switching, Dock behaviour on macOS, and how the
+window looks with the sidebar and the terminal dragged to extremes (the dividers themselves are covered by
+`WorkAreaTest` on a machine with a display). The checklist is in `HARDENING.md`.

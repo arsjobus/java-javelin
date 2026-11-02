@@ -39,7 +39,7 @@ mvn -q dependency:copy-dependencies -DoutputDirectory=target/dist -DincludeScope
 cp "target/$jar" target/dist/
 
 # IconExporter only draws into BufferedImages; keep AWT headless so it does not try to register an AppKit app.
-java -Djava.awt.headless=true -cp target/classes com.javelin_ide.icon.IconExporter packaging/icons
+java -Djava.awt.headless=true -cp target/classes com.javelin.icon.IconExporter packaging/icons
 
 rm -rf dist
 mkdir -p dist
@@ -49,7 +49,7 @@ jpackage \
   --app-version "$APP_VERSION" \
   --input target/dist \
   --main-jar "$jar" \
-  --main-class com.javelin_ide.Launcher \
+  --main-class com.javelin.Launcher \
   --icon packaging/icons/icon.icns \
   --java-options "-Dfile.encoding=UTF-8" \
   --dest dist

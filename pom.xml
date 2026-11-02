@@ -4,8 +4,8 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.javelin_ide</groupId>
-    <artifactId>javelin_ide</artifactId>
+    <groupId>com.javelin</groupId>
+    <artifactId>javelin-ide</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <name>Javelin IDE</name>
     <description>A local-first, human-directed Java code editor.</description>
@@ -99,11 +99,11 @@
                 <version>0.8.16</version>
                 <configuration>
                     <excludes>
-                        <exclude>com/javelin_ide/App*</exclude>
-                        <exclude>com/javelin_ide/Launcher*</exclude>
-                        <exclude>com/javelin_ide/ui/**</exclude>
+                        <exclude>com/javelin/App*</exclude>
+                        <exclude>com/javelin/Launcher*</exclude>
+                        <exclude>com/javelin/ui/**</exclude>
                         <!-- Asks the JDK to use the operating system's trash; needs a desktop session. Everything around it is covered. -->
-                        <exclude>com/javelin_ide/io/DesktopTrash*</exclude>
+                        <exclude>com/javelin/io/DesktopTrash*</exclude>
                     </excludes>
                 </configuration>
                 <executions>
@@ -147,7 +147,7 @@
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
-                    <mainClass>com.javelin_ide.App</mainClass>
+                    <mainClass>com.javelin.App</mainClass>
                 </configuration>
             </plugin>
         </plugins>

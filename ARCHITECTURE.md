@@ -28,7 +28,7 @@ Application
 ## Package layout
 
 ```text
-com.javelin_ide
+com.javelin
 ├── App.java
 ├── build
 ├── core
@@ -69,7 +69,7 @@ Prefer fewer dependencies.
 
 ## Language intelligence (v0.5)
 
-`com.javelin_ide.language` is JavaFX-free. `LanguageService` tracks open documents and routes them to user-started servers; `LanguageServerSession` owns one server process and the protocol handshake; `JsonRpc` and `Json` are a small stdio JSON-RPC client written against the JDK, because an LSP client needs very little JSON and the dependency rule asks for a reason to add one. `ui.language.LanguageController` only translates between editor state and this package.
+`com.javelin.language` is JavaFX-free. `LanguageService` tracks open documents and routes them to user-started servers; `LanguageServerSession` owns one server process and the protocol handshake; `JsonRpc` and `Json` are a small stdio JSON-RPC client written against the JDK, because an LSP client needs very little JSON and the dependency rule asks for a reason to add one. `ui.language.LanguageController` only translates between editor state and this package.
 
 The text and planning logic that used to sit inside `App` now lives here as small static helpers: `TextEdits` (line/character to offset, ordering and applying server edits, the minimal change between two strings), `RenamePlan` (a rename proposal grouped by local file, with the text of the confirmation) and `LanguageProblems` (diagnostics to Problems entries). `ui.language.LanguageController` still decides when to call them and shows the result.
 
@@ -77,7 +77,7 @@ Beyond the v0.5 roadmap items, `LanguageServerSession` also offers signature hel
 
 ## Customization (v0.8)
 
-`com.javelin_ide.settings` is JavaFX-free, like `language`. `Settings` layers a user file and a project file over defaults held by the caller; the file format is deliberately trivial (`key=value`, `#` comments, values verbatim) and writes preserve the user's comments and ordering. `Keybindings` is a registry of action ids and shortcut strings, `EditorPreferences` is the validated `editor.*` view of the settings, and `Themes` discovers built-in and custom themes. `ui.shell.KeyBinder` registers each menu item with `Keybindings`, and `ui.Shortcuts` is the only place shortcut strings become JavaFX key combinations. `ui.SettingsDialog` is a thin editor over the same files.
+`com.javelin.settings` is JavaFX-free, like `language`. `Settings` layers a user file and a project file over defaults held by the caller; the file format is deliberately trivial (`key=value`, `#` comments, values verbatim) and writes preserve the user's comments and ordering. `Keybindings` is a registry of action ids and shortcut strings, `EditorPreferences` is the validated `editor.*` view of the settings, and `Themes` discovers built-in and custom themes. `ui.shell.KeyBinder` registers each menu item with `Keybindings`, and `ui.Shortcuts` is the only place shortcut strings become JavaFX key combinations. `ui.SettingsDialog` is a thin editor over the same files.
 
 Two rules keep customization from becoming ambient behavior: `theme` and `key.*` are read from the user file only (a project cannot restyle or rebind the editor by being opened), and project commands (`run.command`, `build.command`, `language.server.*`) are either pre-filled into a confirmation dialog or echoed in the Output panel when used. The `java.util.prefs` store still holds recent projects and last-used commands. See `CUSTOMIZATION.md`.
 
@@ -97,7 +97,7 @@ Bootstrap (App, Launcher)  ->  ui (JavaFX, one package per feature)  ->  core (J
 
   | Package | Owns |
   | --- | --- |
-  | `ui.shell` | what a window shares: `Workbench` (status line, settings, open project), `BottomPanel`, `KeyBinder`, and `EditorListener` |
+  | `ui.shell` | what a window shares: `Workbench` (status line, settings, open project), `WorkArea` (sidebar and editors side by side, draggable), `BottomPanel` (editors and terminal, draggable), `KeyBinder`, and `EditorListener` |
   | `ui.editor` | the document model of the window: `EditorTabs` (open, save, close, unsaved state), `SearchController`, syntax styling, key handling |
   | `ui.project` | `ProjectTree` (the sidebar) and `ProjectSession` (opening a project, recent projects, one window per folder) |
   | `ui.language` | `LanguageController`: every Language menu command and the servers' answers |
@@ -130,3 +130,28 @@ and `launch.ProjectInstances` (which folders other windows have open: one OS-loc
    and `editor`). Take what it needs through the constructor; react to documents by implementing `EditorListener`.
 3. Register it in `App` and add its menu items in `MainMenu`.
 4. Add a row to `FEATURES.md` naming the test. `mvn test` runs `ArchitectureTest` and `FeaturesDocTest`.
+
+## Window layout and the resizable sidebar (v1.0)
+
+The window's centre is two nested `SplitPane`s, so there is one kind of divider with one look and one behaviour:
+
+```text
+WorkArea (horizontal)  =  sidebar (project tree) | BottomPanel (vertical)  =  editors / terminal and other panels
+```
+
+`ui.shell.WorkArea` holds the sidebar's width in pixels and applies it as the divider position, so a window that grows
+gives the extra space to the editors (the sidebar is `resizableWithParent = false`) and a hidden sidebar comes back
+with the width it had. The sidebar's minimum is its own `minWidth`; the editors' minimum is the `minWidth` of the
+content, which `SplitPane` honours while dragging. Focus Mode needs no code here: `ProjectTree.toggleVisible` changes
+the sidebar's `visible` property, and `WorkArea` takes the sidebar out of (or puts it back into) the split when that
+property changes. The terminal's divider lives in the inner `SplitPane` and is therefore independent of the outer one,
+and the terminal is always exactly as wide as the editors above it. The width arithmetic (`clampWidth`,
+`dividerPosition`) is static and tested without a toolkit; `WorkAreaTest` drives the real controls with mouse events.
+
+## Syntax scanners (v1.0)
+
+`editor.SyntaxHighlighter` picks the language from the file's extension and calls one scanner per lexical family. The
+C-family, Python, markup and Markdown scanners are still inside it; YAML (`YamlSyntax`) and shell (`ShellSyntax`) are
+classes of their own, so the file stays well under the 900-line limit and a new language is a new class plus one line in
+the extension table and one in `spansIn`. Every scanner is a single pass without recursion and bounds every
+unterminated construct by its line, which `SyntaxHighlighterTest` and `ShellSyntaxTest` check on pathological input.
