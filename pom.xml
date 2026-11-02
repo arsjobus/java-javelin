@@ -71,11 +71,44 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
                 <configuration>
-                    <argLine>@{argLine} -Dfile.encoding=UTF-8 --enable-native-access=ALL-UNNAMED</argLine>
+                    <!--
+                        JavaFX is only supported as named modules; on the class path it prints "Unsupported JavaFX
+                        configuration". So the test JVM gets the JavaFX platform jars on a module path (copied to
+                        target/test-fx below) and Surefire keeps them off the class path. Native access goes to
+                        javafx.graphics by name, as in the app.
+                    -->
+                    <argLine>@{argLine} -Dfile.encoding=UTF-8 --module-path ${project.build.directory}/test-fx --add-modules javafx.controls --enable-native-access=javafx.graphics</argLine>
+                    <classpathDependencyExcludes>
+                        <classpathDependencyExclude>org.openjfx:javafx-base</classpathDependencyExclude>
+                        <classpathDependencyExclude>org.openjfx:javafx-graphics</classpathDependencyExclude>
+                        <classpathDependencyExclude>org.openjfx:javafx-controls</classpathDependencyExclude>
+                    </classpathDependencyExcludes>
                     <systemPropertyVariables>
                         <java.awt.headless>true</java.awt.headless>
                     </systemPropertyVariables>
                 </configuration>
+            </plugin>
+            <plugin>
+                <!--
+                    Test JVM only: copies the JavaFX platform jars (the ones with a classifier; the class-less stubs of the
+                    same module name are left out) to target/test-fx for Surefire's module path. Only the classifier that
+                    matches this machine is in the dependency tree, so listing them all is safe.
+                -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.8.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-javafx-for-tests</id>
+                        <phase>process-test-classes</phase>
+                        <goals><goal>copy-dependencies</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/test-fx</outputDirectory>
+                            <includeGroupIds>org.openjfx</includeGroupIds>
+                            <includeClassifiers>linux,linux-aarch64,mac,mac-aarch64,win</includeClassifiers>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>

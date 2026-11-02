@@ -69,9 +69,24 @@ class RuntimeVersionTest {
         assertFalse(javafx.contains("ALL-UNNAMED"), "javafx:run puts JavaFX on the module path; do not open native access to every module");
     }
 
-    @Test void theTestJvmMayLoadJavaFxFromTheClassPath() throws IOException {
-        // Surefire runs on the class path, where the JavaFX classes are in the unnamed module.
-        assertTrue(plugin("maven-surefire-plugin").contains("--enable-native-access=ALL-UNNAMED"));
+    @Test void theTestJvmLoadsJavaFxAsNamedModulesAndGrantsItNativeAccess() throws IOException {
+        String surefire = plugin("maven-surefire-plugin");
+        assertTrue(surefire.contains("--module-path ${project.build.directory}/test-fx"), "JavaFX goes on the test JVM's module path");
+        assertTrue(surefire.contains("--add-modules javafx.controls"));
+        assertTrue(surefire.contains("--enable-native-access=javafx.graphics"));
+        assertFalse(surefire.contains("ALL-UNNAMED"), "JavaFX is a named module in the tests too; do not open native access to everything");
+        for (String module : new String[] {"javafx-base", "javafx-graphics", "javafx-controls"}) {
+            assertTrue(surefire.contains("<classpathDependencyExclude>org.openjfx:" + module + "</classpathDependencyExclude>"), module + " stays off the class path");
+        }
+        String copy = plugin("maven-dependency-plugin");
+        assertTrue(copy.contains("${project.build.directory}/test-fx") && copy.contains("<includeGroupIds>org.openjfx</includeGroupIds>"));
+        assertFalse(copy.contains("<includeClassifiers></includeClassifiers>"), "the class-less stubs must not be copied beside the platform jars");
+    }
+
+    @Test void javaFxInTheTestJvmIsANamedModule() {
+        // Fails when Surefire falls back to the class path, which is what prints "Unsupported JavaFX configuration".
+        assertTrue(javafx.application.Platform.class.getModule().isNamed(), "JavaFX loaded from the class path");
+        assertEquals("javafx.graphics", javafx.application.Platform.class.getModule().getName());
     }
 
     @Test void theMacAppLoadsJavaFxAsModulesAndGrantsItNativeAccess() throws IOException {
