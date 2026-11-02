@@ -28,6 +28,7 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | --- | --- | --- |
 | The product is spelled **Javelin** (capital J) wherever it is built, installed or launched: the app bundle `Javelin IDE.app`, the jar `Javelin-IDE-<version>.jar`, the terminal command `Javelin`, window titles, dialogs, crash reports. `Branding` holds the spelling; no source, script or document may write the name with a lowercase j | automatic | `BrandingTest` (reads the real scripts, POM and docs) |
 | Build, install, launch, uninstall as one chain: `build-app.sh` writes the bundle that `install.sh` looks for and that `Javelin` opens; an older lowercase command is replaced; uninstall removes everything and keeps settings. `JAVELIN_APPS_DIR` / `JAVELIN_BIN_DIR` pick other target folders | `packaging/macos/build-app.sh`, `install.sh`, `Javelin [dir]` | `InstallPipelineE2ETest` (real scripts, stand-ins for `mvn`, `jpackage`, `open`), `JavelinCommandTest`, `MultiInstanceTest` |
+| Quiet start on Java 25: the project builds for JDK 25 with JavaFX 25, which no longer prints the `sun.misc.Unsafe` warning; native access is granted to `javafx.graphics` by name (not to everything) in `mvn javafx:run` and in the macOS app; the macOS app loads JavaFX as named modules from a module path, so JavaFX's "Unsupported JavaFX configuration" warning is gone; no flag is used to hide a warning; `build-app.sh` refuses a JDK older than 25 | `mvn javafx:run`, `packaging/macos/build-app.sh` | `RuntimeVersionTest`, `InstallPipelineE2ETest.javaFxIsRunAsNamedModulesAndEverythingElseStaysOnTheClassPath`, `InstallPipelineE2ETest.anOlderJdkIsRefusedBeforeAnythingIsBuilt`, `DependencyAuditTest` |
 | The settings folder can be moved with `JAVELIN_IDE_CONFIG_DIR` (the old misspelled `JAVALIN_IDE_CONFIG_DIR` still works, the new name wins) | environment | `SettingsTest` |
 
 ## Editing
@@ -100,6 +101,6 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 
 ## Checked by hand (needs a display)
 
-Dialogs, tab context menu, drag and drop in the tree, image zoom, theme switching, Dock behaviour on macOS, and how the
+Dialogs, tab context menu, drag and drop in the tree, image zoom, theme switching, Dock behaviour on macOS, that `mvn javafx:run` and the installed app print no `WARNING:` line on start (run `Javelin` from a terminal, or `Javelin IDE.app/Contents/MacOS/"Javelin IDE"`, and read stderr), and how the
 window looks with the sidebar and the terminal dragged to extremes (the dividers themselves are covered by
 `WorkAreaTest` on a machine with a display). The checklist is in `HARDENING.md`.

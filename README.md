@@ -53,7 +53,7 @@ See [FEATURES.md](FEATURES.md) for every feature and the test that verifies it.
 
 ## Requirements
 
-- Java 21+
+- Java 25+ (JavaFX 25 needs JDK 23 or newer; 25 is the long-term-support release)
 - Maven 3.9+
 
 ## Run
@@ -73,7 +73,7 @@ mvn clean package
 Build a real app that starts without a Terminal window, and install the `Javelin` command:
 
 ```
-packaging/macos/build-app.sh      # needs JDK 21+ (with jpackage) and Maven; writes dist/Javelin IDE.app
+packaging/macos/build-app.sh      # needs JDK 25+ (with jpackage) and Maven; writes dist/Javelin IDE.app
 packaging/macos/install.sh        # copies the app to /Applications and `Javelin` to /usr/local/bin (or ~/.local/bin)
 ```
 

@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -49,11 +50,22 @@ class InstallPipelineE2ETest {
         openLog = work.resolve("open.log");
         jpackageLog = work.resolve("jpackage.log");
         stub("uname", "echo Darwin");
-        stub("java", "exit 0");   // the icon export
+        stub("java", """
+            case "$*" in
+              *-version*) echo 'openjdk version "'"${STUB_JAVA_VERSION:-25.0.1}"'" 2025-10-21' >&2 ;;
+            esac
+            """);   // the version check, and the icon export
         stub("mvn", """
             case "$*" in
               *help:evaluate*) echo 0.1.0-SNAPSHOT ;;
-              *dependency:copy-dependencies*) for a in "$@"; do case "$a" in -DoutputDirectory=*) mkdir -p "${a#-DoutputDirectory=}" ;; esac; done ;;
+              *dependency:copy-dependencies*)
+                for a in "$@"; do
+                  case "$a" in
+                    -DoutputDirectory=*)
+                      dir="${a#-DoutputDirectory=}"; mkdir -p "$dir"
+                      for jar in javafx-base-25.0.2.jar javafx-base-25.0.2-mac-aarch64.jar richtextfx-0.11.7.jar; do : > "$dir/$jar"; done ;;
+                  esac
+                done ;;
               *) mkdir -p target/classes && : > target/Javelin-IDE-0.1.0-SNAPSHOT.jar ;;
             esac
             """);
@@ -97,7 +109,13 @@ class InstallPipelineE2ETest {
 
     private List<String> lines(Path log) throws IOException { return Files.exists(log) ? Files.readAllLines(log, StandardCharsets.UTF_8) : List.of(); }
 
-    private Outcome build() throws Exception { return sh(script("build-app.sh"), checkout, Map.of("SKIP_TESTS", "1")); }
+    private Outcome build() throws Exception { return build(Map.of()); }
+
+    private Outcome build(Map<String, String> env) throws Exception {
+        Map<String, String> all = new HashMap<>(Map.of("SKIP_TESTS", "1"));
+        all.putAll(env);
+        return sh(script("build-app.sh"), checkout, all);
+    }
 
     private Outcome install() throws Exception { return sh(script("install.sh"), checkout, Map.of()); }
 
@@ -112,6 +130,34 @@ class InstallPipelineE2ETest {
         assertEquals("Javelin IDE", jpackage.get(jpackage.indexOf("--name") + 1));
         assertEquals("Javelin-IDE-0.1.0-SNAPSHOT.jar", jpackage.get(jpackage.indexOf("--main-jar") + 1));
         assertTrue(built.out().contains("Javelin IDE.app"), built.out());
+    }
+
+    @Test void javaFxIsRunAsNamedModulesAndEverythingElseStaysOnTheClassPath() throws Exception {
+        Outcome built = build();
+        assertEquals(0, built.exit(), built.err());
+        List<String> jpackage = lines(jpackageLog);
+        // JavaFX from the module path: no "Unsupported JavaFX configuration" warning, and native access can be given to javafx.graphics alone.
+        assertEquals("target/fx", jpackage.get(jpackage.indexOf("--module-path") + 1));
+        List<String> modules = List.of(jpackage.get(jpackage.indexOf("--add-modules") + 1).split(","));
+        assertTrue(modules.containsAll(List.of("javafx.controls", "java.se", "jdk.unsupported")), modules.toString());
+        List<String> options = new ArrayList<>();
+        for (int i = 0; i < jpackage.size() - 1; i++) if (jpackage.get(i).equals("--java-options")) options.add(jpackage.get(i + 1));
+        assertTrue(options.contains("--enable-native-access=javafx.graphics"), options.toString());
+        assertTrue(options.contains("-Dfile.encoding=UTF-8"), options.toString());
+        assertFalse(options.stream().anyMatch(o -> o.contains("sun-misc-unsafe")), "a flag that hides a warning is not a fix: " + options);
+        // Only the platform jar moves; the class-less stub of the same module name must not sit on either path.
+        try (var fx = Files.list(checkout.resolve("target/fx")); var dist = Files.list(checkout.resolve("target/dist"))) {
+            assertEquals(List.of("javafx-base-25.0.2-mac-aarch64.jar"), fx.map(p -> p.getFileName().toString()).toList());
+            assertEquals(List.of("Javelin-IDE-0.1.0-SNAPSHOT.jar", "richtextfx-0.11.7.jar"), dist.map(p -> p.getFileName().toString()).sorted().toList());
+        }
+    }
+
+    @Test void anOlderJdkIsRefusedBeforeAnythingIsBuilt() throws Exception {
+        Outcome built = build(Map.of("STUB_JAVA_VERSION", "21.0.5"));
+        assertEquals(1, built.exit());
+        assertTrue(built.err().contains("JDK 25") && built.err().contains("JDK 21"), built.err());
+        assertFalse(Files.exists(checkout.resolve("target")), "nothing was built");
+        assertEquals(List.of(), lines(jpackageLog), "jpackage never ran");
     }
 
     @Test void installingPlacesTheAppAndTheCommandUnderTheirCapitalisedNames() throws Exception {

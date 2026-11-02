@@ -15,7 +15,7 @@ Main code is under `src/main/java/com/javelin`. `App.java` only creates and conn
 
 ## Build and style
 
-- Requires Java 21+ and Maven 3.9+ (see `README.md`).
+- Requires Java 25+ and Maven 3.9+ (see `README.md`).
 - Use `mvn test` for the test suite. `mvn verify` also enforces the JaCoCo coverage gate.
 - The Maven Spotless configuration uses Google Java Format and checks formatting. Keep imports clean and follow the existing style.
 - Avoid adding dependencies unless they solve a clear problem that the JDK or JavaFX cannot handle adequately.

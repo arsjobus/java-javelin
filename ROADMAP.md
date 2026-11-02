@@ -106,6 +106,7 @@ See [HARDENING.md](HARDENING.md) for what each item covers, how it is verified, 
 - [x] Resizable project sidebar (drag its border; works with the terminal showing; `WorkAreaTest`)
 - [x] Shell script highlighting (`ShellSyntaxTest`)
 - [x] One package name, `com.javelin` (`PackageNameTest`)
+- [x] Java 25 and JavaFX 25: starts without JDK warnings; the macOS app loads JavaFX as modules (`RuntimeVersionTest`, `InstallPipelineE2ETest`)
 - [ ] Release packaging
 - [x] No mandatory account (nothing in the editor signs in; see [PRIVACY.md](PRIVACY.md))
 - [x] No mandatory cloud service (`OfflineGuardTest` fails the build if main code touches the network)

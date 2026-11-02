@@ -12,10 +12,11 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.release>21</maven.compiler.release>
-        <javafx.version>21.0.6</javafx.version>
+        <maven.compiler.release>25</maven.compiler.release>
+        <javafx.version>25.0.2</javafx.version>
         <junit.version>5.11.4</junit.version>
         <archunit.version>1.4.1</archunit.version>
+        <slf4j.version>2.0.17</slf4j.version>
         <!-- Filled in by the JaCoCo agent when it runs; empty otherwise so surefire's @{argLine} always resolves. -->
         <argLine></argLine>
     </properties>
@@ -44,6 +45,13 @@
             <version>${archunit.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- Test only: ArchUnit logs through SLF4J, which prints "No SLF4J providers were found" without one. NOP keeps the build output quiet and adds no logging. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-nop</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -63,7 +71,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
                 <configuration>
-                    <argLine>@{argLine} -Dfile.encoding=UTF-8</argLine>
+                    <argLine>@{argLine} -Dfile.encoding=UTF-8 --enable-native-access=ALL-UNNAMED</argLine>
                     <systemPropertyVariables>
                         <java.awt.headless>true</java.awt.headless>
                     </systemPropertyVariables>
@@ -148,6 +156,10 @@
                 <version>0.0.8</version>
                 <configuration>
                     <mainClass>com.javelin.App</mainClass>
+                    <options>
+                        <!-- JavaFX loads its native libraries through a restricted method. Grant that to JavaFX only, so the JDK stays quiet and blocks every other module that tries. -->
+                        <option>--enable-native-access=javafx.graphics</option>
+                    </options>
                 </configuration>
             </plugin>
         </plugins>
