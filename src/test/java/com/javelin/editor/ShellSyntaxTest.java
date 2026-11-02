@@ -2,12 +2,14 @@ package com.javelin.editor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /** What a shell script gets coloured, token by token. Each expectation reads {@code style:text}. */
@@ -26,6 +28,68 @@ class ShellSyntaxTest {
     @ParameterizedTest
     @ValueSource(strings = {"a.shx", "sh", "script.sh.bak", "run.csh.txt"})
     void similarNamesAreNot(String name) { assertFalse(SyntaxHighlighter.appliesTo(new File(name)), name); }
+
+    @ParameterizedTest
+    @ValueSource(strings = {".bashrc", ".BASHRC", ".bash_profile", ".bash_login", ".bash_logout", ".bash_aliases", ".profile", ".zshrc", ".zprofile", ".zshenv",
+        ".zlogin", ".zlogout", ".kshrc", ".envrc", "home/me/.zshrc"})
+    void shellStartUpFilesAreHighlightedByName(String name) {
+        assertEquals(SyntaxHighlighter.Language.SHELL, SyntaxHighlighter.languageOf(new File(name)), name);
+        assertTrue(SyntaxHighlighter.appliesTo(new File(name)), name);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"bashrc", ".bashrc.bak", "my.zshrc", ".profile.d", ".fishrc", "profile"})
+    void similarStartUpNamesAreNot(String name) { assertFalse(SyntaxHighlighter.appliesTo(new File(name)), name); }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"#!/bin/sh\n", "#!/bin/bash\necho hi", "#!/usr/bin/env bash\n", "#!/usr/bin/env -S bash -e\n", "#!/usr/bin/env FOO=1 zsh\n",
+        "#! /bin/zsh\n", "#!/bin/ksh", "#!/bin/dash\r\necho hi", "#!/usr/local/bin/BASH\n", "#!/bin/sh -e\n"})
+    void anExtensionlessFileWithAShellShebangIsShell(String text) {
+        File script = new File("deploy");
+        assertEquals(SyntaxHighlighter.Language.SHELL, SyntaxHighlighter.languageOf(script, text), text);
+        assertTrue(SyntaxHighlighter.appliesTo(script, text), text);
+        assertFalse(SyntaxHighlighter.spans(text, script).isEmpty(), "it is coloured, not just recognised: " + text);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "echo hi\n", " #!/bin/sh\n", "# !/bin/sh\n", "#!\n", "#!/usr/bin/env\n", "#!/usr/bin/env -S\n", "#!/usr/bin/ruby\n", "#!/bin/csh\n",
+        "\n#!/bin/sh\n", "#!/bin/bashful\n", "#!/usr/bin/pythonista\n"})
+    void otherFirstLinesLeaveTheFileAsPlainText(String text) {
+        assertNull(SyntaxHighlighter.languageOf(new File("deploy"), text), text);
+        assertTrue(SyntaxHighlighter.spans(text, new File("deploy")).isEmpty(), text);
+    }
+
+    @Test void theShebangIsOnlyReadInTheFirstLine() {
+        assertNull(SyntaxHighlighter.languageOf(new File("deploy"), "echo hi\n#!/bin/sh\n"));
+        assertNull(SyntaxHighlighter.languageOf(new File("deploy"), "#!" + " ".repeat(300) + "/bin/sh\n"), "a first line that long is not an interpreter line");
+    }
+
+    @Test void aFileWithAnExtensionIsNeverSecondGuessed() {
+        assertNull(SyntaxHighlighter.languageOf(new File("notes.txt"), "#!/bin/sh\n"));
+        assertNull(SyntaxHighlighter.languageOf(new File("a.rb"), "#!/bin/bash\n"));
+        assertEquals(SyntaxHighlighter.Language.PYTHON, SyntaxHighlighter.languageOf(new File("a.py"), "#!/bin/bash\n"), "the extension wins");
+    }
+
+    @Test void aHiddenFileOrATrailingDotHasNoExtensionSoItsFirstLineCounts() {
+        assertEquals(SyntaxHighlighter.Language.SHELL, SyntaxHighlighter.languageOf(new File(".myscript"), "#!/bin/sh\n"));
+        assertEquals(SyntaxHighlighter.Language.SHELL, SyntaxHighlighter.languageOf(new File("run."), "#!/bin/sh\n"));
+    }
+
+    @Test void anUntitledBufferIsStillJavaWhateverItsFirstLine() {
+        assertEquals(SyntaxHighlighter.Language.JAVA, SyntaxHighlighter.languageOf(null, "#!/bin/sh\n"));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {"#!/usr/bin/python|PYTHON", "#!/usr/bin/env python3|PYTHON", "#!/usr/bin/env python3.12|PYTHON", "#!/usr/bin/env node|JAVASCRIPT",
+        "#!/usr/bin/nodejs|JAVASCRIPT"})
+    void pythonAndNodeScriptsAreRecognisedToo(String text, SyntaxHighlighter.Language expected) {
+        assertEquals(expected, SyntaxHighlighter.languageOf(new File("tool"), text), text);
+    }
+
+    @Test void theColoursOfAScriptWithoutAnExtensionAreThoseOfAShFile() {
+        String script = "#!/bin/bash\nif [ -f x ]; then echo \"$HOME\"; fi\n";
+        assertEquals(SyntaxHighlighter.spans(script, new File("run.sh")), SyntaxHighlighter.spans(script, new File("run")));
+    }
 
     @Test void commentsStartAtTheStartOfAWord() {
         assertEquals(List.of("comment:#!/bin/sh", "annotation:echo", "comment:# trailing", "annotation:echo", "type:$#"), styled("#!/bin/sh\necho hi # trailing\necho a#b $#"));

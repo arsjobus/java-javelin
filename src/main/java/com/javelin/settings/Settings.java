@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -80,7 +81,7 @@ public final class Settings {
 
     /** Keys that only the user file may set. */
     public static boolean isUserOnly(String key) {
-        return key.equals("theme") || key.equals("app.icon") || key.equals(SEARCH_CASE_SENSITIVE) || key.startsWith("key.");
+        return key.equals("theme") || key.equals("app.icon") || key.equals(SEARCH_CASE_SENSITIVE) || key.startsWith("key.") || key.startsWith("layout.");
     }
 
     public Path userFile() { return userFile; }
@@ -164,7 +165,30 @@ public final class Settings {
     public void save(Scope scope) throws IOException {
         Path file = scope == Scope.USER ? userFile : projectFile;
         if (file == null) throw new IOException("No project is open");
-        Map<String, String> values = target(scope);
+        write(file, target(scope));
+    }
+
+    /**
+     * Writes only the given keys of the scope: the file is read again from disk, those keys are set (or removed, when
+     * they have no value in memory) and everything else in the file stays as another window may just have written it.
+     * Use this for values that change while the editor runs (such as the window layout), so that several windows
+     * sharing one settings file do not overwrite each other's changes; {@link #save} writes every value held in memory.
+     * Values of other keys held in memory are not touched.
+     */
+    public void saveKeys(Scope scope, Collection<String> keys) throws IOException {
+        Path file = scope == Scope.USER ? userFile : projectFile;
+        if (file == null) throw new IOException("No project is open");
+        Map<String, String> onDisk = new LinkedHashMap<>();
+        read(file, onDisk, "settings", new ArrayList<>()); // problems in the file were reported when it was loaded
+        Map<String, String> memory = target(scope);
+        for (String key : keys) {
+            String value = memory.get(key);
+            if (value == null) onDisk.remove(key); else onDisk.put(key, value);
+        }
+        write(file, onDisk);
+    }
+
+    private static void write(Path file, Map<String, String> values) throws IOException {
         List<String> existing = Files.isRegularFile(file) ? new ArrayList<>(Files.readAllLines(file, StandardCharsets.UTF_8)) : new ArrayList<>();
         if (!existing.isEmpty() && existing.get(0).startsWith("\uFEFF")) existing.set(0, existing.get(0).substring(1));
         if (existing.isEmpty() && values.isEmpty()) return;
@@ -197,7 +221,9 @@ public final class Settings {
         }
     }
 
-    private void read(Path file, Map<String, String> into, String label) {
+    private void read(Path file, Map<String, String> into, String label) { read(file, into, label, warnings); }
+
+    private static void read(Path file, Map<String, String> into, String label, List<String> warnings) {
         into.clear();
         if (!Files.isRegularFile(file)) return;
         List<String> lines;

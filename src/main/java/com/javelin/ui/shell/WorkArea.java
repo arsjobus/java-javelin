@@ -1,7 +1,9 @@
 package com.javelin.ui.shell;
 
 import javafx.scene.control.SplitPane;
+import java.util.function.DoubleConsumer;
 import javafx.scene.control.SplitPane.Divider;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Region;
 
 /**
@@ -25,6 +27,9 @@ public final class WorkArea {
     private final Region sidebar;
     private double sidebarWidth = DEFAULT_SIDEBAR_WIDTH;
     private boolean applying;
+    private boolean pressed; // a mouse button is down on the split pane: a divider move now is the user dragging
+    private boolean dragged;
+    private DoubleConsumer onSidebarWidthChanged = width -> {};
 
     public WorkArea(Region sidebar, Region content) {
         this.sidebar = sidebar;
@@ -33,6 +38,12 @@ public final class WorkArea {
         sidebar.setMinWidth(MIN_SIDEBAR_WIDTH);
         content.setMinWidth(MIN_EDITOR_WIDTH); // the divider stops where the editors would get narrower than this
         split.widthProperty().addListener((o, was, now) -> applyWidth());
+        split.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> { pressed = true; dragged = false; });
+        split.addEventFilter(MouseEvent.MOUSE_RELEASED, e -> {
+            pressed = false;
+            if (dragged) onSidebarWidthChanged.accept(sidebarWidth); // once per drag, not once per pixel
+            dragged = false;
+        });
         sidebar.visibleProperty().addListener((o, was, visible) -> { if (visible) attach(); else detach(); });
         if (sidebar.isVisible()) attach();
     }
@@ -45,11 +56,18 @@ public final class WorkArea {
     /** The width the sidebar has, or has when it is shown again, in pixels, measured to the middle of the divider. */
     public double sidebarWidth() { return sidebarWidth; }
 
-    /** Sets the sidebar's width (within its limits), as if the user had dragged the divider there. */
+    /**
+     * Sets the sidebar's width (within its limits), as if the user had dragged the divider there. Before the window has
+     * a size (a width restored from the last run, set before the window is shown) the width is kept as asked and
+     * limited once the size is known, so a wide sidebar is not squeezed to the minimum on the way.
+     */
     public void sidebarWidth(double width) {
-        sidebarWidth = clampWidth(width, split.getWidth());
+        sidebarWidth = split.getWidth() > 0 ? clampWidth(width, split.getWidth()) : Math.max(MIN_SIDEBAR_WIDTH, width);
         applyWidth();
     }
+
+    /** Called with the new width (pixels) once each time the user finishes dragging the divider; not called for {@link #sidebarWidth(double)}. */
+    public void onSidebarWidthChanged(DoubleConsumer listener) { onSidebarWidthChanged = listener == null ? width -> {} : listener; }
 
     // ---- the policy, free of any control so it can be tested on its own ----
 
@@ -71,6 +89,7 @@ public final class WorkArea {
         divider.positionProperty().addListener((o, was, now) -> {
             if (applying || split.getWidth() <= 0) return;
             sidebarWidth = clampWidth(now.doubleValue() * split.getWidth(), split.getWidth());
+            if (pressed) dragged = true;
         });
         applyWidth();
     }

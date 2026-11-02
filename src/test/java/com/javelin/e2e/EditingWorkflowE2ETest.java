@@ -105,4 +105,21 @@ class EditingWorkflowE2ETest {
             "annotation:exit", "number:1", "keyword:fi", "keyword:EOF", "string:hello $name")), coloured.toString());
         assertTrue(SyntaxHighlighter.spans(reopened, home.resolve("run.txt").toFile()).isEmpty(), "the same text in a .txt file stays plain");
     }
+
+    @Test void aScriptWithoutAnExtensionIsHighlightedFromItsFirstLineAndAStartUpFileByName() throws IOException {
+        String script = "#!/usr/bin/env bash\nset -e\nif [ -n \"$HOME\" ]; then echo \"$HOME\"; fi\n";
+        Path deploy = home.resolve("deploy");
+        FileIO.writeAtomic(deploy, script);
+        String reopened = FileIO.readText(deploy);
+        List<String> coloured = SyntaxHighlighter.spans(reopened, deploy.toFile()).stream().map(s -> s.style() + ":" + reopened.substring(s.start(), s.end())).toList();
+        assertTrue(coloured.containsAll(List.of("comment:#!/usr/bin/env bash", "keyword:if", "keyword:then", "keyword:fi")), coloured.toString());
+
+        Path plain = home.resolve("notes");
+        FileIO.writeAtomic(plain, "just words\n#!/bin/sh\n");
+        assertTrue(SyntaxHighlighter.spans(FileIO.readText(plain), plain.toFile()).isEmpty(), "a #! line that is not the first line does not make a script");
+
+        Path rc = home.resolve(".zshrc");
+        FileIO.writeAtomic(rc, "export PATH=\"$HOME/bin:$PATH\" # mine\n");
+        assertFalse(SyntaxHighlighter.spans(FileIO.readText(rc), rc.toFile()).isEmpty(), ".zshrc is shell without any extension or #! line");
+    }
 }

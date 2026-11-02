@@ -38,7 +38,7 @@ import java.util.Set;
  *   <li><b>Markdown</b>: headings, fenced and inline code, emphasis, links, blockquotes and list markers.
  *   <li><b>YAML</b> ({@code .yml}, {@code .yaml}): keys, scalars, comments, anchors and markers, one line at a time; see
  *       {@link YamlSyntax}.
- *   <li><b>Shell</b> ({@code .sh}, {@code .bash}, {@code .zsh}, {@code .ksh}, {@code .command}): comments, quoted
+ *   <li><b>Shell</b> ({@code .sh}, {@code .bash}, {@code .zsh}, {@code .ksh}, {@code .command}, start-up files such as {@code .bashrc}, and extensionless files with a shell {@code #!} line): comments, quoted
  *       strings, here-documents, variables, reserved words and builtins in command position; see {@link ShellSyntax}.
  * </ul>
  *
@@ -147,27 +147,83 @@ public final class SyntaxHighlighter {
 
     private SyntaxHighlighter() {}
 
+    /** Shell start-up files that have no extension, by name (compared in lower case). */
+    private static final Set<String> SHELL_FILE_NAMES = Set.of(".bashrc", ".bash_profile", ".bash_login", ".bash_logout", ".bash_aliases",
+        ".profile", ".zshrc", ".zprofile", ".zshenv", ".zlogin", ".zlogout", ".kshrc", ".envrc");
+
+    /** Programs a {@code #!} line may name that run shell scripts (compared in lower case, without the folder). */
+    private static final Set<String> SHELL_PROGRAMS = Set.of("sh", "bash", "dash", "ash", "ksh", "mksh", "zsh", "rbash");
+
+    /** How much of the first line is looked at for a {@code #!} line; a longer one is not a real interpreter line. */
+    private static final int MAX_SHEBANG_CHARS = 256;
+
     /**
-     * The language whose rules the file gets: {@link Language#JAVA} for an untitled buffer (the editor is
-     * Java-oriented), the language of a known extension (C-family, Python, HTML, XML, Markdown, YAML or shell), and {@code null} for any other
-     * file or a file without an extension, which is shown as plain text.
+     * The language whose rules the file gets, going by its name alone: {@link Language#JAVA} for an untitled buffer (the
+     * editor is Java-oriented), the language of a known extension (C-family, Python, HTML, XML, Markdown, YAML or shell),
+     * {@link Language#SHELL} for the well-known shell start-up files ({@code .bashrc}, {@code .zshrc}, {@code .profile}
+     * and so on), and {@code null} for any other file, which is shown as plain text. See {@link #languageOf(File, String)}
+     * for files whose first line names their interpreter.
      */
     public static Language languageOf(File file) {
         if (file == null) return Language.JAVA;
         String name = file.getName();
+        if (SHELL_FILE_NAMES.contains(name.toLowerCase(Locale.ROOT))) return Language.SHELL;
         int dot = name.lastIndexOf('.');
         return dot < 0 ? null : EXTENSIONS.get(name.substring(dot + 1).toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * Like {@link #languageOf(File)}, but a file with no extension whose first line is {@code #!} naming a shell
+     * ({@code #!/bin/bash}, {@code #!/usr/bin/env zsh}), Python or Node gets that language. A file that has an
+     * extension is never second-guessed: {@code notes.txt} stays plain text whatever its first line says.
+     */
+    public static Language languageOf(File file, String text) {
+        Language byName = languageOf(file);
+        if (byName != null || file == null || hasExtension(file.getName())) return byName;
+        return languageOfShebang(text);
     }
 
     /** True when the file should get syntax highlighting, that is when {@link #languageOf(File)} knows its language. */
     public static boolean appliesTo(File file) { return languageOf(file) != null; }
 
+    /** True when {@link #languageOf(File, String)} knows the language of the file with this text. */
+    public static boolean appliesTo(File file, String text) { return languageOf(file, text) != null; }
+
+    private static boolean hasExtension(String name) {
+        int dot = name.lastIndexOf('.');
+        return dot > 0 && dot < name.length() - 1; // ".hidden" and "trailing." have none
+    }
+
+    /** The language named by a {@code #!} first line, or null when the text has none or names an unknown program. */
+    static Language languageOfShebang(String text) {
+        if (text == null || !text.startsWith("#!")) return null;
+        int end = text.indexOf('\n');
+        end = Math.min(end < 0 ? text.length() : end, MAX_SHEBANG_CHARS);
+        String[] words = text.substring(2, end).strip().split("\\s+");
+        String program = baseName(words[0]);
+        if (program.equals("env")) { // #!/usr/bin/env [-S] [NAME=value] program
+            program = "";
+            for (int i = 1; i < words.length; i++) {
+                if (words[i].startsWith("-") || words[i].indexOf('=') > 0) continue;
+                program = baseName(words[i]);
+                break;
+            }
+        }
+        program = program.toLowerCase(Locale.ROOT);
+        if (SHELL_PROGRAMS.contains(program)) return Language.SHELL;
+        if (program.matches("python(\\d+(\\.\\d+)*)?")) return Language.PYTHON; // python, python3, python3.12
+        if (program.equals("node") || program.equals("nodejs")) return Language.JAVASCRIPT;
+        return null;
+    }
+
+    private static String baseName(String path) { return path.substring(path.lastIndexOf('/') + 1); }
+
     /** True when {@link #spans} would produce nothing because the text is too long. */
     public static boolean tooLarge(int length) { return length > MAX_CHARS; }
 
-    /** Like {@link #spans(String)}, but empty when {@link #appliesTo(File)} says the file is not highlightable. */
+    /** Like {@link #spans(String)}, but empty when {@link #appliesTo(File, String)} says the file is not highlightable. */
     public static List<Span> spans(String text, File file) {
-        Language language = languageOf(file);
+        Language language = languageOf(file, text);
         return language == null ? new ArrayList<>() : spansIn(text, language);
     }
 

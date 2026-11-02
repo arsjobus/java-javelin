@@ -49,6 +49,20 @@ class WorkAreaTest {
         assertEquals(0.5, WorkArea.dividerPosition(250, 0), "no size yet: nothing meaningful to compute");
     }
 
+    @Test void theBottomPanelHeightStaysBetweenItsMinimumAndWhatLeavesRoomForTheEditors() {
+        assertEquals(250, BottomPanel.clampHeight(250, 800));
+        assertEquals(BottomPanel.MIN_BOTTOM_HEIGHT, BottomPanel.clampHeight(5, 800));
+        assertEquals(800 - BottomPanel.MIN_EDITOR_HEIGHT, BottomPanel.clampHeight(5000, 800));
+        assertEquals(BottomPanel.MIN_BOTTOM_HEIGHT, BottomPanel.clampHeight(250, 100), "in a tiny window the panel minimum wins");
+    }
+
+    @Test void theBottomDividerSitsAtTheDefaultShareUntilAHeightIsChosen() {
+        assertEquals(0.7, BottomPanel.dividerPosition(0, 800), 1e-9);
+        assertEquals(0.7, BottomPanel.dividerPosition(240, 0), 1e-9, "no size yet");
+        assertEquals(0.75, BottomPanel.dividerPosition(200, 800), 1e-9);
+        assertEquals(0.9, BottomPanel.dividerPosition(1, 800), 1e-9, "clamped to the minimum height, 80 of 800");
+    }
+
     // ---- the controls ----
 
     private static boolean display;
@@ -227,6 +241,52 @@ class WorkAreaTest {
             assertEquals(370, w.sidebarWidth(), 1.0, "a bigger window keeps the sidebar");
             assertEquals(w.editors().getWidth(), terminal.getWidth(), 1.0);
             assertEquals(900, w.editors().getHeight() + terminal.getHeight() + terminalDivider.getLayoutBounds().getHeight(), 4.0, "editors and terminal share the height");
+            return null;
+        });
+    }
+
+    @Test void aWidthRestoredBeforeTheWindowHasASizeIsKept() throws Exception {
+        assumeTrue(display, "needs a display to run JavaFX controls");
+        Window w = fx(() -> {
+            VBox sidebar = new VBox();
+            WorkArea area = new WorkArea(sidebar, new StackPane());
+            area.sidebarWidth(400); // as LayoutMemory does at start, before the first layout
+            new Scene(area.node(), 1000, 700);
+            Window window = new Window(area, sidebar, new StackPane());
+            window.resize(1000, 700);
+            return window;
+        });
+        fx(() -> { assertEquals(400, w.sidebarWidth(), 2.0); return null; });
+    }
+
+    @Test void draggingReportsTheNewSizesAndSettingThemDoesNot() throws Exception {
+        Window w = window(true);
+        double[] reported = {0, 0};
+        fx(() -> {
+            w.area().onSidebarWidthChanged(width -> reported[0] = width);
+            bottom.onHeightChanged(height -> reported[1] = height);
+            w.area().sidebarWidth(300);
+            bottom.bottomHeight(200);
+            w.layout();
+            assertEquals(0, reported[0], "setting a width is not a drag");
+            assertEquals(0, reported[1], "setting a height is not a drag");
+            assertEquals(200, ((Region) bottom.terminalTab().getTabPane()).getHeight(), 6.0, "the restored height is used");
+            w.drag(w.sidebarDivider(), 50, 0);
+            assertEquals(350, reported[0], 2.0);
+            w.drag(Window.dividerOf(bottom.node()), 0, -40);
+            assertEquals(240, reported[1], 8.0);
+            return null;
+        });
+    }
+
+    @Test void theBottomPanelKeepsItsHeightWhenTheWindowIsResized() throws Exception {
+        Window w = window(true);
+        fx(() -> {
+            Region panel = (Region) bottom.terminalTab().getTabPane();
+            w.drag(Window.dividerOf(bottom.node()), 0, -60);
+            double chosen = panel.getHeight();
+            w.resize(1000, 1000);
+            assertEquals(chosen, panel.getHeight(), 2.0, "a taller window gives the extra space to the editors");
             return null;
         });
     }

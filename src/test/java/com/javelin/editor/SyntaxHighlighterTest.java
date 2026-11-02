@@ -113,7 +113,7 @@ class SyntaxHighlighterTest {
     void cFamilyFilesAreHighlighted(String name) { assertTrue(SyntaxHighlighter.appliesTo(new File(name)), name); }
 
     @ParameterizedTest
-    @ValueSource(strings = {"a.rb", "a.fish", "a.txt", "a.toml", "a.properties", "README", "Makefile", ".bashrc", "trailing.", "a.java.bak", "dir.java/notes"})
+    @ValueSource(strings = {"a.rb", "a.fish", "a.txt", "a.toml", "a.properties", "README", "Makefile", ".gitignore", "trailing.", "a.java.bak", "dir.java/notes"})
     void otherFilesAreShownAsPlainText(String name) { assertFalse(SyntaxHighlighter.appliesTo(new File(name)), name); }
 
     @Test void anUntitledBufferIsHighlighted() { assertTrue(SyntaxHighlighter.appliesTo(null)); }
@@ -153,7 +153,7 @@ class SyntaxHighlighterTest {
     void eachExtensionMapsToItsLanguage(String name, Language expected) { assertEquals(expected, SyntaxHighlighter.languageOf(new File(name)), name); }
 
     @ParameterizedTest
-    @CsvSource({"a.rb", "a.txt", "README", "Makefile", ".bashrc", "trailing.", "a.java.bak", "dir.java/notes"})
+    @CsvSource({"a.rb", "a.txt", "README", "Makefile", ".gitignore", "trailing.", "a.java.bak", "dir.java/notes"})
     void otherFilesHaveNoLanguage(String name) { assertNull(SyntaxHighlighter.languageOf(new File(name)), name); }
 
     @Test void anUntitledBufferIsJava() { assertEquals(Language.JAVA, SyntaxHighlighter.languageOf(null)); }

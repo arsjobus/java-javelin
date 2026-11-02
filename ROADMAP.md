@@ -118,7 +118,7 @@ Each open item above, with what would let it be ticked. Items marked *decision* 
 | Item | Already verified by | Still needed (proposed) |
 | --- | --- | --- |
 | Stable file/document model | `FileIOTest`, `RecoveryStoreTest`, `RecoverySessionTest` | Policy for non-UTF-8 files (today they cannot be opened); undo history and selection are not recovered (documented in BUGS.md) |
-| Stable project model | `ProjectFilesTest`, `ProjectWatcherTest`, `ProjectFinderTest`, `MultiInstanceTest`, `ProjectInstancesTest`, `SameProjectTwiceE2ETest` (the same folder opened twice is detected) | Instances share one settings file (last writer wins) |
+| Stable project model | `ProjectFilesTest`, `ProjectWatcherTest`, `ProjectFinderTest`, `MultiInstanceTest`, `ProjectInstancesTest`, `SameProjectTwiceE2ETest` (the same folder opened twice is detected) | Instances share one settings file: layout values are now saved key by key (`Settings.saveKeys`), but the Settings dialog still writes everything it holds (last writer wins there) |
 | Reliable language integration | `LspTest`, `LanguageServiceTest`, `LanguageWorkflowE2ETest` (start, diagnostics, rename planned and applied to real files) | *Decision:* keep servers manual-start for 1.0 (documented) or add an explicit auto-start setting; `workspace/applyEdit` and code actions are listed as unsupported in BUGS.md |
 | Reliable build/run workflow | `BuildSystemTest`, `ProcessManagerTest`, `ProblemParserTest`, `BuildPipelineE2ETest` | A pipeline test per supported build tool that is installed on the CI machine; no PTY (documented limit) |
 | Git workflow | nothing (v0.6 was skipped) | *Decision:* build it, or move it out of 1.0 |

@@ -18,6 +18,7 @@ import com.javelin.ui.recovery.RecoveryController;
 import com.javelin.ui.run.RunController;
 import com.javelin.ui.shell.BottomPanel;
 import com.javelin.ui.shell.KeyBinder;
+import com.javelin.ui.shell.LayoutMemory;
 import com.javelin.ui.shell.WorkArea;
 import com.javelin.ui.shell.Workbench;
 import java.nio.file.Path;
@@ -75,7 +76,9 @@ public final class App extends Application {
 
         BorderPane root = new BorderPane();
         root.setTop(new MainMenu(binder, editors, search, session, tree, bottom, themes, language, run, settings).create(stage));
-        root.setCenter(new WorkArea(tree.sidebar(), bottom.node()).node());
+        WorkArea workArea = new WorkArea(tree.sidebar(), bottom.node());
+        LayoutMemory layout = new LayoutMemory(bench.settings(), workArea, bottom, bench::status);
+        root.setCenter(workArea.node());
         Region statusSpacer = new Region();
         HBox.setHgrow(statusSpacer, Priority.ALWAYS);
         HBox statusBar = new HBox(bench.statusLabel(), statusSpacer, language.statusLabel());
@@ -89,7 +92,7 @@ public final class App extends Application {
         themes.install();
         binder.apply();
         stage.setScene(scene);
-        stage.setOnCloseRequest(event -> { if (!editors.confirmCloseDirtyTabs()) event.consume(); else recovery.stopAutosave(); });
+        stage.setOnCloseRequest(event -> { if (!editors.confirmCloseDirtyTabs()) event.consume(); else { recovery.stopAutosave(); layout.flush(); } });
         stage.show();
         tree.startWatching();
         settings.reportProblems(false);
