@@ -155,3 +155,7 @@ C-family, Python, markup and Markdown scanners are still inside it; YAML (`YamlS
 classes of their own, so the file stays well under the 900-line limit and a new language is a new class plus one line in
 the extension table and one in `spansIn`. Every scanner is a single pass without recursion and bounds every
 unterminated construct by its line, which `SyntaxHighlighterTest` and `ShellSyntaxTest` check on pathological input.
+
+## Dialogs and the main window (v1.0)
+
+All dialogs and native choosers are shown through `ui/Dialogs` (`DialogOwnershipTest` fails the build otherwise). `Dialogs` keeps the stack of open dialog windows and gives each new dialog the innermost one as its owner (the main window when none is open). `DialogNesting` counts open dialogs so the main window is restored once, after the last has closed, and `WindowRestore` touches the window only if it is minimized or unfocused. The decision logic (`DialogNesting`, `WindowRestore`) has no JavaFX dependency and is unit tested; `DialogsFxTest` checks ownership with real windows.

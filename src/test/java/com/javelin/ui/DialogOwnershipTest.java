@@ -55,14 +55,16 @@ class DialogOwnershipTest {
         assertEquals(List.of(), violations);
     }
 
-    @Test void dialogsGivesEveryDialogTheMainWindowAsOwnerAndRestoresItInFinally() throws IOException {
+    @Test void dialogsGivesEveryDialogAnOwnerAndRestoresTheMainWindowOnceInFinally() throws IOException {
         String code = Files.readString(DIALOGS);
-        assertTrue(code.contains("dialog.initOwner(owner)"), "dialogs without an owner are the cause of the bug");
-        assertTrue(code.contains("dialog.getOwner() == null"), "an owner a caller already set must be kept");
-        assertTrue(Pattern.compile("finally\\s*\\{\\s*restoreOwner\\(\\)").matcher(code).find(), "restore even when the dialog throws");
-        assertEquals(2, count(code, "finally"), "both show() and guarded() restore the window");
-        assertTrue(code.contains("Platform.runLater"), "restore again after the OS has finished moving windows");
+        assertTrue(code.contains("dialog.initOwner(parent)"), "dialogs without an owner are the cause of the minimizing");
+        assertTrue(code.contains("dialog.getOwner() != parent"), "an owner that is already right is kept");
+        assertTrue(code.contains("showing.get(showing.size() - 1)"), "a dialog opened from a dialog belongs to that dialog, not to the main window");
+        assertEquals(3, count(code, "finally"), "show(), guarded() and the deferred restore each clean up in a finally... ");
+        assertTrue(Pattern.compile("finally\\s*\\{[^}]*\\bclosed\\(\\)").matcher(code).find(), "...so the count is kept even when the dialog throws");
+        assertEquals(1, count(code, "Platform.runLater"), "one deferred restore, not an immediate one plus another");
         assertTrue(code.contains("WindowRestore.restore("));
+        assertFalse(code.contains("public static void restoreOwner"), "nothing may raise the main window on its own: it must go through the nesting count");
     }
 
     @Test void theMainWindowIsRegisteredAsOwnerWhenItIsCreated() throws IOException {
