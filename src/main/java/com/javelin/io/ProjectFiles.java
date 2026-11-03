@@ -8,6 +8,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -15,10 +16,10 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Creating, renaming, moving and deleting files and folders in the project tree. JavaFX-free, so the rules are tested
+ * Creating, renaming, moving, copying and deleting files and folders in the project tree. JavaFX-free, so the rules are tested
  * without a display.
  *
- * <p>Creating, renaming and moving never overwrite anything. Deleting is the dangerous half, so it is strict: it refuses the project
+ * <p>Creating, renaming, moving and copying never overwrite anything. Deleting is the dangerous half, so it is strict: it refuses the project
  * folder itself, anything outside the project (including paths that escape through a symbolic link), and it never
  * follows a symbolic link, so deleting a link removes the link and leaves what it points at alone.
  */
@@ -160,16 +161,7 @@ public final class ProjectFiles {
         Path from = source.toAbsolutePath().normalize();
         Path toDir = directory.toAbsolutePath().normalize();
         if (from.equals(root)) throw new IOException("The project folder itself cannot be moved or renamed from here.");
-        if (!from.startsWith(root)) throw new IOException(from.getFileName() + " is not inside the project, so it will not be moved.");
-        if (!toDir.startsWith(root)) throw new IOException("The destination is not inside the project, so nothing will be moved there.");
-        if (!Files.exists(from, LinkOption.NOFOLLOW_LINKS)) throw new NoSuchFileException(from.toString(), null, from.getFileName() + " no longer exists.");
-        if (!Files.isDirectory(toDir)) throw new IOException(toDir.getFileName() + " is not a folder, so nothing can be moved into it.");
-        // Symbolic links in the middle of either path could lead out of the project; check where both really are.
-        Path realRoot = root.toRealPath();
-        if (!from.getParent().toRealPath().startsWith(realRoot)) throw new IOException(from.getFileName() + " is not inside the project, so it will not be moved.");
-        if (!toDir.toRealPath().startsWith(realRoot)) throw new IOException("The destination is not inside the project, so nothing will be moved there.");
-        if (Files.isDirectory(from, LinkOption.NOFOLLOW_LINKS) && toDir.startsWith(from))
-            throw new IOException("A folder cannot be moved into itself.");
+        requireConfined(root, from, toDir, "moved");
         Path target = toDir.resolve(name.strip());
         if (target.equals(from)) return from; // nothing to do
         boolean caseOnly = Files.exists(target, LinkOption.NOFOLLOW_LINKS) && onlyCaseDiffers(from, target);
@@ -181,6 +173,100 @@ public final class ProjectFiles {
             try { return Files.move(temp, target); } catch (IOException ex) { Files.move(temp, from); throw ex; } // put it back if the second step fails
         }
         return Files.move(from, target); // no REPLACE_EXISTING: if something appears meanwhile this fails rather than overwrites
+    }
+
+    /**
+     * The checks every move and copy shares: {@code from} exists and is inside {@code root}, {@code toDir} is a folder
+     * inside {@code root}, neither reaches outside through a symbolic link, and a folder is not put inside itself.
+     * {@code verb} ("moved" or "copied") only words the messages.
+     */
+    private static void requireConfined(Path root, Path from, Path toDir, String verb) throws IOException {
+        if (!from.startsWith(root)) throw new IOException(from.getFileName() + " is not inside the project, so it will not be " + verb + ".");
+        if (!toDir.startsWith(root)) throw new IOException("The destination is not inside the project, so nothing will be " + verb + " there.");
+        if (!Files.exists(from, LinkOption.NOFOLLOW_LINKS)) throw new NoSuchFileException(from.toString(), null, from.getFileName() + " no longer exists.");
+        if (!Files.isDirectory(toDir)) throw new IOException(toDir.getFileName() + " is not a folder, so nothing can be " + verb + " into it.");
+        // Symbolic links in the middle of either path could lead out of the project; check where both really are.
+        Path realRoot = root.toRealPath();
+        if (!from.getParent().toRealPath().startsWith(realRoot)) throw new IOException(from.getFileName() + " is not inside the project, so it will not be " + verb + ".");
+        if (!toDir.toRealPath().startsWith(realRoot)) throw new IOException("The destination is not inside the project, so nothing will be " + verb + " there.");
+        if (Files.isDirectory(from, LinkOption.NOFOLLOW_LINKS) && toDir.startsWith(from))
+            throw new IOException("A folder cannot be " + verb + " into itself.");
+    }
+
+    /**
+     * Copies {@code source} (a file, or a folder with everything in it) into {@code directory}. Never overwrites: if the
+     * name is taken the copy is called {@code name copy.ext}, then {@code name copy 2.ext} and so on, which is also what
+     * pasting beside the original gives. Refuses the project folder itself and anything, as source or destination, that is
+     * not inside {@code projectRoot} (including paths that escape through a symbolic link), and a folder copied into itself.
+     * Symbolic links are copied as links, never followed, and special files (pipes, sockets, devices) are refused. If a
+     * folder cannot be copied completely, what was copied so far is removed again. Returns the new path.
+     */
+    public static Path copyInto(Path projectRoot, Path source, Path directory) throws IOException {
+        Path root = projectRoot.toAbsolutePath().normalize();
+        Path from = source.toAbsolutePath().normalize();
+        Path toDir = directory.toAbsolutePath().normalize();
+        if (from.equals(root) || from.getFileName() == null) throw new IOException("The project folder itself cannot be copied from here.");
+        requireConfined(root, from, toDir, "copied");
+        Path target = freeCopyName(toDir, from.getFileName().toString(), Files.isDirectory(from, LinkOption.NOFOLLOW_LINKS));
+        copyTree(from, target);
+        return target;
+    }
+
+    /** {@code name} in {@code directory} if that is free, otherwise {@code name copy.ext}, {@code name copy 2.ext}, ... (folders and dotfiles keep their whole name as the stem). */
+    static Path freeCopyName(Path directory, String name, boolean folder) throws IOException {
+        Path plain = directory.resolve(name);
+        if (!Files.exists(plain, LinkOption.NOFOLLOW_LINKS)) return plain;
+        int dot = folder ? -1 : name.lastIndexOf('.');
+        String stem = dot > 0 ? name.substring(0, dot) : name;
+        String extension = dot > 0 ? name.substring(dot) : "";
+        for (int n = 1; n <= 10_000; n++) {
+            String candidate = stem + (n == 1 ? " copy" : " copy " + n) + extension;
+            String problem = nameProblem(candidate);
+            if (problem != null) throw new IOException("\"" + name + "\" cannot be copied here: " + problem);
+            Path path = directory.resolve(candidate);
+            if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return path;
+        }
+        throw new IOException("No free name for a copy of \"" + name + "\" in " + directory.getFileName() + ".");
+    }
+
+    /** Copies a file, link or folder tree to {@code target}, which must not exist. A half-made folder copy is removed again; nothing else is touched. */
+    private static void copyTree(Path from, Path target) throws IOException {
+        if (!Files.isDirectory(from, LinkOption.NOFOLLOW_LINKS)) {
+            copyEntry(from, target, Files.readAttributes(from, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS));
+            return;
+        }
+        boolean[] created = {false}; // only a folder this call made may be cleaned up; one that appeared meanwhile is not ours
+        try {
+            Files.walkFileTree(from, new SimpleFileVisitor<>() {
+                @Override public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                    Files.createDirectory(target.resolve(from.relativize(dir).toString()));
+                    created[0] = true;
+                    return FileVisitResult.CONTINUE;
+                }
+                @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    copyEntry(file, target.resolve(from.relativize(file).toString()), attrs);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException | RuntimeException ex) {
+            if (created[0]) removeQuietly(target);
+            throw ex;
+        }
+    }
+
+    private static void copyEntry(Path file, Path to, BasicFileAttributes attrs) throws IOException {
+        if (attrs.isOther()) throw new IOException(file.getFileName() + " is not a regular file, so it cannot be copied.");
+        Files.copy(file, to, StandardCopyOption.COPY_ATTRIBUTES, LinkOption.NOFOLLOW_LINKS); // no REPLACE_EXISTING
+    }
+
+    /** Deletes a tree this class just made (never follows links); a failure here must not hide the original error. */
+    private static void removeQuietly(Path tree) {
+        try {
+            Files.walkFileTree(tree, new SimpleFileVisitor<>() {
+                @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException { Files.delete(file); return FileVisitResult.CONTINUE; }
+                @Override public FileVisitResult postVisitDirectory(Path dir, IOException ex) throws IOException { Files.delete(dir); return FileVisitResult.CONTINUE; }
+            });
+        } catch (IOException | RuntimeException ignored) { /* best effort */ }
     }
 
     /** True when {@code a} and {@code b} are the same existing entry whose names differ only in letter case (case-insensitive file system). */

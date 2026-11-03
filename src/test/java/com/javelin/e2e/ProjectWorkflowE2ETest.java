@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.javelin.editor.Symbols;
 import com.javelin.editor.TextSearch;
+import com.javelin.io.FileClipboard;
 import com.javelin.io.FileIO;
 import com.javelin.io.ProjectFiles;
 import com.javelin.io.ProjectFinder;
@@ -133,6 +134,47 @@ class ProjectWorkflowE2ETest {
         assertFalse(Files.exists(file));
         assertTrue(Files.exists(home.resolve("trash/files/Scratch.txt")), "deleted files can be restored from the bin");
         assertEquals("keep", Files.readString(outside));
+    }
+
+    @Test void copyAndPasteAFileIntoAnotherFolderOfTheProject() throws IOException {
+        Path src = ProjectFiles.createFolder(project, "src");
+        Path docs = ProjectFiles.createFolder(project, "docs");
+        Path main = ProjectFiles.createFile(src, "Main.java");
+        FileIO.writeAtomic(main, "class Main {}");
+        FileClipboard clipboard = new FileClipboard();
+
+        clipboard.copy(List.of(main));
+        FileClipboard.Result result = clipboard.paste(project, docs);
+
+        assertEquals(1, result.done().size());
+        assertEquals("class Main {}", FileIO.readText(docs.resolve("Main.java")), "the copy has the same text");
+        assertEquals("class Main {}", FileIO.readText(main), "the original is still where it was");
+        assertEquals(Path.of("docs", "Main.java").toString(), ProjectPaths.display(project.toFile(), result.done().get(0).to().toFile()));
+
+        clipboard.paste(project, docs); // a second paste never overwrites the first
+        assertTrue(Files.exists(docs.resolve("Main copy.java")));
+        assertEquals("class Main {}", FileIO.readText(docs.resolve("Main.java")));
+    }
+
+    @Test void cutAndPasteAFileIntoAnotherFolderOfTheProject() throws IOException {
+        Path src = ProjectFiles.createFolder(project, "src");
+        Path archive = ProjectFiles.createFolder(project, "archive");
+        Path old = ProjectFiles.createFile(src, "Old.java");
+        FileIO.writeAtomic(old, "class Old {}");
+        FileClipboard clipboard = new FileClipboard();
+
+        clipboard.cut(List.of(old));
+        assertTrue(Files.exists(old), "nothing moves until it is pasted");
+        FileClipboard.Result result = clipboard.paste(project, archive);
+
+        FileClipboard.Pasted moved = result.done().get(0);
+        assertTrue(moved.moved());
+        assertFalse(Files.exists(old));
+        assertEquals("class Old {}", FileIO.readText(archive.resolve("Old.java")));
+        // the sidebar repoints an open tab of the file with this same rule
+        assertEquals(archive.resolve("Old.java"), ProjectFiles.relocated(moved.from(), moved.to(), old));
+        assertTrue(clipboard.isEmpty(), "a cut is pasted once");
+        assertTrue(clipboard.paste(project, src).done().isEmpty(), "so a second paste does nothing");
     }
 
     @Test void changesMadeOutsideTheEditorRefreshTheTree() throws IOException {

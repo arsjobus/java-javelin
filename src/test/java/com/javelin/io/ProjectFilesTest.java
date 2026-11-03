@@ -609,6 +609,145 @@ class ProjectFilesTest {
         assertTrue(Files.isDirectory(folder));
     }
 
+    // ---- copy ----
+
+    @Test void copiesAFileIntoAFolderAndLeavesTheOriginal() throws IOException {
+        Path file = Files.writeString(project.resolve("A.java"), "class A {}");
+        Path folder = Files.createDirectory(project.resolve("pkg"));
+        Path copy = ProjectFiles.copyInto(project, file, folder);
+        assertEquals(folder.resolve("A.java"), copy);
+        assertEquals("class A {}", Files.readString(copy));
+        assertEquals("class A {}", Files.readString(file), "the original stays");
+    }
+
+    @Test void copiesAFolderWithEverythingInIt() throws IOException {
+        Path src = Files.createDirectories(project.resolve("src/deep/er"));
+        Files.writeString(src.resolve("One.txt"), "1");
+        Files.writeString(project.resolve("src/deep/Two.txt"), "2");
+        Files.createDirectory(project.resolve("src/empty"));
+        Path target = Files.createDirectory(project.resolve("backup"));
+        Path copy = ProjectFiles.copyInto(project, project.resolve("src"), target);
+        assertEquals(target.resolve("src"), copy);
+        assertEquals("1", Files.readString(copy.resolve("deep/er/One.txt")));
+        assertEquals("2", Files.readString(copy.resolve("deep/Two.txt")));
+        assertTrue(Files.isDirectory(copy.resolve("empty")), "empty folders are copied too");
+        assertTrue(Files.exists(src.resolve("One.txt")), "the original stays");
+    }
+
+    @Test void copyingBesideTheOriginalNumbersTheCopyAndNeverOverwrites() throws IOException {
+        Path file = Files.writeString(project.resolve("Main.java"), "v1");
+        Path first = ProjectFiles.copyInto(project, file, project);
+        Path second = ProjectFiles.copyInto(project, file, project);
+        Path third = ProjectFiles.copyInto(project, first, project);
+        assertEquals(project.resolve("Main copy.java"), first);
+        assertEquals(project.resolve("Main copy 2.java"), second);
+        assertEquals(project.resolve("Main copy copy.java"), third);
+        assertEquals("v1", Files.readString(file));
+    }
+
+    @Test void copyKeepsAnExistingFileWithTheSameNameInTheTargetFolder() throws IOException {
+        Path file = Files.writeString(project.resolve("notes.txt"), "mine");
+        Path folder = Files.createDirectory(project.resolve("docs"));
+        Files.writeString(folder.resolve("notes.txt"), "theirs");
+        Path copy = ProjectFiles.copyInto(project, file, folder);
+        assertEquals(folder.resolve("notes copy.txt"), copy);
+        assertEquals("theirs", Files.readString(folder.resolve("notes.txt")), "nothing is overwritten");
+        assertEquals("mine", Files.readString(copy));
+    }
+
+    @Test void copyNamesFoldersAndDotFilesWithoutSplittingAtADot() throws IOException {
+        Path folder = Files.createDirectory(project.resolve("v1.2"));
+        Path dot = Files.writeString(project.resolve(".gitignore"), "x");
+        assertEquals(project.resolve("v1.2 copy"), ProjectFiles.copyInto(project, folder, project));
+        assertEquals(project.resolve(".gitignore copy"), ProjectFiles.copyInto(project, dot, project));
+    }
+
+    @Test void copyKeepsTheModifiedTimeOfAFile() throws IOException {
+        Path file = Files.writeString(project.resolve("old.txt"), "x");
+        Files.setLastModifiedTime(file, java.nio.file.attribute.FileTime.fromMillis(1_000_000_000_000L));
+        Path copy = ProjectFiles.copyInto(project, file, project);
+        assertEquals(Files.getLastModifiedTime(file), Files.getLastModifiedTime(copy));
+    }
+
+    @Test void copyRefusesAFolderIntoItselfOrBelowItself() throws IOException {
+        Path folder = Files.createDirectories(project.resolve("a/b"));
+        assertThrows(IOException.class, () -> ProjectFiles.copyInto(project, project.resolve("a"), project.resolve("a")));
+        IOException below = assertThrows(IOException.class, () -> ProjectFiles.copyInto(project, project.resolve("a"), folder));
+        assertTrue(below.getMessage().contains("into itself"), below.getMessage());
+        assertFalse(Files.exists(folder.resolve("a")), "nothing was made");
+    }
+
+    @Test void copyRefusesTheProjectFolderAndAnythingOutsideTheProject() throws IOException {
+        Path outside = Files.writeString(dir.resolve("outside.txt"), "o");
+        Path folder = Files.createDirectory(project.resolve("in"));
+        Path file = Files.writeString(project.resolve("f.txt"), "f");
+        assertThrows(IOException.class, () -> ProjectFiles.copyInto(project, project, folder));
+        assertThrows(IOException.class, () -> ProjectFiles.copyInto(project, outside, folder), "a source outside the project");
+        assertThrows(IOException.class, () -> ProjectFiles.copyInto(project, file, dir), "a destination outside the project");
+        assertFalse(Files.exists(dir.resolve("f.txt")));
+    }
+
+    @Test void copyRefusesADestinationThatIsNotAFolderOrASourceThatIsGone() throws IOException {
+        Path file = Files.writeString(project.resolve("f.txt"), "f");
+        Path other = Files.writeString(project.resolve("g.txt"), "g");
+        assertThrows(IOException.class, () -> ProjectFiles.copyInto(project, file, other));
+        assertThrows(NoSuchFileException.class, () -> ProjectFiles.copyInto(project, project.resolve("missing.txt"), project));
+    }
+
+    @Test void copyThroughALinkThatLeadsOutsideIsRefused() throws IOException {
+        Path elsewhere = Files.createDirectory(dir.resolve("elsewhere"));
+        Path file = Files.writeString(project.resolve("f.txt"), "f");
+        link(project.resolve("door"), elsewhere);
+        assertThrows(IOException.class, () -> ProjectFiles.copyInto(project, file, project.resolve("door")), "into a folder that is really outside");
+        Files.writeString(elsewhere.resolve("secret.txt"), "s");
+        assertThrows(IOException.class, () -> ProjectFiles.copyInto(project, project.resolve("door/secret.txt"), project), "from a folder that is really outside");
+        try (var listing = Files.list(elsewhere)) { assertEquals(1, listing.count(), "nothing was written outside"); }
+        assertFalse(Files.exists(project.resolve("secret.txt")));
+    }
+
+    @Test void copyingAFolderCopiesALinkInsideItAsALinkAndNeverFollowsIt() throws IOException {
+        Path outside = Files.writeString(dir.resolve("huge.bin"), "outside data");
+        Path folder = Files.createDirectory(project.resolve("pkg"));
+        link(folder.resolve("shortcut"), outside);
+        Path copy = ProjectFiles.copyInto(project, folder, project);
+        assertTrue(Files.isSymbolicLink(copy.resolve("shortcut")), "the link is copied as a link");
+        assertEquals(outside, Files.readSymbolicLink(copy.resolve("shortcut")));
+        assertEquals("outside data", Files.readString(outside), "what the link points at is untouched");
+    }
+
+    @Test void aFolderThatCannotBeCopiedCompletelyLeavesNoHalfCopyBehind() throws IOException {
+        assumeTrue(!System.getProperty("os.name").toLowerCase().contains("win") && !"root".equals(System.getProperty("user.name")), "needs POSIX permissions and a non-root user");
+        Path folder = Files.createDirectories(project.resolve("pkg/locked"));
+        Files.writeString(project.resolve("pkg/A.txt"), "a");
+        Path secret = Files.writeString(folder.resolve("secret.txt"), "s");
+        var original = Files.getPosixFilePermissions(secret);
+        Files.setPosixFilePermissions(secret, java.util.Set.of()); // cannot be read, so it cannot be copied
+        try {
+            Path target = Files.createDirectory(project.resolve("dest"));
+            assertThrows(IOException.class, () -> ProjectFiles.copyInto(project, project.resolve("pkg"), target));
+            assertFalse(Files.exists(target.resolve("pkg")), "the half-made copy is removed again");
+            assertEquals("a", Files.readString(project.resolve("pkg/A.txt")), "the original is untouched");
+        } finally { Files.setPosixFilePermissions(secret, original); }
+    }
+
+    @Test void copyRefusesASpecialFileInsteadOfWaitingOnIt() throws IOException, InterruptedException {
+        assumeTrue(System.getProperty("os.name").toLowerCase().matches(".*(linux|mac).*"), "needs mkfifo");
+        Path pipe = project.resolve("pipe");
+        try { assumeTrue(new ProcessBuilder("mkfifo", pipe.toString()).start().waitFor() == 0, "mkfifo is not available"); }
+        catch (IOException ex) { assumeTrue(false, "mkfifo is not available"); }
+        Path folder = Files.createDirectory(project.resolve("in"));
+        assertTimeoutPreemptively(java.time.Duration.ofSeconds(10), () ->
+            assertThrows(IOException.class, () -> ProjectFiles.copyInto(project, pipe, folder)));
+    }
+
+    @Test void copyIsRefusedWhenNoFreeNameFitsInTheLimit() throws IOException {
+        Path file = Files.writeString(project.resolve("x".repeat(ProjectFiles.MAX_NAME_LENGTH)), "x");
+        Path folder = Files.createDirectory(project.resolve("in"));
+        Files.writeString(folder.resolve(file.getFileName().toString()), "taken");
+        IOException ex = assertThrows(IOException.class, () -> ProjectFiles.copyInto(project, file, folder));
+        assertTrue(ex.getMessage().contains("255"), ex.getMessage());
+    }
+
     // ---- relocated (repointing open tabs) ----
 
     @Test void relocatedMapsAFileBelowAMovedFolder() {

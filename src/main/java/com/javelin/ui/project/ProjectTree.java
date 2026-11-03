@@ -1,5 +1,6 @@
 package com.javelin.ui.project;
 
+import com.javelin.io.FileClipboard;
 import com.javelin.io.ProjectFiles;
 import com.javelin.io.ProjectWatcher;
 import com.javelin.io.Trash;
@@ -33,6 +34,9 @@ import javafx.scene.control.TreeView;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.TransferMode;
@@ -49,6 +53,9 @@ public final class ProjectTree implements EditorListener {
     private final TreeView<File> projectTree = new TreeView<>();
     private final ContextMenu treeMenu = new ContextMenu();
     private MenuItem renameTreeItem;
+    private MenuItem pasteTreeItem;
+    // What Copy or Cut last put aside, to be pasted into a folder of this project.
+    private final FileClipboard clipboard = new FileClipboard();
     private final TreeGestures treeGestures = new TreeGestures();
     // Notices files added, removed, renamed or moved outside the editor (terminal, build, git, file manager).
     private final ProjectWatcher treeWatcher;
@@ -77,6 +84,7 @@ public final class ProjectTree implements EditorListener {
                     if (!isEmpty() && getTreeItem() != null && !projectTree.getSelectionModel().getSelectedItems().contains(getTreeItem()))
                         projectTree.getSelectionModel().clearAndSelect(projectTree.getRow(getTreeItem()));
                     renameTreeItem.setDisable(projectTree.getSelectionModel().getSelectedItems().size() != 1);
+                    pasteTreeItem.setDisable(clipboard.isEmpty());
                 });
                 // Double-click opens a file. It is decided from the presses on this very row, not from the tree's
                 // selection or JavaFX's click count, so a shaky hand, a drag or a tree rebuild cannot lose or redirect it.
@@ -114,18 +122,30 @@ public final class ProjectTree implements EditorListener {
             }
         });
         MenuItem newFile = new MenuItem("New File..."), newFolder = new MenuItem("New Folder..."), rename = new MenuItem("Rename..."), delete = new MenuItem("Delete");
+        MenuItem copy = new MenuItem("Copy"), cut = new MenuItem("Cut"), paste = new MenuItem("Paste");
+        copy.setAccelerator(new KeyCodeCombination(KeyCode.C, KeyCombination.SHORTCUT_DOWN));
+        cut.setAccelerator(new KeyCodeCombination(KeyCode.X, KeyCombination.SHORTCUT_DOWN));
+        paste.setAccelerator(new KeyCodeCombination(KeyCode.V, KeyCombination.SHORTCUT_DOWN));
         renameTreeItem = rename;
+        pasteTreeItem = paste;
+        copy.setOnAction(e -> copyFromTree());
+        cut.setOnAction(e -> cutFromTree());
+        paste.setOnAction(e -> pasteIntoTree());
         newFile.setOnAction(e -> createInTree(false));
         newFolder.setOnAction(e -> createInTree(true));
         rename.setOnAction(e -> renameInTree());
         delete.setOnAction(e -> deleteFromTree());
-        treeMenu.getItems().addAll(newFile, newFolder, new SeparatorMenuItem(), rename, delete);
+        treeMenu.getItems().addAll(newFile, newFolder, new SeparatorMenuItem(), cut, copy, paste, new SeparatorMenuItem(), rename, delete);
         // Right-clicking the empty part of the sidebar adds to the project folder itself.
         MenuItem rootFile = new MenuItem("New File..."), rootFolder = new MenuItem("New Folder...");
         rootFile.setOnAction(e -> { projectTree.getSelectionModel().clearSelection(); createInTree(false); });
         rootFolder.setOnAction(e -> { projectTree.getSelectionModel().clearSelection(); createInTree(true); });
-        projectTree.setContextMenu(new ContextMenu(rootFile, rootFolder));
-        projectTree.setOnKeyPressed(event -> { if (event.getCode() == KeyCode.F2) { renameInTree(); event.consume(); return; } if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE && event.isShortcutDown()) { deleteFromTree(); event.consume(); } });
+        MenuItem rootPaste = new MenuItem("Paste");
+        rootPaste.setOnAction(e -> { projectTree.getSelectionModel().clearSelection(); pasteIntoTree(); });
+        ContextMenu rootMenu = new ContextMenu(rootFile, rootFolder, new SeparatorMenuItem(), rootPaste);
+        rootMenu.setOnShowing(e -> rootPaste.setDisable(clipboard.isEmpty()));
+        projectTree.setContextMenu(rootMenu);
+        projectTree.setOnKeyPressed(this::onTreeKey);
 
         Label projectLabel = new Label("PROJECT");
         projectLabel.setStyle("-fx-font-weight: bold;");
@@ -134,6 +154,21 @@ public final class ProjectTree implements EditorListener {
         sidebar.setPrefWidth(250);
         VBox.setVgrow(projectTree, Priority.ALWAYS);
         return sidebar;
+    }
+
+    /** Keys that act on the tree itself: F2 rename, Delete, and the shortcut key with C, X or V for Copy, Cut and Paste. */
+    private void onTreeKey(KeyEvent event) {
+        boolean plainShortcut = event.isShortcutDown() && !event.isShiftDown() && !event.isAltDown();
+        switch (event.getCode()) {
+            case F2 -> renameInTree();
+            case DELETE -> deleteFromTree();
+            case BACK_SPACE -> { if (!event.isShortcutDown()) return; deleteFromTree(); }
+            case C -> { if (!plainShortcut) return; copyFromTree(); }
+            case X -> { if (!plainShortcut) return; cutFromTree(); }
+            case V -> { if (!plainShortcut) return; pasteIntoTree(); }
+            default -> { return; }
+        }
+        event.consume();
     }
 
     /** View > Focus Mode: hides or shows the sidebar. */
@@ -222,8 +257,7 @@ public final class ProjectTree implements EditorListener {
         String what = folder ? "folder" : "file";
         if (!bench.requireProject("New " + what)) return;
         File projectDirectory = bench.projectDirectory();
-        TreeItem<File> selected = projectTree.getSelectionModel().getSelectedItem();
-        Path directory = ProjectFiles.directoryFor((selected == null ? projectDirectory : selected.getValue()).toPath());
+        Path directory = targetDirectory();
         String name = "";
         while (true) {
             TextInputDialog dialog = new TextInputDialog(name);
@@ -244,6 +278,48 @@ public final class ProjectTree implements EditorListener {
                 bench.showError("Could not create " + what, ex.getMessage()); // then ask again, keeping what was typed
             }
         }
+    }
+
+    /** Where something new or pasted belongs: inside the selected folder, beside the selected file, or in the project folder. */
+    private Path targetDirectory() {
+        TreeItem<File> selected = projectTree.getSelectionModel().getSelectedItem();
+        return ProjectFiles.directoryFor((selected == null ? bench.projectDirectory() : selected.getValue()).toPath());
+    }
+
+    /** Copy: puts the selected files and folders aside to be pasted; the originals are not touched. */
+    private void copyFromTree() { putAside("Copy", FileClipboard.Mode.COPY); }
+
+    /** Cut: puts the selected files and folders aside; they move when pasted, so nothing is lost if the cut is never pasted. */
+    private void cutFromTree() { putAside("Cut", FileClipboard.Mode.CUT); }
+
+    private void putAside(String title, FileClipboard.Mode mode) {
+        if (!bench.requireProject(title)) return;
+        File projectDirectory = bench.projectDirectory();
+        List<TreeItem<File>> selected = new ArrayList<>(projectTree.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) { bench.status("Select files or folders to " + title.toLowerCase() + " first."); return; }
+        if (selected.stream().anyMatch(item -> item.getValue().equals(projectDirectory))) { bench.status("The project folder itself cannot be " + (mode == FileClipboard.Mode.CUT ? "cut" : "copied") + " from here."); return; }
+        List<Path> paths = selected.stream().map(item -> item.getValue().toPath()).toList();
+        if (mode == FileClipboard.Mode.CUT) clipboard.cut(paths); else clipboard.copy(paths);
+        int count = clipboard.sources().size();
+        bench.status((mode == FileClipboard.Mode.CUT ? "Cut " : "Copied ") + count + (count == 1 ? " item" : " items") + ". Select a folder and paste.");
+    }
+
+    /** Paste: copies or moves what Copy or Cut put aside into the selected folder (beside the selected file, or the project folder). Open tabs follow moved files; nothing is overwritten. */
+    private void pasteIntoTree() {
+        if (!bench.requireProject("Paste")) return;
+        if (clipboard.isEmpty()) { bench.status("Nothing to paste. Copy or cut files or folders first."); return; }
+        File projectDirectory = bench.projectDirectory();
+        Path directory = targetDirectory();
+        boolean cut = clipboard.mode() == FileClipboard.Mode.CUT;
+        FileClipboard.Result result = clipboard.paste(projectDirectory.toPath(), directory);
+        for (FileClipboard.Pasted item : result.done()) if (item.moved()) editors.relocate(item.from(), item.to());
+        refresh();
+        if (!result.done().isEmpty()) revealInTree(result.done().get(result.done().size() - 1).to().toFile());
+        int count = result.done().size();
+        String where = directory.equals(projectDirectory.toPath()) ? projectDirectory.getName() : bench.displayPath(directory.toFile());
+        if (count > 0) bench.status((cut ? "Moved " : "Copied ") + count + (count == 1 ? " item" : " items") + " to " + where + ".");
+        else if (result.failures().isEmpty()) bench.status("Already in " + where + ".");
+        if (!result.failures().isEmpty()) bench.showError("Could not " + (cut ? "move" : "copy") + " everything", String.join("\n", result.failures()));
     }
 
     /** Moves the selected files and folders straight to the recycle bin, without asking. Nothing is deleted for good. */
