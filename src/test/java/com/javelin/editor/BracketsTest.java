@@ -76,4 +76,45 @@ class BracketsTest {
         // Documented limit (BUGS.md): the scan is textual, so the ")" inside the quotes is the one that closes the "(".
         assertEquals(4, Brackets.pair("f(\"a)\")", 1).orElseThrow().partner());
     }
+
+    private static java.util.Optional<Brackets.Pair> javaPair(String text, int index) {
+        return Brackets.pair(text, index, SyntaxHighlighter.spansIn(text, SyntaxHighlighter.Language.JAVA));
+    }
+
+    @Test void bracketsInStringsAndCommentsAreSkippedByBracketsInCode() {
+        String text = "f(\"a)\", 'x', /* ) */ b) // )";
+        int open = text.indexOf('(');
+        assertEquals(text.indexOf("b)") + 1, javaPair(text, open).orElseThrow().partner(), "the ) in the string and the comment do not count");
+        assertEquals(text.indexOf("a)") + 1, Brackets.pair(text, open).orElseThrow().partner(), "the textual match still stops at the first )");
+    }
+
+    @Test void aBracketInCodeIsNotFooledByACharacterLiteral() {
+        String text = "if (c == '(') { x(); }";
+        assertEquals(text.indexOf("')") + 1, javaPair(text, text.indexOf('(')).orElseThrow().partner(), "the ( inside the character literal is not a bracket of the code");
+        assertEquals(text.lastIndexOf('}'), javaPair(text, text.indexOf('{')).orElseThrow().partner());
+    }
+
+    @Test void aBracketInsideAStringPairsOnlyWithinThatString() {
+        String text = "g(\"(a) b)\") ;";
+        int inner = text.indexOf("(a");
+        assertEquals(inner + 2, javaPair(text, inner).orElseThrow().partner(), "pairs with the ) in the same string");
+        assertEquals(inner, javaPair(text, inner + 2).orElseThrow().partner());
+        assertTrue(javaPair("g(\"(a\") ;", 3).isEmpty(), "the ) after the string is code, so the ( in the string has no partner");
+    }
+
+    @Test void bracketsInsideOneCommentDoNotPairWithTheNextComment() {
+        String text = "/* ( */ x /* ) */";
+        assertTrue(javaPair(text, text.indexOf('(')).isEmpty());
+        assertTrue(javaPair(text, text.indexOf(')')).isEmpty());
+    }
+
+    @Test void withoutSpansTheMatchIsPurelyTextual() {
+        assertEquals(Brackets.pair(TEXT, 1), Brackets.pair(TEXT, 1, java.util.List.of()));
+    }
+
+    @Test void anUnterminatedStringOnTheLineDoesNotHideTheRestOfTheFile() {
+        String text = "a(\"oops\nb(c))";
+        assertEquals(text.length() - 1, javaPair(text, 1).orElseThrow().partner(), "the string ends at its line, so the next line is code again");
+        assertEquals(text.length() - 2, javaPair(text, text.indexOf("(c")).orElseThrow().partner());
+    }
 }

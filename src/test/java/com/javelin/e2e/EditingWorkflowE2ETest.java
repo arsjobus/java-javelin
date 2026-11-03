@@ -57,6 +57,20 @@ class EditingWorkflowE2ETest {
         assertEquals(open, Brackets.pair(text, pair.partner()).orElseThrow().partner(), "and back again");
     }
 
+    @Test void matchingABracketIgnoresBracketsInStringsAndCommentsOfASavedFile() throws IOException {
+        Path file = home.resolve("Parens.java");
+        FileIO.writeAtomic(file, "class P {\n    boolean f(char c) {\n        // a stray ) in a comment\n        return c == ')' || g(\"(\") && h(c);\n    }\n}\n");
+        String text = FileIO.readText(file);
+        List<SyntaxHighlighter.Span> spans = SyntaxHighlighter.spans(text, file.toFile()); // the language comes from the extension, as in the window
+        int open = text.indexOf("f(") + 1;
+        Brackets.Pair pair = Brackets.pair(text, Brackets.near(text, open).orElseThrow(), spans).orElseThrow();
+        assertEquals(text.indexOf("c) {") + 1, pair.partner(), "the parameter list ends at its own ), not at the one in the comment");
+        int call = text.indexOf("g(") + 1;
+        assertEquals(text.indexOf("\")", call) + 1, Brackets.pair(text, call, spans).orElseThrow().partner(), "the ( inside the string is not the call's");
+        int body = text.indexOf("{", open);
+        assertEquals(text.lastIndexOf("}", text.lastIndexOf("}") - 1), Brackets.pair(text, body, spans).orElseThrow().partner());
+    }
+
     @Test void findNextWalksThroughMatchesAndReplaceSavesTheResult() throws IOException {
         Path file = savedSource();
         String text = FileIO.readText(file);

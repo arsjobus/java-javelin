@@ -2,6 +2,7 @@ package com.javelin.ui.editor;
 
 import com.javelin.editor.Brackets;
 import com.javelin.editor.LineNavigation;
+import com.javelin.editor.SyntaxHighlighter;
 import com.javelin.editor.TextSearch;
 import com.javelin.io.ProjectFinder;
 import com.javelin.settings.Settings;
@@ -136,7 +137,7 @@ public final class SearchController {
             String text = a.getText();
             OptionalInt at = Brackets.near(text, a.getCaretPosition());
             if (at.isEmpty()) { bench.status("No bracket at caret"); return; }
-            Brackets.pair(text, at.getAsInt()).ifPresentOrElse(
+            Brackets.pair(text, at.getAsInt(), SyntaxHighlighter.spans(text, editors.fileOf(a))).ifPresentOrElse(
                 pair -> { a.selectRange(pair.start(), pair.end()); bench.status("Matching bracket"); },
                 () -> bench.status("No matching bracket"));
         });
