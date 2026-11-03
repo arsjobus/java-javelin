@@ -48,6 +48,7 @@ window uses; features that need a display (`App`, `ui/*`) are listed under *Chec
 | Go to Line (invalid numbers are refused); opening a Problem or Reference lands on the nearest valid line and column | Go to > Line | `LineNavigationTest`, `EditingWorkflowE2ETest` |
 | Matching bracket for `()`, `[]`, `{}` (selects both brackets). Brackets inside string and character literals and comments are not counted by a bracket in code, so `f(")")` pairs with its own closing `)`; a bracket inside a string or comment pairs only within that same string or comment. Which text is a string or comment comes from the syntax highlighter, so a file of an unknown type (plain text) is matched textually | Go to > Matching Bracket | `BracketsTest`, `EditingWorkflowE2ETest.matchingABracketSelectsTheWholeBlock`, `EditingWorkflowE2ETest.matchingABracketIgnoresBracketsInStringsAndCommentsOfASavedFile` |
 | Completion: the popup starts at the word before the caret; choosing replaces it plus anything typed since, and never uses a range outside the document | Language > Complete | `CompletionsTest`, `EditingWorkflowE2ETest` |
+| Walk a complete Java method without executing it: parsed branch, loop, switch and exit explanations appear beside highlighted code; navigate manually with Previous/Next or arrow keys, or finish with Escape | right-click a complete method selection > Walk me Through | `FunctionWalkthroughTest` |
 
 ## Window layout
 

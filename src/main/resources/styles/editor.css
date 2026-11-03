@@ -53,6 +53,9 @@
 .popup-pane .list-cell:filled:selected { -fx-background-color: #cfe3ff; }
 .popup-pane .popup-text { -fx-text-fill: #1e1e1e; -fx-font-family: "Monospaced"; -fx-padding: 6; }
 .popup-pane.scroll-pane > .viewport { -fx-background-color: #f3f3f3; }
+.walkthrough-bubble { -fx-background-radius: 10; -fx-border-radius: 10; -fx-padding: 12; -fx-max-width: 430; }
+.walkthrough-bubble .walkthrough-progress { -fx-font-weight: bold; -fx-padding: 0 6 0 6; }
+.walkthrough-bubble .popup-text { -fx-font-family: System; -fx-font-size: 14px; -fx-padding: 0 6 4 6; }
 .theme-dark.popup-pane { -fx-background-color: #252526; -fx-border-color: #454545; }
 .theme-dark.popup-pane .list-cell { -fx-text-fill: #d4d4d4; }
 .theme-dark.popup-pane .list-cell:filled:selected { -fx-background-color: #094771; }

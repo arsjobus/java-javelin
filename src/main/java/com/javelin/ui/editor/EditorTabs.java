@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.Optional;
 import java.util.function.Consumer;
 import javafx.application.Platform;
+import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
@@ -50,17 +51,23 @@ public final class EditorTabs {
     private final List<EditorListener> listeners = new ArrayList<>();
     private final DiagnosticStore diagnostics;
     private final EditorFactory factory;
+    private final WalkthroughController walkthrough;
     private final SyntaxStyler styler;
     private final TabContextMenu contextMenu;
 
-    public EditorTabs(Workbench bench, DiagnosticStore diagnostics) {
+    public EditorTabs(Workbench bench, DiagnosticStore diagnostics, Consumer<Parent> popupStyler) {
         this.bench = bench;
         this.diagnostics = diagnostics;
-        this.factory = new EditorFactory(bench);
+        this.walkthrough = new WalkthroughController(bench, popupStyler);
+        this.factory = new EditorFactory(bench, walkthrough::start);
         this.styler = new SyntaxStyler(diagnostics, this::fileOf);
         this.contextMenu = new TabContextMenu(tabs, this::confirmClose);
+        tabs.getSelectionModel().selectedItemProperty().addListener((observable, oldTab, newTab) -> walkthrough.stop());
         tabs.getTabs().addListener((javafx.collections.ListChangeListener<Tab>) change -> {
-            while (change.next()) if (change.wasRemoved()) change.getRemoved().forEach(this::forgetTab);
+            while (change.next()) if (change.wasRemoved()) {
+                walkthrough.stop();
+                change.getRemoved().forEach(this::forgetTab);
+            }
         });
         contextMenu.install();
     }
@@ -282,7 +289,10 @@ public final class EditorTabs {
     }
 
     /** Releases everything the tabs hold (text subscriptions) when the window shuts down. */
-    public void dispose() { subscriptions.values().forEach(Subscription::unsubscribe); }
+    public void dispose() {
+        walkthrough.stop();
+        subscriptions.values().forEach(Subscription::unsubscribe);
+    }
 
     // ---- reacting to the project changing on disk ----
 

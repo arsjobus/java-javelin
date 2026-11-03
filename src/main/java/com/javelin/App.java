@@ -43,11 +43,11 @@ public final class App extends Application {
     private final Workbench bench = new Workbench(Preferences.userNodeForPackage(App.class));
     private final ProcessManager processes = new ProcessManager();
     private final DiagnosticStore diagnostics = new DiagnosticStore();
-    private final EditorTabs editors = new EditorTabs(bench, diagnostics);
+    private final ThemeController themes = new ThemeController(bench);
+    private final EditorTabs editors = new EditorTabs(bench, diagnostics, themes::stylePopup);
     private final BottomPanel bottom = new BottomPanel(editors.node(), processes, bench::projectDirectory);
     private final ProjectTree tree = new ProjectTree(bench, editors);
     private final KeyBinder binder = new KeyBinder(bench.keys());
-    private final ThemeController themes = new ThemeController(bench);
     private final SettingsController settings = new SettingsController(bench, editors, bottom, themes, binder, tree::refresh);
     private final ProjectSession session = new ProjectSession(bench, editors, bottom, settings);
     private final SearchController search = new SearchController(bench, editors);

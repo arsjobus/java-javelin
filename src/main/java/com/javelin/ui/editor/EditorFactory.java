@@ -7,9 +7,11 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.IndexRange;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyCode;
@@ -23,11 +25,15 @@ import org.fxmisc.richtext.LineNumberFactory;
 /** Builds the text editors: their look, context menu, Tab / Enter behaviour and extra cursors. */
 final class EditorFactory {
     private final Workbench bench;
+    private final Consumer<CodeArea> walkthrough;
     private final Map<CodeArea, List<CaretNode>> extraCarets = new HashMap<>();
     private boolean swallowTypedTab;
     private boolean swallowTypedEnter;
 
-    EditorFactory(Workbench bench) { this.bench = bench; }
+    EditorFactory(Workbench bench, Consumer<CodeArea> walkthrough) {
+        this.bench = bench;
+        this.walkthrough = walkthrough;
+    }
 
     CodeArea create() {
         CodeArea editor = new CodeArea();
@@ -96,11 +102,14 @@ final class EditorFactory {
             IndexRange selection = editor.getSelection();
             editor.replaceText(selection.getStart(), selection.getEnd(), clipboard.getString());
         });
-        ContextMenu menu = new ContextMenu(copy, cut, paste);
+        MenuItem walk = new MenuItem("Walk me Through");
+        walk.setOnAction(event -> walkthrough.accept(editor));
+        ContextMenu menu = new ContextMenu(copy, cut, paste, new SeparatorMenuItem(), walk);
         menu.setOnShowing(event -> {
             boolean hasSelection = editor.getSelection().getLength() > 0;
             copy.setDisable(!hasSelection);
             cut.setDisable(!hasSelection);
+            walk.setDisable(!hasSelection);
             paste.setDisable(!Clipboard.getSystemClipboard().hasString());
         });
         editor.setContextMenu(menu);
