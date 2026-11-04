@@ -14,147 +14,212 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * The AI workflow as a person uses it, on the real settings, the real Ollama client and a fake Ollama server on a loopback
- * port: choose a model, preview what is sent, run, review the proposal, apply or reject, and the failures on the way.
+ * The AI workflow as a person uses it, on the real settings, the real Ollama client and a fake
+ * Ollama server on a loopback port: choose a model, preview what is sent, run, review the proposal,
+ * apply or reject, and the failures on the way.
  */
 class AiWorkflowE2ETest {
-    @TempDir Path dir;
+  @TempDir Path dir;
 
-    private static final String DOC = "public class Calc {\n    int add(int a, int b) { return a - b; }\n    int twice(int a) { return a * 2; }\n}\n";
-    private static final int START = DOC.indexOf("    int add"), END = DOC.indexOf('\n', START) + 1;
+  private static final String DOC =
+      "public class Calc {\n    int add(int a, int b) { return a - b; }\n    int twice(int a) { return a * 2; }\n}\n";
+  private static final int START = DOC.indexOf("    int add"), END = DOC.indexOf('\n', START) + 1;
 
-    private AiService service(FakeOllamaAccess server, String model) throws Exception {
-        Settings settings = new Settings(dir.resolve("settings.conf"));
-        settings.put(Scope.USER, "ai.ollama.endpoint", server.endpoint());
-        if (model != null) settings.put(Scope.USER, "ai.model", model);
-        AiConfig config = AiConfig.from(settings);
-        return new AiService(AiProviders.create(config), config);
+  private AiService service(FakeOllamaAccess server, String model) throws Exception {
+    Settings settings = new Settings(dir.resolve("settings.conf"));
+    settings.put(Scope.USER, "ai.ollama.endpoint", server.endpoint());
+    if (model != null) settings.put(Scope.USER, "ai.model", model);
+    AiConfig config = AiConfig.from(settings);
+    return new AiService(AiProviders.create(config), config);
+  }
+
+  @Test
+  void chooseAModelThenExplainASelection() throws Exception {
+    try (var server = FakeOllamaAccess.start()) {
+      server.models("{\"models\":[{\"name\":\"llama3:latest\"},{\"name\":\"codellama\"}]}");
+      AiService noModel = service(server, null);
+      List<String> models = noModel.models(new AiCancel());
+      assertEquals(List.of("codellama", "llama3:latest"), models);
+
+      Settings settings = new Settings(dir.resolve("settings.conf"));
+      settings.put(Scope.USER, "ai.model", models.get(1));
+      assertEquals("llama3:latest", AiConfig.from(settings).model());
+
+      server.chat("This method subtracts.", " It should add.");
+      AiService svc = service(server, "llama3:latest");
+      AiPlan plan =
+          svc.prepare(
+              AiAction.EXPLAIN,
+              new AiSource("Calc.java", "Calc.java", "java", DOC, START, END),
+              null);
+      assertTrue(plan.preview().contains("return a - b;"));
+      assertFalse(plan.preview().contains("twice"), "only the selection leaves the editor");
+      assertEquals(0, server.chatCalls(), "nothing is sent before the user approves");
+
+      List<String> shown = new ArrayList<>();
+      AiResult result = svc.run(plan, shown::add, new AiCancel());
+      assertEquals("This method subtracts. It should add.", result.text());
+      assertEquals(List.of("This method subtracts.", " It should add."), shown);
+      assertEquals(1, server.chatCalls());
+      assertTrue(server.lastChatBody().contains("return a - b;"));
+      assertFalse(server.lastChatBody().contains("twice"));
     }
+  }
 
-    @Test void chooseAModelThenExplainASelection() throws Exception {
-        try (var server = FakeOllamaAccess.start()) {
-            server.models("{\"models\":[{\"name\":\"llama3:latest\"},{\"name\":\"codellama\"}]}");
-            AiService noModel = service(server, null);
-            List<String> models = noModel.models(new AiCancel());
-            assertEquals(List.of("codellama", "llama3:latest"), models);
+  @Test
+  void proposeAChangeReviewItAndApplyIt() throws Exception {
+    try (var server = FakeOllamaAccess.start()) {
+      server.chat(
+          "Changed the operator.\n```java\n    int add(int a, int b) { return a + b; }\n```\n");
+      AiService svc = service(server, "m");
+      AiPlan plan =
+          svc.prepare(
+              AiAction.PROPOSE_CHANGE,
+              new AiSource("Calc.java", "Calc.java", "java", DOC, START, END),
+              "fix add");
+      AiProposal proposal = svc.run(plan, s -> {}, new AiCancel()).proposal();
 
-            Settings settings = new Settings(dir.resolve("settings.conf"));
-            settings.put(Scope.USER, "ai.model", models.get(1));
-            assertEquals("llama3:latest", AiConfig.from(settings).model());
+      String diff = proposal.diff().text();
+      assertTrue(diff.contains("-    int add(int a, int b) { return a - b; }"));
+      assertTrue(diff.contains("+    int add(int a, int b) { return a + b; }"));
+      assertEquals(DOC, DOC, "nothing has changed until the user applies");
 
-            server.chat("This method subtracts.", " It should add.");
-            AiService svc = service(server, "llama3:latest");
-            AiPlan plan = svc.prepare(AiAction.EXPLAIN, new AiSource("Calc.java", "Calc.java", "java", DOC, START, END), null);
-            assertTrue(plan.preview().contains("return a - b;"));
-            assertFalse(plan.preview().contains("twice"), "only the selection leaves the editor");
-            assertEquals(0, server.chatCalls(), "nothing is sent before the user approves");
-
-            List<String> shown = new ArrayList<>();
-            AiResult result = svc.run(plan, shown::add, new AiCancel());
-            assertEquals("This method subtracts. It should add.", result.text());
-            assertEquals(List.of("This method subtracts.", " It should add."), shown);
-            assertEquals(1, server.chatCalls());
-            assertTrue(server.lastChatBody().contains("return a - b;"));
-            assertFalse(server.lastChatBody().contains("twice"));
-        }
+      assertTrue(proposal.isStillValid(DOC));
+      String applied = proposal.applyTo(DOC);
+      assertEquals(DOC.replace("a - b", "a + b"), applied);
+      assertEquals(1, applied.lines().filter(l -> l.contains("twice")).count());
     }
+  }
 
-    @Test void proposeAChangeReviewItAndApplyIt() throws Exception {
-        try (var server = FakeOllamaAccess.start()) {
-            server.chat("Changed the operator.\n```java\n    int add(int a, int b) { return a + b; }\n```\n");
-            AiService svc = service(server, "m");
-            AiPlan plan = svc.prepare(AiAction.PROPOSE_CHANGE, new AiSource("Calc.java", "Calc.java", "java", DOC, START, END), "fix add");
-            AiProposal proposal = svc.run(plan, s -> {}, new AiCancel()).proposal();
-
-            String diff = proposal.diff().text();
-            assertTrue(diff.contains("-    int add(int a, int b) { return a - b; }"));
-            assertTrue(diff.contains("+    int add(int a, int b) { return a + b; }"));
-            assertEquals(DOC, DOC, "nothing has changed until the user applies");
-
-            assertTrue(proposal.isStillValid(DOC));
-            String applied = proposal.applyTo(DOC);
-            assertEquals(DOC.replace("a - b", "a + b"), applied);
-            assertEquals(1, applied.lines().filter(l -> l.contains("twice")).count());
-        }
+  @Test
+  void rejectingLeavesTheDocumentUntouchedAndAStaleProposalCannotBeApplied() throws Exception {
+    try (var server = FakeOllamaAccess.start()) {
+      server.chat("```java\n    int add(int a, int b) { return b + a; }\n```");
+      AiService svc = service(server, "m");
+      AiProposal proposal =
+          svc.run(
+                  svc.prepare(
+                      AiAction.PROPOSE_CHANGE,
+                      new AiSource("Calc.java", "Calc.java", "java", DOC, START, END),
+                      "x"),
+                  s -> {},
+                  new AiCancel())
+              .proposal();
+      String rejected = DOC; // rejecting means doing nothing
+      assertEquals(DOC, rejected);
+      String editedMeanwhile = DOC.replace("a - b", "a * b");
+      assertFalse(proposal.isStillValid(editedMeanwhile));
     }
+  }
 
-    @Test void rejectingLeavesTheDocumentUntouchedAndAStaleProposalCannotBeApplied() throws Exception {
-        try (var server = FakeOllamaAccess.start()) {
-            server.chat("```java\n    int add(int a, int b) { return b + a; }\n```");
-            AiService svc = service(server, "m");
-            AiProposal proposal = svc.run(svc.prepare(AiAction.PROPOSE_CHANGE, new AiSource("Calc.java", "Calc.java", "java", DOC, START, END), "x"), s -> {}, new AiCancel()).proposal();
-            String rejected = DOC; // rejecting means doing nothing
-            assertEquals(DOC, rejected);
-            String editedMeanwhile = DOC.replace("a - b", "a * b");
-            assertFalse(proposal.isStillValid(editedMeanwhile));
-        }
+  @Test
+  void generateTestsOpensANewDocumentAndDoesNotTouchTheSource() throws Exception {
+    try (var server = FakeOllamaAccess.start()) {
+      server.chat(
+          "Here are tests.\n```java\nimport org.junit.jupiter.api.Test;\nclass CalcTest { @Test void adds() {} }\n```");
+      AiService svc = service(server, "m");
+      AiPlan plan =
+          svc.prepare(
+              AiAction.GENERATE_TESTS,
+              new AiSource("src/Calc.java", "Calc.java", "java", DOC, 0, 0),
+              null);
+      assertTrue(plan.preview().contains("whole file of src/Calc.java"));
+      AiProposal p = svc.run(plan, s -> {}, new AiCancel()).proposal();
+      assertEquals("CalcTest.java", p.suggestedName());
+      assertTrue(p.replacement().contains("class CalcTest"));
     }
+  }
 
-    @Test void generateTestsOpensANewDocumentAndDoesNotTouchTheSource() throws Exception {
-        try (var server = FakeOllamaAccess.start()) {
-            server.chat("Here are tests.\n```java\nimport org.junit.jupiter.api.Test;\nclass CalcTest { @Test void adds() {} }\n```");
-            AiService svc = service(server, "m");
-            AiPlan plan = svc.prepare(AiAction.GENERATE_TESTS, new AiSource("src/Calc.java", "Calc.java", "java", DOC, 0, 0), null);
-            assertTrue(plan.preview().contains("whole file of src/Calc.java"));
-            AiProposal p = svc.run(plan, s -> {}, new AiCancel()).proposal();
-            assertEquals("CalcTest.java", p.suggestedName());
-            assertTrue(p.replacement().contains("class CalcTest"));
-        }
+  @Test
+  void ollamaNotRunningIsAMessageNotAProblem() throws Exception {
+    String endpoint;
+    try (var server = FakeOllamaAccess.start()) {
+      endpoint = server.endpoint();
     }
+    Settings settings = new Settings(dir.resolve("settings.conf"));
+    settings.put(Scope.USER, "ai.ollama.endpoint", endpoint);
+    settings.put(Scope.USER, "ai.model", "m");
+    AiConfig config = AiConfig.from(settings);
+    AiService svc = new AiService(AiProviders.create(config), config);
+    AiPlan plan =
+        svc.prepare(
+            AiAction.EXPLAIN,
+            new AiSource("Calc.java", "Calc.java", "java", DOC, START, END),
+            null);
+    AiException ex = assertThrows(AiException.class, () -> svc.run(plan, s -> {}, new AiCancel()));
+    assertEquals(AiException.Kind.UNAVAILABLE, ex.kind());
+    assertTrue(ex.getMessage().contains("ollama serve"));
+  }
 
-    @Test void ollamaNotRunningIsAMessageNotAProblem() throws Exception {
-        String endpoint;
-        try (var server = FakeOllamaAccess.start()) { endpoint = server.endpoint(); }
-        Settings settings = new Settings(dir.resolve("settings.conf"));
-        settings.put(Scope.USER, "ai.ollama.endpoint", endpoint);
-        settings.put(Scope.USER, "ai.model", "m");
-        AiConfig config = AiConfig.from(settings);
-        AiService svc = new AiService(AiProviders.create(config), config);
-        AiPlan plan = svc.prepare(AiAction.EXPLAIN, new AiSource("Calc.java", "Calc.java", "java", DOC, START, END), null);
-        AiException ex = assertThrows(AiException.class, () -> svc.run(plan, s -> {}, new AiCancel()));
-        assertEquals(AiException.Kind.UNAVAILABLE, ex.kind());
-        assertTrue(ex.getMessage().contains("ollama serve"));
+  @Test
+  void aSecretFileNeverGetsAsFarAsTheNetwork() throws Exception {
+    try (var server = FakeOllamaAccess.start()) {
+      AiService svc = service(server, "m");
+      assertThrows(
+          AiException.class,
+          () ->
+              svc.prepare(
+                  AiAction.EXPLAIN, new AiSource(".env", ".env", null, "TOKEN=abc", 0, 9), null));
+      assertEquals(0, server.chatCalls());
     }
+  }
 
-    @Test void aSecretFileNeverGetsAsFarAsTheNetwork() throws Exception {
-        try (var server = FakeOllamaAccess.start()) {
-            AiService svc = service(server, "m");
-            assertThrows(AiException.class, () -> svc.prepare(AiAction.EXPLAIN, new AiSource(".env", ".env", null, "TOKEN=abc", 0, 9), null));
-            assertEquals(0, server.chatCalls());
-        }
-    }
+  @Test
+  void aRemoteAddressInTheSettingsIsRefusedBeforeAnyRequest() throws Exception {
+    Settings settings = new Settings(dir.resolve("settings.conf"));
+    settings.put(Scope.USER, "ai.ollama.endpoint", "http://ai.example.com:11434");
+    settings.put(Scope.USER, "ai.model", "m");
+    assertEquals(
+        AiException.Kind.REFUSED,
+        assertThrows(AiException.class, () -> AiProviders.create(AiConfig.from(settings))).kind());
+    assertFalse(AiConfig.validate(settings).isEmpty());
+    assertTrue(Files.notExists(dir.resolve("none")));
+  }
 
-    @Test void aRemoteAddressInTheSettingsIsRefusedBeforeAnyRequest() throws Exception {
-        Settings settings = new Settings(dir.resolve("settings.conf"));
-        settings.put(Scope.USER, "ai.ollama.endpoint", "http://ai.example.com:11434");
-        settings.put(Scope.USER, "ai.model", "m");
-        assertEquals(AiException.Kind.REFUSED, assertThrows(AiException.class, () -> AiProviders.create(AiConfig.from(settings))).kind());
-        assertFalse(AiConfig.validate(settings).isEmpty());
-        assertTrue(Files.notExists(dir.resolve("none")));
+  @Test
+  void aLongRefactorAsEditBlocksIsSplicedInAndACarelessReplyIsFlaggedBeforeReview()
+      throws Exception {
+    StringBuilder big = new StringBuilder("public class Big {\n");
+    for (int i = 0; i < 45; i++)
+      big.append("    int f")
+          .append(i)
+          .append("(int x) {\n        return x + ")
+          .append(i)
+          .append(";\n    }\n");
+    big.append("}\n");
+    String doc = big.toString();
+    try (var server = FakeOllamaAccess.start()) {
+      server.chat(
+          "Renamed it.\n<<<<<<< SEARCH\n    int f7(int x) {\n        return x + 7;\n    }\n=======\n    int seven(int x) {\n        return x + 7;\n    }\n>>>>>>> REPLACE\n");
+      AiService svc = service(server, "m");
+      AiPlan plan =
+          svc.prepare(
+              AiAction.PROPOSE_CHANGE,
+              new AiSource("Big.java", "Big.java", "java", doc, 0, doc.length()),
+              "rename f7 to seven");
+      assertTrue(
+          plan.preview().contains("<<<<<<< SEARCH"),
+          "the user sees that edit blocks are asked for");
+      AiResult result = svc.run(plan, s -> {}, new AiCancel());
+      assertFalse(result.hasErrors(), result.findings().toString());
+      assertEquals(doc.replace("int f7(", "int seven("), result.proposal().applyTo(doc));
+      assertEquals(1, result.proposal().diff().added());
+      assertEquals(1, result.proposal().diff().removed());
     }
-
-    @Test void aLongRefactorAsEditBlocksIsSplicedInAndACarelessReplyIsFlaggedBeforeReview() throws Exception {
-        StringBuilder big = new StringBuilder("public class Big {\n");
-        for (int i = 0; i < 45; i++) big.append("    int f").append(i).append("(int x) {\n        return x + ").append(i).append(";\n    }\n");
-        big.append("}\n");
-        String doc = big.toString();
-        try (var server = FakeOllamaAccess.start()) {
-            server.chat("Renamed it.\n<<<<<<< SEARCH\n    int f7(int x) {\n        return x + 7;\n    }\n=======\n    int seven(int x) {\n        return x + 7;\n    }\n>>>>>>> REPLACE\n");
-            AiService svc = service(server, "m");
-            AiPlan plan = svc.prepare(AiAction.PROPOSE_CHANGE, new AiSource("Big.java", "Big.java", "java", doc, 0, doc.length()), "rename f7 to seven");
-            assertTrue(plan.preview().contains("<<<<<<< SEARCH"), "the user sees that edit blocks are asked for");
-            AiResult result = svc.run(plan, s -> {}, new AiCancel());
-            assertFalse(result.hasErrors(), result.findings().toString());
-            assertEquals(doc.replace("int f7(", "int seven("), result.proposal().applyTo(doc));
-            assertEquals(1, result.proposal().diff().added());
-            assertEquals(1, result.proposal().diff().removed());
-        }
-        try (var server = FakeOllamaAccess.start()) {
-            server.chat("Here you go.\n```java\npublic class Big {\n    int f0(int x) {\n        return x + 0;\n    }\n    // ... the other methods stay as they are\n}\n```");
-            AiService svc = service(server, "m");
-            AiResult result = svc.run(svc.prepare(AiAction.PROPOSE_CHANGE, new AiSource("Big.java", "Big.java", "java", doc, 0, doc.length()), "x"), s -> {}, new AiCancel());
-            assertTrue(result.hasErrors(), "dropping 44 methods behind a placeholder must be flagged");
-            assertTrue(result.findings().stream().anyMatch(f -> f.message().contains("placeholder")));
-        }
+    try (var server = FakeOllamaAccess.start()) {
+      server.chat(
+          "Here you go.\n```java\npublic class Big {\n    int f0(int x) {\n        return x + 0;\n    }\n    // ... the other methods stay as they are\n}\n```");
+      AiService svc = service(server, "m");
+      AiResult result =
+          svc.run(
+              svc.prepare(
+                  AiAction.PROPOSE_CHANGE,
+                  new AiSource("Big.java", "Big.java", "java", doc, 0, doc.length()),
+                  "x"),
+              s -> {},
+              new AiCancel());
+      assertTrue(result.hasErrors(), "dropping 44 methods behind a placeholder must be flagged");
+      assertTrue(result.findings().stream().anyMatch(f -> f.message().contains("placeholder")));
     }
+  }
 }

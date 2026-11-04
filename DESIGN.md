@@ -4,13 +4,13 @@
 
 ```text
 +-------------------------------------------------------------+
-| File  Edit  Search  View  Navigate  Run  Tools  Help       |
+| File  Edit  Search  View  Navigate  Run  Tools  Help        |
 +--------------+----------------------------------------------+
 | PROJECT      | main.java                                    |
 |              |                                              |
-| src/         | 1  package example;                         |
-|  ├ App.java  | 2                                              |
-|  └ ...       | 3  public class App {                       |
+| src/         | 1  package example;                          |
+|  ├ App.java  | 2                                            |
+|  └ ...       | 3  public class App {                        |
 |              | 4      ...                                   |
 | README.md    | 5  }                                         |
 | pom.xml      |                                              |

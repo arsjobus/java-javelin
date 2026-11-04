@@ -30,199 +30,275 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * A person's day with the editor, driven through the same JavaFX-free services the window uses: open a project, create
- * and edit files, find things, rename and delete, survive a crash. Each test is one feature from FEATURES.md and states
- * the outcome a user would notice, so a failure here reads as "this feature no longer works".
+ * A person's day with the editor, driven through the same JavaFX-free services the window uses:
+ * open a project, create and edit files, find things, rename and delete, survive a crash. Each test
+ * is one feature from FEATURES.md and states the outcome a user would notice, so a failure here
+ * reads as "this feature no longer works".
  */
 class ProjectWorkflowE2ETest {
-    @TempDir Path home;
-    private Trash.Bin bin;
-    Path project;
-    final AtomicInteger treeRefreshes = new AtomicInteger();
-    ProjectWatcher watcher;
-    Settings settings;
+  @TempDir Path home;
+  private Trash.Bin bin;
+  Path project;
+  final AtomicInteger treeRefreshes = new AtomicInteger();
+  ProjectWatcher watcher;
+  Settings settings;
 
-    /** In-memory stand-in for the user's preferences node. */
-    private static final class MemoryPreferences extends AbstractPreferences {
-        private final java.util.Map<String, String> values = new java.util.HashMap<>();
-        MemoryPreferences() { super(null, ""); }
-        @Override protected void putSpi(String key, String value) { values.put(key, value); }
-        @Override protected String getSpi(String key) { return values.get(key); }
-        @Override protected void removeSpi(String key) { values.remove(key); }
-        @Override protected void removeNodeSpi() {}
-        @Override protected String[] keysSpi() { return values.keySet().toArray(new String[0]); }
-        @Override protected String[] childrenNamesSpi() { return new String[0]; }
-        @Override protected AbstractPreferences childSpi(String name) { throw new UnsupportedOperationException(); }
-        @Override protected void syncSpi() throws BackingStoreException {}
-        @Override protected void flushSpi() throws BackingStoreException {}
+  /** In-memory stand-in for the user's preferences node. */
+  private static final class MemoryPreferences extends AbstractPreferences {
+    private final java.util.Map<String, String> values = new java.util.HashMap<>();
+
+    MemoryPreferences() {
+      super(null, "");
     }
 
-    @BeforeEach void openProject() throws IOException {
-        project = Files.createDirectories(home.resolve("demo"));
-        bin = Trash.freedesktop(home.resolve("trash"), java.time.Clock.systemUTC());
-        settings = new Settings(home.resolve("user").resolve(Settings.FILE_NAME));
-        settings.setProject(project);
-        settings.reload();
-        Set<String> excludes = NameList.parse(settings.get("tree.exclude", ".git,target"));
-        watcher = new ProjectWatcher(() -> excludes, treeRefreshes::incrementAndGet);
-        watcher.watch(project);
+    @Override
+    protected void putSpi(String key, String value) {
+      values.put(key, value);
     }
 
-    @AfterEach void closeProject() { watcher.close(); }
-
-    @Test void createEditSaveAndReopenAFile() throws IOException {
-        Path src = ProjectFiles.createFolder(project, "src");
-        Path main = ProjectFiles.createFile(src, "Main.java");
-        assertEquals("", FileIO.readText(main), "a new file is empty");
-
-        FileIO.writeAtomic(main, "class Main {\n    int count;\n}\n");
-        assertEquals("class Main {\n    int count;\n}\n", FileIO.readText(main));
-
-        assertThrows(IOException.class, () -> ProjectFiles.createFile(src, "Main.java"), "creating never overwrites");
-        assertEquals("class Main {\n    int count;\n}\n", FileIO.readText(main), "the existing file is untouched");
+    @Override
+    protected String getSpi(String key) {
+      return values.get(key);
     }
 
-    @Test void findAndReplaceAcrossASavedFile() throws IOException {
-        Path file = ProjectFiles.createFile(project, "Notes.txt");
-        FileIO.writeAtomic(file, "Todo: fix todo list, TODO later");
-        String text = FileIO.readText(file);
-
-        assertEquals(3, TextSearch.count(text, "todo", true));
-        assertEquals(1, TextSearch.count(text, "todo", false));
-        FileIO.writeAtomic(file, TextSearch.replace(text, "todo", "done", true));
-        assertEquals("done: fix done list, done later", FileIO.readText(file));
+    @Override
+    protected void removeSpi(String key) {
+      values.remove(key);
     }
 
-    @Test void goToFileFindsFilesButSkipsExcludedFolders() throws IOException {
-        Path nested = ProjectFiles.createFolder(ProjectFiles.createFolder(project, "src"), "util");
-        Path helper = ProjectFiles.createFile(nested, "Helper.java");
-        Path built = ProjectFiles.createFile(ProjectFiles.createFolder(project, "target"), "Helper.class");
+    @Override
+    protected void removeNodeSpi() {}
 
-        Set<String> excludes = NameList.parse(settings.get("tree.exclude", ".git,target"));
-        assertEquals(helper.toFile(), ProjectFinder.find(project.toFile(), "Helper.java", excludes).orElseThrow());
-        assertTrue(ProjectFinder.find(project.toFile(), "Helper.class", excludes).isEmpty(), "build output is not searched");
-        assertTrue(Files.exists(built), "...but it is still there");
+    @Override
+    protected String[] keysSpi() {
+      return values.keySet().toArray(new String[0]);
     }
 
-    @Test void aProjectCanChangeWhatTheTreeHides() throws IOException {
-        Files.createDirectories(project.resolve(Settings.PROJECT_DIRECTORY));
-        Files.writeString(settings.projectFile(), "tree.exclude=build, .cache\n");
-        settings.reload();
-        assertEquals(List.of("build", ".cache"), List.copyOf(NameList.parse(settings.get("tree.exclude", ".git,target"))));
+    @Override
+    protected String[] childrenNamesSpi() {
+      return new String[0];
     }
 
-    @Test void renamingAndMovingKeepsTheFileAndShowsRelativePaths() throws IOException {
-        Path file = ProjectFiles.createFile(project, "Old.java");
-        FileIO.writeAtomic(file, "class Old {}");
-        Path folder = ProjectFiles.createFolder(project, "model");
-
-        Path renamed = ProjectFiles.rename(project, file, "New.java");
-        Path moved = ProjectFiles.moveInto(project, renamed, folder);
-
-        assertEquals("class Old {}", FileIO.readText(moved));
-        assertFalse(Files.exists(file));
-        assertEquals(Path.of("model", "New.java").toString(), ProjectPaths.display(project.toFile(), moved.toFile()));
+    @Override
+    protected AbstractPreferences childSpi(String name) {
+      throw new UnsupportedOperationException();
     }
 
-    @Test void deletingIsConfinedToTheProjectAndGoesToTheBin() throws IOException {
-        Path file = ProjectFiles.createFile(project, "Scratch.txt");
-        Path outside = Files.writeString(home.resolve("precious.txt"), "keep");
+    @Override
+    protected void syncSpi() throws BackingStoreException {}
 
-        assertThrows(IOException.class, () -> ProjectFiles.trash(project, outside, bin));
-        assertThrows(IOException.class, () -> ProjectFiles.trash(project, project, bin), "the project folder itself is refused");
-        ProjectFiles.trash(project, file, bin);
-        assertFalse(Files.exists(file));
-        assertTrue(Files.exists(home.resolve("trash/files/Scratch.txt")), "deleted files can be restored from the bin");
-        assertEquals("keep", Files.readString(outside));
-    }
+    @Override
+    protected void flushSpi() throws BackingStoreException {}
+  }
 
-    @Test void copyAndPasteAFileIntoAnotherFolderOfTheProject() throws IOException {
-        Path src = ProjectFiles.createFolder(project, "src");
-        Path docs = ProjectFiles.createFolder(project, "docs");
-        Path main = ProjectFiles.createFile(src, "Main.java");
-        FileIO.writeAtomic(main, "class Main {}");
-        FileClipboard clipboard = new FileClipboard();
+  @BeforeEach
+  void openProject() throws IOException {
+    project = Files.createDirectories(home.resolve("demo"));
+    bin = Trash.freedesktop(home.resolve("trash"), java.time.Clock.systemUTC());
+    settings = new Settings(home.resolve("user").resolve(Settings.FILE_NAME));
+    settings.setProject(project);
+    settings.reload();
+    Set<String> excludes = NameList.parse(settings.get("tree.exclude", ".git,target"));
+    watcher = new ProjectWatcher(() -> excludes, treeRefreshes::incrementAndGet);
+    watcher.watch(project);
+  }
 
-        clipboard.copy(List.of(main));
-        FileClipboard.Result result = clipboard.paste(project, docs);
+  @AfterEach
+  void closeProject() {
+    watcher.close();
+  }
 
-        assertEquals(1, result.done().size());
-        assertEquals("class Main {}", FileIO.readText(docs.resolve("Main.java")), "the copy has the same text");
-        assertEquals("class Main {}", FileIO.readText(main), "the original is still where it was");
-        assertEquals(Path.of("docs", "Main.java").toString(), ProjectPaths.display(project.toFile(), result.done().get(0).to().toFile()));
+  @Test
+  void createEditSaveAndReopenAFile() throws IOException {
+    Path src = ProjectFiles.createFolder(project, "src");
+    Path main = ProjectFiles.createFile(src, "Main.java");
+    assertEquals("", FileIO.readText(main), "a new file is empty");
 
-        clipboard.paste(project, docs); // a second paste never overwrites the first
-        assertTrue(Files.exists(docs.resolve("Main copy.java")));
-        assertEquals("class Main {}", FileIO.readText(docs.resolve("Main.java")));
-    }
+    FileIO.writeAtomic(main, "class Main {\n    int count;\n}\n");
+    assertEquals("class Main {\n    int count;\n}\n", FileIO.readText(main));
 
-    @Test void cutAndPasteAFileIntoAnotherFolderOfTheProject() throws IOException {
-        Path src = ProjectFiles.createFolder(project, "src");
-        Path archive = ProjectFiles.createFolder(project, "archive");
-        Path old = ProjectFiles.createFile(src, "Old.java");
-        FileIO.writeAtomic(old, "class Old {}");
-        FileClipboard clipboard = new FileClipboard();
+    assertThrows(
+        IOException.class,
+        () -> ProjectFiles.createFile(src, "Main.java"),
+        "creating never overwrites");
+    assertEquals(
+        "class Main {\n    int count;\n}\n",
+        FileIO.readText(main),
+        "the existing file is untouched");
+  }
 
-        clipboard.cut(List.of(old));
-        assertTrue(Files.exists(old), "nothing moves until it is pasted");
-        FileClipboard.Result result = clipboard.paste(project, archive);
+  @Test
+  void findAndReplaceAcrossASavedFile() throws IOException {
+    Path file = ProjectFiles.createFile(project, "Notes.txt");
+    FileIO.writeAtomic(file, "Todo: fix todo list, TODO later");
+    String text = FileIO.readText(file);
 
-        FileClipboard.Pasted moved = result.done().get(0);
-        assertTrue(moved.moved());
-        assertFalse(Files.exists(old));
-        assertEquals("class Old {}", FileIO.readText(archive.resolve("Old.java")));
-        // the sidebar repoints an open tab of the file with this same rule
-        assertEquals(archive.resolve("Old.java"), ProjectFiles.relocated(moved.from(), moved.to(), old));
-        assertTrue(clipboard.isEmpty(), "a cut is pasted once");
-        assertTrue(clipboard.paste(project, src).done().isEmpty(), "so a second paste does nothing");
-    }
+    assertEquals(3, TextSearch.count(text, "todo", true));
+    assertEquals(1, TextSearch.count(text, "todo", false));
+    FileIO.writeAtomic(file, TextSearch.replace(text, "todo", "done", true));
+    assertEquals("done: fix done list, done later", FileIO.readText(file));
+  }
 
-    @Test void changesMadeOutsideTheEditorRefreshTheTree() throws IOException {
-        assertFalse(watcher.poll(), "nothing changed yet");
-        Files.writeString(project.resolve("FromTerminal.txt"), "x");
-        assertTrue(watcher.poll());
-        assertEquals(1, treeRefreshes.get());
+  @Test
+  void goToFileFindsFilesButSkipsExcludedFolders() throws IOException {
+    Path nested = ProjectFiles.createFolder(ProjectFiles.createFolder(project, "src"), "util");
+    Path helper = ProjectFiles.createFile(nested, "Helper.java");
+    Path built =
+        ProjectFiles.createFile(ProjectFiles.createFolder(project, "target"), "Helper.class");
 
-        Path ours = ProjectFiles.createFile(project, "Ours.txt");
-        watcher.acknowledge();
-        assertFalse(watcher.poll(), "the editor's own change, once acknowledged, does not loop back");
-        Files.delete(ours);
-        assertTrue(watcher.poll());
-    }
+    Set<String> excludes = NameList.parse(settings.get("tree.exclude", ".git,target"));
+    assertEquals(
+        helper.toFile(),
+        ProjectFinder.find(project.toFile(), "Helper.java", excludes).orElseThrow());
+    assertTrue(
+        ProjectFinder.find(project.toFile(), "Helper.class", excludes).isEmpty(),
+        "build output is not searched");
+    assertTrue(Files.exists(built), "...but it is still there");
+  }
 
-    @Test void recentProjectsRememberWhatWasOpened() throws IOException {
-        RecentProjects recent = new RecentProjects(new MemoryPreferences());
-        File other = Files.createDirectories(home.resolve("other")).toFile();
-        recent.add(project.toFile());
-        recent.add(other);
-        assertEquals(List.of(other.getAbsolutePath(), project.toFile().getAbsolutePath()), recent.list());
-    }
+  @Test
+  void aProjectCanChangeWhatTheTreeHides() throws IOException {
+    Files.createDirectories(project.resolve(Settings.PROJECT_DIRECTORY));
+    Files.writeString(settings.projectFile(), "tree.exclude=build, .cache\n");
+    settings.reload();
+    assertEquals(
+        List.of("build", ".cache"),
+        List.copyOf(NameList.parse(settings.get("tree.exclude", ".git,target"))));
+  }
 
-    @Test void unsavedWorkSurvivesACrashAndIsGoneOnceSaved() throws IOException {
-        Path recoveryDir = home.resolve("recovery");
-        Path file = ProjectFiles.createFile(project, "Draft.java");
-        FileIO.writeAtomic(file, "class Draft {}");
+  @Test
+  void renamingAndMovingKeepsTheFileAndShowsRelativePaths() throws IOException {
+    Path file = ProjectFiles.createFile(project, "Old.java");
+    FileIO.writeAtomic(file, "class Old {}");
+    Path folder = ProjectFiles.createFolder(project, "model");
 
-        RecoveryStore running = new RecoveryStore(recoveryDir);
-        String id = RecoveryStore.newId();
-        assertTrue(running.saveIfChanged(id, file, "class Draft { int unsaved; }", 12, 0));
-        // the process dies here: no endSession(), no discard()
+    Path renamed = ProjectFiles.rename(project, file, "New.java");
+    Path moved = ProjectFiles.moveInto(project, renamed, folder);
 
-        RecoveryStore nextRun = new RecoveryStore(recoveryDir);
-        RecoveryStore.Snapshot found = nextRun.pending().get(0);
-        assertEquals("class Draft { int unsaved; }", found.text());
-        assertEquals(file.toAbsolutePath(), found.original().toAbsolutePath());
-        assertEquals("class Draft {}", FileIO.readText(file), "the file on disk was never touched by recovery");
+    assertEquals("class Old {}", FileIO.readText(moved));
+    assertFalse(Files.exists(file));
+    assertEquals(
+        Path.of("model", "New.java").toString(),
+        ProjectPaths.display(project.toFile(), moved.toFile()));
+  }
 
-        FileIO.writeAtomic(file, found.text());
-        nextRun.discard(found.id());
-        assertTrue(nextRun.pending().isEmpty());
-    }
+  @Test
+  void deletingIsConfinedToTheProjectAndGoesToTheBin() throws IOException {
+    Path file = ProjectFiles.createFile(project, "Scratch.txt");
+    Path outside = Files.writeString(home.resolve("precious.txt"), "keep");
 
-    @Test void symbolLookupFollowsTheCaretLikeHoverAndGoToDefinitionDo() {
-        String code = "int total = add(total, 1);";
-        int caretAfterAdd = code.indexOf('(');
-        assertEquals("add", Symbols.wordAt(code, Symbols.symbolOffset(code, caretAfterAdd)));
-        assertEquals("", Symbols.wordAt(code, Symbols.symbolOffset(code, code.indexOf(", ") + 1)));
-    }
+    assertThrows(IOException.class, () -> ProjectFiles.trash(project, outside, bin));
+    assertThrows(
+        IOException.class,
+        () -> ProjectFiles.trash(project, project, bin),
+        "the project folder itself is refused");
+    ProjectFiles.trash(project, file, bin);
+    assertFalse(Files.exists(file));
+    assertTrue(
+        Files.exists(home.resolve("trash/files/Scratch.txt")),
+        "deleted files can be restored from the bin");
+    assertEquals("keep", Files.readString(outside));
+  }
+
+  @Test
+  void copyAndPasteAFileIntoAnotherFolderOfTheProject() throws IOException {
+    Path src = ProjectFiles.createFolder(project, "src");
+    Path docs = ProjectFiles.createFolder(project, "docs");
+    Path main = ProjectFiles.createFile(src, "Main.java");
+    FileIO.writeAtomic(main, "class Main {}");
+    FileClipboard clipboard = new FileClipboard();
+
+    clipboard.copy(List.of(main));
+    FileClipboard.Result result = clipboard.paste(project, docs);
+
+    assertEquals(1, result.done().size());
+    assertEquals(
+        "class Main {}", FileIO.readText(docs.resolve("Main.java")), "the copy has the same text");
+    assertEquals("class Main {}", FileIO.readText(main), "the original is still where it was");
+    assertEquals(
+        Path.of("docs", "Main.java").toString(),
+        ProjectPaths.display(project.toFile(), result.done().get(0).to().toFile()));
+
+    clipboard.paste(project, docs); // a second paste never overwrites the first
+    assertTrue(Files.exists(docs.resolve("Main copy.java")));
+    assertEquals("class Main {}", FileIO.readText(docs.resolve("Main.java")));
+  }
+
+  @Test
+  void cutAndPasteAFileIntoAnotherFolderOfTheProject() throws IOException {
+    Path src = ProjectFiles.createFolder(project, "src");
+    Path archive = ProjectFiles.createFolder(project, "archive");
+    Path old = ProjectFiles.createFile(src, "Old.java");
+    FileIO.writeAtomic(old, "class Old {}");
+    FileClipboard clipboard = new FileClipboard();
+
+    clipboard.cut(List.of(old));
+    assertTrue(Files.exists(old), "nothing moves until it is pasted");
+    FileClipboard.Result result = clipboard.paste(project, archive);
+
+    FileClipboard.Pasted moved = result.done().get(0);
+    assertTrue(moved.moved());
+    assertFalse(Files.exists(old));
+    assertEquals("class Old {}", FileIO.readText(archive.resolve("Old.java")));
+    // the sidebar repoints an open tab of the file with this same rule
+    assertEquals(
+        archive.resolve("Old.java"), ProjectFiles.relocated(moved.from(), moved.to(), old));
+    assertTrue(clipboard.isEmpty(), "a cut is pasted once");
+    assertTrue(clipboard.paste(project, src).done().isEmpty(), "so a second paste does nothing");
+  }
+
+  @Test
+  void changesMadeOutsideTheEditorRefreshTheTree() throws IOException {
+    assertFalse(watcher.poll(), "nothing changed yet");
+    Files.writeString(project.resolve("FromTerminal.txt"), "x");
+    assertTrue(watcher.poll());
+    assertEquals(1, treeRefreshes.get());
+
+    Path ours = ProjectFiles.createFile(project, "Ours.txt");
+    watcher.acknowledge();
+    assertFalse(watcher.poll(), "the editor's own change, once acknowledged, does not loop back");
+    Files.delete(ours);
+    assertTrue(watcher.poll());
+  }
+
+  @Test
+  void recentProjectsRememberWhatWasOpened() throws IOException {
+    RecentProjects recent = new RecentProjects(new MemoryPreferences());
+    File other = Files.createDirectories(home.resolve("other")).toFile();
+    recent.add(project.toFile());
+    recent.add(other);
+    assertEquals(
+        List.of(other.getAbsolutePath(), project.toFile().getAbsolutePath()), recent.list());
+  }
+
+  @Test
+  void unsavedWorkSurvivesACrashAndIsGoneOnceSaved() throws IOException {
+    Path recoveryDir = home.resolve("recovery");
+    Path file = ProjectFiles.createFile(project, "Draft.java");
+    FileIO.writeAtomic(file, "class Draft {}");
+
+    RecoveryStore running = new RecoveryStore(recoveryDir);
+    String id = RecoveryStore.newId();
+    assertTrue(running.saveIfChanged(id, file, "class Draft { int unsaved; }", 12, 0));
+    // the process dies here: no endSession(), no discard()
+
+    RecoveryStore nextRun = new RecoveryStore(recoveryDir);
+    RecoveryStore.Snapshot found = nextRun.pending().get(0);
+    assertEquals("class Draft { int unsaved; }", found.text());
+    assertEquals(file.toAbsolutePath(), found.original().toAbsolutePath());
+    assertEquals(
+        "class Draft {}", FileIO.readText(file), "the file on disk was never touched by recovery");
+
+    FileIO.writeAtomic(file, found.text());
+    nextRun.discard(found.id());
+    assertTrue(nextRun.pending().isEmpty());
+  }
+
+  @Test
+  void symbolLookupFollowsTheCaretLikeHoverAndGoToDefinitionDo() {
+    String code = "int total = add(total, 1);";
+    int caretAfterAdd = code.indexOf('(');
+    assertEquals("add", Symbols.wordAt(code, Symbols.symbolOffset(code, caretAfterAdd)));
+    assertEquals("", Symbols.wordAt(code, Symbols.symbolOffset(code, code.indexOf(", ") + 1)));
+  }
 }

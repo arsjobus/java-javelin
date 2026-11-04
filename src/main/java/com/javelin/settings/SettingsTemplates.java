@@ -1,11 +1,14 @@
 package com.javelin.settings;
 
-/** Starter contents for settings files created on request. Everything is commented out, so a fresh file changes nothing. */
+/**
+ * Starter contents for settings files created on request. Everything is commented out, so a fresh
+ * file changes nothing.
+ */
 public final class SettingsTemplates {
-    private SettingsTemplates() {}
+  private SettingsTemplates() {}
 
-    public static String user(Keybindings keys) {
-        return """
+  public static String user(Keybindings keys) {
+    return """
             # Javelin IDE user settings.
             # Format: one key=value per line, UTF-8. Lines starting with # are comments; values are taken as written.
             # Remove the leading # from a line to enable it. Saving this file in the editor applies it immediately.
@@ -40,11 +43,12 @@ public final class SettingsTemplates {
 
             # Keybindings: key.<action id>=<shortcut>. Modifiers: Ctrl, Shift, Alt, Meta, Shortcut (Cmd on macOS).
             # Use "none" to remove a shortcut. Unlisted actions keep their defaults.
-            """ + keys.template();
-    }
+            """
+        + keys.template();
+  }
 
-    public static String project() {
-        return """
+  public static String project() {
+    return """
             # Javelin IDE project settings. Same format as the user settings file.
             # These values override the user's for this project only. Commit this file to share them,
             # or ignore the .javelin-ide folder. Remove the leading # from a line to enable it.
@@ -65,5 +69,5 @@ public final class SettingsTemplates {
             # Pre-filled into the Start Language Server dialog, one line per language id (java, python, ...).
             #language.server.java=
             """;
-    }
+  }
 }

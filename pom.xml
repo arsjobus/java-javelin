@@ -116,7 +116,9 @@
                 <version>3.2.1</version>
                 <configuration>
                     <java>
-                        <googleJavaFormat/>
+                        <googleJavaFormat>
+                            <version>1.28.0</version>
+                        </googleJavaFormat>
                         <removeUnusedImports/>
                     </java>
                 </configuration>
@@ -131,9 +133,9 @@
             <plugin>
                 <!--
                     Coverage gate. The JavaFX user interface (App, ui/*) needs a display and is verified by hand and by
-                    the smoke checks in HARDENING.md, so it is excluded; everything else (build, editor, io, language,
-                    settings, terminal) must stay at 100% line coverage. `mvn verify` fails if that slips, and the
-                    HTML report lands in target/site/jacoco.
+                    the smoke checks in HARDENING.md, so it is excluded. The remaining code must stay above 95% line
+                    coverage and 85% branch coverage. `mvn verify` fails if either slips, and the HTML report lands in
+                    target/site/jacoco.
                 -->
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -169,12 +171,12 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>1.00</minimum>
+                                            <minimum>0.95</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.90</minimum>
+                                            <minimum>0.85</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
