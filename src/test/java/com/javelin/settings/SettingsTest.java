@@ -188,6 +188,65 @@ class SettingsTest {
         try (var files = Files.list(folder)) { assertEquals(1, files.count()); }
     }
 
+    @Test void saveWritesOnlyTheKeysChangedHereAndKeepsWhatAnotherWindowWrote() throws IOException {
+        write(userFile(), "theme=dark\nlayout.sidebarWidth=250\nai.model=old\n");
+        Settings dialogWindow = new Settings(userFile());
+        Settings otherWindow = new Settings(userFile());
+        otherWindow.put(Scope.USER, "layout.sidebarWidth", "400");
+        otherWindow.put(Scope.USER, "ai.model", "new");
+        otherWindow.save(Scope.USER);
+
+        dialogWindow.put(Scope.USER, "editor.tabSize", "2"); // the Settings dialog still holds the old width and model
+        dialogWindow.save(Scope.USER);
+
+        assertEquals("theme=dark\nlayout.sidebarWidth=400\nai.model=new\neditor.tabSize=2\n", Files.readString(userFile()));
+    }
+
+    @Test void aLineAddedByHandAfterLoadingSurvivesASave() throws IOException {
+        write(userFile(), "a=1\n");
+        Settings s = new Settings(userFile());
+        write(userFile(), "a=1\n# added while the editor ran\nhand=written\n");
+        s.put(Scope.USER, "b", "2");
+        s.save(Scope.USER);
+        assertEquals("a=1\n# added while the editor ran\nhand=written\nb=2\n", Files.readString(userFile()));
+    }
+
+    @Test void removingAKeyThisWindowNeverHeldDoesNotDeleteItFromTheFile() throws IOException {
+        write(userFile(), "a=1\n");
+        Settings s = new Settings(userFile());
+        write(userFile(), "a=1\neditor.tabSize=8\n"); // another window set it after this one loaded
+        s.remove(Scope.USER, "editor.tabSize"); // the dialog resets a key it never saw
+        s.save(Scope.USER);
+        assertEquals("a=1\neditor.tabSize=8\n", Files.readString(userFile()));
+    }
+
+    @Test void aSavedKeyIsNotWrittenAgainAndReloadDropsUnsavedChanges() throws IOException {
+        write(userFile(), "a=1\n");
+        Settings s = new Settings(userFile());
+        s.put(Scope.USER, "a", "2");
+        s.save(Scope.USER);
+        write(userFile(), "a=3\n"); // someone else changes it afterwards
+        s.save(Scope.USER); // nothing of ours is pending any more
+        assertEquals("a=3\n", Files.readString(userFile()));
+
+        s.put(Scope.USER, "b", "x");
+        s.reload(); // discards the unsaved change
+        s.save(Scope.USER);
+        assertEquals("a=3\n", Files.readString(userFile()));
+    }
+
+    @Test void projectAndUserChangesArePendingSeparately() throws IOException {
+        Settings s = settings();
+        s.setProject(dir.resolve("proj"));
+        s.put(Scope.USER, "u", "1");
+        s.put(Scope.PROJECT, "editor.tabSize", "2");
+        s.save(Scope.USER);
+        assertFalse(Files.exists(dir.resolve("proj/.javelin-ide/settings.conf")), "saving the user scope must not write the project's");
+        s.save(Scope.PROJECT);
+        assertEquals("editor.tabSize=2\n", Files.readString(dir.resolve("proj/.javelin-ide/settings.conf")));
+        assertEquals("u=1\n", Files.readString(userFile()));
+    }
+
     @Test void userKeysFiltersByPrefix() throws IOException {
         write(userFile(), "key.a=1\nkey.b=2\nother=3\n");
         assertEquals(List.of("key.a", "key.b"), new Settings(userFile()).userKeys("key."));

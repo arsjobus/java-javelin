@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -22,7 +23,9 @@ import java.util.function.Function;
  * Windows path or a shell command can be written as-is.
  *
  * <p>Saving rewrites only the lines that changed: comments, blank lines, ordering and untouched entries are
- * preserved, so a file the user edits by hand stays theirs. Nothing here touches the network.
+ * preserved, so a file the user edits by hand stays theirs. {@link #save} also writes only the keys this object
+ * changed ({@link #put}, {@link #remove}) since it was loaded or last saved, on top of what the file holds now, so
+ * several windows sharing one file never write back each other's old values. Nothing here touches the network.
  *
  * <p>Some keys are read from the user file only ({@link #isUserOnly}): a project must not be able to change the
  * user's theme or keybindings just by being opened.
@@ -39,6 +42,9 @@ public final class Settings {
     private final Map<String, String> user = new LinkedHashMap<>();
     private final Map<String, String> project = new LinkedHashMap<>();
     private final List<String> warnings = new ArrayList<>();
+    /** Keys changed in memory and not yet written, per scope. */
+    private final Set<String> pendingUser = new LinkedHashSet<>();
+    private final Set<String> pendingProject = new LinkedHashSet<>();
 
     public Settings(Path userFile) {
         this.userFile = userFile.toAbsolutePath().normalize();
@@ -101,6 +107,8 @@ public final class Settings {
     /** Re-reads both files, discarding unsaved in-memory changes. Problems are collected in {@link #warnings()}. */
     public void reload() {
         warnings.clear();
+        pendingUser.clear();
+        pendingProject.clear();
         read(userFile, user, "user settings");
         if (projectFile == null) project.clear(); else read(projectFile, project, "project settings");
         for (var it = project.keySet().iterator(); it.hasNext();) {
@@ -150,22 +158,22 @@ public final class Settings {
     public void put(Scope scope, String key, String value) {
         checkKey(scope, key);
         target(scope).put(key, value == null ? "" : value.replace('\r', ' ').replace('\n', ' ').strip());
+        pending(scope).add(key);
     }
 
-    /** Removes a value in memory; call {@link #save} to write it. */
+    /** Removes a value in memory; call {@link #save} to write it. A key not held in memory is left alone on disk. */
     public void remove(Scope scope, String key) {
         if (scope == Scope.PROJECT && projectFile == null) return;
-        target(scope).remove(key);
+        if (target(scope).remove(key) != null) pending(scope).add(key);
     }
 
     /**
-     * Writes the scope's values to its file, changing only lines that differ. Does nothing when there are no
-     * values and no file, so an untouched project never gains a settings folder.
+     * Writes the keys changed here since the last load or save ({@link #put}, {@link #remove}) to the scope's file,
+     * changing only lines that differ and keeping everything else as the file holds it now. Does nothing when there
+     * is nothing to write and no file, so an untouched project never gains a settings folder.
      */
     public void save(Scope scope) throws IOException {
-        Path file = scope == Scope.USER ? userFile : projectFile;
-        if (file == null) throw new IOException("No project is open");
-        write(file, target(scope));
+        saveKeys(scope, List.copyOf(pending(scope)));
     }
 
     /**
@@ -173,7 +181,7 @@ public final class Settings {
      * they have no value in memory) and everything else in the file stays as another window may just have written it.
      * Use this for values that change while the editor runs (such as the window layout), so that several windows
      * sharing one settings file do not overwrite each other's changes; {@link #save} writes every value held in memory.
-     * Values of other keys held in memory are not touched.
+     * Values of other keys held in memory are not touched, and the keys written are no longer pending.
      */
     public void saveKeys(Scope scope, Collection<String> keys) throws IOException {
         Path file = scope == Scope.USER ? userFile : projectFile;
@@ -186,6 +194,7 @@ public final class Settings {
             if (value == null) onDisk.remove(key); else onDisk.put(key, value);
         }
         write(file, onDisk);
+        pending(scope).removeAll(keys);
     }
 
     private static void write(Path file, Map<String, String> values) throws IOException {
@@ -211,6 +220,8 @@ public final class Settings {
     }
 
     private Map<String, String> target(Scope scope) { return scope == Scope.USER ? user : project; }
+
+    private Set<String> pending(Scope scope) { return scope == Scope.USER ? pendingUser : pendingProject; }
 
     private void checkKey(Scope scope, String key) {
         if (key == null || key.isBlank() || key.contains("=") || key.chars().anyMatch(Character::isWhitespace) || key.startsWith("#"))

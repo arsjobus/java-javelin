@@ -9,6 +9,7 @@ import com.javelin.settings.Settings.Scope;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -42,5 +43,22 @@ class LayoutWorkflowE2ETest {
         Settings next = new Settings(file());
         assertEquals("light", next.get("theme", ""));
         assertEquals(280, new LayoutPrefs(next).sidebarWidth().getAsDouble());
+    }
+
+    @Test void everyEditorWideSaveLeavesAnotherWindowsLayoutAndModelAlone() throws IOException {
+        Files.writeString(file(), "theme=dark\n");
+        Settings windowA = new Settings(file()); // the window the user picks a theme in
+        Settings windowB = new Settings(file());
+        new LayoutPrefs(windowB).rememberSidebarWidth(360);
+        windowB.put(Scope.USER, "ai.model", "llama3");
+        windowB.saveKeys(Scope.USER, List.of("ai.model"));
+
+        windowA.put(Scope.USER, "theme", "light"); // Theme menu, search "match case" and the Settings dialog all end in save
+        windowA.save(Scope.USER);
+
+        Settings next = new Settings(file());
+        assertEquals("light", next.get("theme", ""));
+        assertEquals(360, new LayoutPrefs(next).sidebarWidth().getAsDouble());
+        assertEquals("llama3", next.get("ai.model", ""));
     }
 }
