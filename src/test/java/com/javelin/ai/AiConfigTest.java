@@ -24,6 +24,7 @@ class AiConfigTest {
         assertFalse(c.hasModel());
         assertEquals(12_000, c.maxContextChars());
         assertEquals(Duration.ofSeconds(120), c.timeout());
+        assertEquals(40, c.editBlockMinLines());
         assertTrue(AiConfig.validate(settings).isEmpty());
     }
 
@@ -83,5 +84,16 @@ class AiConfigTest {
         settings.put(Scope.USER, "ai.provider", "ollama");
         settings.put(Scope.USER, "ai.ollama.endpoint", "http://example.com");
         assertEquals(AiException.Kind.REFUSED, assertThrows(AiException.class, () -> AiProviders.create(AiConfig.from(settings))).kind());
+    }
+
+    @Test void theEditBlockLimitIsReadClampedAndReported() {
+        settings.put(Scope.USER, "ai.editBlockMinLines", "0");
+        assertEquals(0, AiConfig.from(settings).editBlockMinLines());
+        settings.put(Scope.USER, "ai.editBlockMinLines", "-5");
+        assertEquals(0, AiConfig.from(settings).editBlockMinLines());
+        assertEquals(1, AiConfig.validate(settings).size());
+        settings.put(Scope.USER, "ai.editBlockMinLines", "many");
+        assertEquals(40, AiConfig.from(settings).editBlockMinLines());
+        assertTrue(AiConfig.validate(settings).get(0).startsWith("ai.editBlockMinLines"));
     }
 }

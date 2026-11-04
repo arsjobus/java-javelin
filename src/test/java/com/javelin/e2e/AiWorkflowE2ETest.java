@@ -132,4 +132,29 @@ class AiWorkflowE2ETest {
         assertFalse(AiConfig.validate(settings).isEmpty());
         assertTrue(Files.notExists(dir.resolve("none")));
     }
+
+    @Test void aLongRefactorAsEditBlocksIsSplicedInAndACarelessReplyIsFlaggedBeforeReview() throws Exception {
+        StringBuilder big = new StringBuilder("public class Big {\n");
+        for (int i = 0; i < 45; i++) big.append("    int f").append(i).append("(int x) {\n        return x + ").append(i).append(";\n    }\n");
+        big.append("}\n");
+        String doc = big.toString();
+        try (var server = FakeOllamaAccess.start()) {
+            server.chat("Renamed it.\n<<<<<<< SEARCH\n    int f7(int x) {\n        return x + 7;\n    }\n=======\n    int seven(int x) {\n        return x + 7;\n    }\n>>>>>>> REPLACE\n");
+            AiService svc = service(server, "m");
+            AiPlan plan = svc.prepare(AiAction.PROPOSE_CHANGE, new AiSource("Big.java", "Big.java", "java", doc, 0, doc.length()), "rename f7 to seven");
+            assertTrue(plan.preview().contains("<<<<<<< SEARCH"), "the user sees that edit blocks are asked for");
+            AiResult result = svc.run(plan, s -> {}, new AiCancel());
+            assertFalse(result.hasErrors(), result.findings().toString());
+            assertEquals(doc.replace("int f7(", "int seven("), result.proposal().applyTo(doc));
+            assertEquals(1, result.proposal().diff().added());
+            assertEquals(1, result.proposal().diff().removed());
+        }
+        try (var server = FakeOllamaAccess.start()) {
+            server.chat("Here you go.\n```java\npublic class Big {\n    int f0(int x) {\n        return x + 0;\n    }\n    // ... the other methods stay as they are\n}\n```");
+            AiService svc = service(server, "m");
+            AiResult result = svc.run(svc.prepare(AiAction.PROPOSE_CHANGE, new AiSource("Big.java", "Big.java", "java", doc, 0, doc.length()), "x"), s -> {}, new AiCancel());
+            assertTrue(result.hasErrors(), "dropping 44 methods behind a placeholder must be flagged");
+            assertTrue(result.findings().stream().anyMatch(f -> f.message().contains("placeholder")));
+        }
+    }
 }

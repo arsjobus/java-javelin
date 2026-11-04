@@ -139,7 +139,7 @@ class InstallPipelineE2ETest {
         // JavaFX from the module path: no "Unsupported JavaFX configuration" warning, and native access can be given to javafx.graphics alone.
         assertEquals("target/fx", jpackage.get(jpackage.indexOf("--module-path") + 1));
         List<String> modules = List.of(jpackage.get(jpackage.indexOf("--add-modules") + 1).split(","));
-        assertTrue(modules.containsAll(List.of("javafx.controls", "java.se", "jdk.unsupported")), modules.toString());
+        assertTrue(modules.containsAll(List.of("javafx.controls", "java.se", "jdk.unsupported", "jdk.compiler")), modules.toString()); // jdk.compiler: the AI change check parses Java
         List<String> options = new ArrayList<>();
         for (int i = 0; i < jpackage.size() - 1; i++) if (jpackage.get(i).equals("--java-options")) options.add(jpackage.get(i + 1));
         assertTrue(options.contains("--enable-native-access=javafx.graphics"), options.toString());

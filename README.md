@@ -113,6 +113,7 @@ java-javelin/
 ├── DESIGN.md
 ├── PRIVACY.md
 ├── AI.md
+├── AI-EDITING.md
 ├── EXTENSIONS.md
 ├── SECURITY.md
 ├── CUSTOMIZATION.md

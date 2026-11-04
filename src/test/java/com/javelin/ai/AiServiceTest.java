@@ -122,7 +122,7 @@ class AiServiceTest {
         provider.answer = "```\none\n```\n```\ntwo\n```";
         AiResult r = service.run(service.prepare(AiAction.PROPOSE_CHANGE, source("Foo.java", SEL_START, SEL_END), "x"), s -> {}, new AiCancel());
         assertTrue(r.note().contains("2 code blocks"));
-        assertTrue(r.proposal().replacement().startsWith("one"));
+        assertTrue(r.proposal().replacement().strip().startsWith("one")); // indentation of the selection is put back, see ChangeReplyTest
     }
 
     @Test void anEmptyAnswerIsAnError() throws Exception {
@@ -146,4 +146,84 @@ class AiServiceTest {
     }
 
     @Test void modelsComeFromTheProvider() throws Exception { assertEquals(List.of("fake-model"), service.models(new AiCancel())); }
+
+    // ---- checking and splicing a proposed change ----
+
+    private AiResult propose(String reply, int from, int to) throws Exception {
+        provider.answer = reply;
+        return service.run(service.prepare(AiAction.PROPOSE_CHANGE, source("Foo.java", from, to), "make add really add"), s -> {}, new AiCancel());
+    }
+
+    @Test void aBrokenReplyIsStillProposedButTheChecksSayWhatIsWrong() throws Exception {
+        AiResult r = propose("```java\n    int add(int a, int b) {\n        return a + b\n```", SEL_START, SEL_END);
+        assertNotNull(r.proposal());
+        assertTrue(r.hasErrors());
+        assertTrue(r.findings().stream().anyMatch(f -> f.message().contains("Brackets")));
+    }
+
+    @Test void aPlaceholderReplyIsFlaggedAsAnError() throws Exception {
+        AiResult r = propose("```java\n    int add(int a, int b) {\n        // ... rest of the method\n    }\n```", SEL_START, SEL_END);
+        assertTrue(r.hasErrors());
+        assertTrue(r.findings().stream().anyMatch(f -> f.message().contains("placeholder")));
+    }
+
+    @Test void aSoundReplyHasNoFindings() throws Exception {
+        AiResult r = propose("```java\n    int add(int a, int b) { return a + b; }\n```", SEL_START, SEL_END);
+        assertEquals(List.of(), r.findings());
+        assertFalse(r.hasErrors());
+    }
+
+    @Test void aSelectionThatStartsMidLineIsSentAsWholeLinesAndTheReplyIsSplicedBackCleanly() throws Exception {
+        int from = DOC.indexOf("int add"), to = DOC.indexOf("a - b") + 5;
+        AiPlan plan = service.prepare(AiAction.PROPOSE_CHANGE, source("Foo.java", from, to), "fix add");
+        assertTrue(plan.request().prompt().contains("\n    int add(int a, int b) { return a - b; }\n"), "the model sees the line with its indentation");
+        provider.answer = "```java\nint add(int a, int b) { return a + b; }\n```"; // the model lost the indentation
+        AiResult r = service.run(plan, s -> {}, new AiCancel());
+        assertEquals("class Foo {\n    int add(int a, int b) { return a + b; }\n}\n", r.proposal().applyTo(DOC));
+        assertTrue(r.findings().stream().anyMatch(f -> f.message().contains("indentation")));
+        assertFalse(r.hasErrors());
+    }
+
+    @Test void editBlocksAreAppliedToTheSelectedCode() throws Exception {
+        AiResult r = propose("Fixed the sign.\n<<<<<<< SEARCH\n    int add(int a, int b) { return a - b; }\n=======\n    int add(int a, int b) { return a + b; }\n>>>>>>> REPLACE", SEL_START, SEL_END);
+        assertEquals("Fixed the sign.", r.proposal().explanation());
+        assertEquals("class Foo {\n    int add(int a, int b) { return a + b; }\n}\n", r.proposal().applyTo(DOC));
+        assertEquals(List.of(), r.findings());
+    }
+
+    @Test void editBlocksThatDoNotMatchTheCodeProposeNothingAndSayWhy() throws Exception {
+        AiResult r = propose("<<<<<<< SEARCH\n    int sub(int a, int b) { return a - b; }\n=======\nx\n>>>>>>> REPLACE", SEL_START, SEL_END);
+        assertNull(r.proposal());
+        assertTrue(r.note().contains("not in the code"));
+        assertEquals(DOC, DOC, "nothing was applied");
+    }
+
+    @Test void aUnifiedDiffReplyIsAppliedAsAPatch() throws Exception {
+        AiResult r = propose("```diff\n@@ -1 +1 @@\n-    int add(int a, int b) { return a - b; }\n+    int add(int a, int b) { return a + b; }\n```", SEL_START, SEL_END);
+        assertEquals("class Foo {\n    int add(int a, int b) { return a + b; }\n}\n", r.proposal().applyTo(DOC));
+    }
+
+    @Test void aLongSelectionAsksForEditBlocksInTheMessage() throws Exception {
+        StringBuilder body = new StringBuilder("class Big {\n");
+        for (int i = 0; i < 50; i++) body.append("    int f").append(i).append("() { return ").append(i).append("; }\n");
+        body.append("}\n");
+        AiPlan plan = service.prepare(AiAction.PROPOSE_CHANGE, new AiSource("Big.java", "Big.java", "java", body.toString(), 0, body.length()), "rename f3 to three");
+        assertTrue(plan.request().prompt().contains("<<<<<<< SEARCH"));
+        provider.answer = "<<<<<<< SEARCH\n    int f3() { return 3; }\n=======\n    int three() { return 3; }\n>>>>>>> REPLACE";
+        AiResult r = service.run(plan, s -> {}, new AiCancel());
+        assertEquals(body.toString().replace("int f3()", "int three()"), r.proposal().applyTo(body.toString()));
+        assertEquals(1, r.proposal().diff().added());
+        assertTrue(r.findings().stream().noneMatch(Finding::isError), r.findings().toString());
+    }
+
+    @Test void theEditBlockLimitFromTheSettingsDecidesWhatTheModelIsAskedFor() throws Exception {
+        Settings settings = new Settings(dir.resolve("limit.conf"));
+        settings.put(Scope.USER, "ai.model", "fake-model");
+        settings.put(Scope.USER, "ai.editBlockMinLines", "0");
+        AiPlan always = new AiService(provider, AiConfig.from(settings)).prepare(AiAction.PROPOSE_CHANGE, source("Foo.java", SEL_START, SEL_END), "x");
+        assertTrue(always.request().prompt().contains("<<<<<<< SEARCH"));
+        settings.put(Scope.USER, "ai.editBlockMinLines", "100000");
+        AiPlan never = new AiService(provider, AiConfig.from(settings)).prepare(AiAction.PROPOSE_CHANGE, source("Foo.java", SEL_START, SEL_END), "x");
+        assertFalse(never.request().prompt().contains("<<<<<<< SEARCH"));
+    }
 }

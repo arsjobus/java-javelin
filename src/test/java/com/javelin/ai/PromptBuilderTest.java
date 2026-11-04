@@ -56,5 +56,27 @@ class PromptBuilderTest {
         assertFalse(prompt.contains("(null)"));
     }
 
+    private static AiContext longContext(int lines) throws Exception {
+        String text = "int x = 1;\n".repeat(lines);
+        return AiContext.of(AiAction.PROPOSE_CHANGE, new AiSource("Foo.java", "Foo.java", "java", text, 0, text.length()), 100_000);
+    }
+
+    @Test void aShortChangeAsksForTheWholeReplacementAndNeverForPlaceholders() throws Exception {
+        AiContext c = longContext(PromptBuilder.EDIT_BLOCK_MIN_LINES - 1);
+        assertFalse(PromptBuilder.usesEditBlocks(c));
+        String prompt = PromptBuilder.build(AiAction.PROPOSE_CHANGE, c, "rename x", "m").prompt();
+        assertTrue(prompt.contains("ONE fenced code block") && prompt.contains("no placeholders"));
+        assertFalse(prompt.contains("<<<<<<< SEARCH"));
+    }
+
+    @Test void aLongChangeAsksForEditBlocksInsteadOfAWholeCopy() throws Exception {
+        AiContext c = longContext(PromptBuilder.EDIT_BLOCK_MIN_LINES);
+        assertTrue(PromptBuilder.usesEditBlocks(c));
+        String prompt = PromptBuilder.build(AiAction.PROPOSE_CHANGE, c, "rename x", "m").prompt();
+        assertTrue(prompt.contains("<<<<<<< SEARCH") && prompt.contains("======= ".strip()) && prompt.contains(">>>>>>> REPLACE"));
+        assertTrue(prompt.contains("only the parts that change"));
+        assertFalse(prompt.contains("ONE fenced code block"));
+    }
+
     private static int count(String text, String part) { int n = 0, i = 0; while ((i = text.indexOf(part, i)) >= 0) { n++; i += part.length(); } return n; }
 }

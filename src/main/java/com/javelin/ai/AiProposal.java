@@ -15,7 +15,7 @@ public record AiProposal(Kind kind, String documentName, int start, int end, Str
     /** A replacement for the text that was sent. */
     public static AiProposal replace(AiContext context, String code, String explanation) {
         return new AiProposal(Kind.REPLACE_RANGE, context.name(), context.start(), context.end(), context.text(),
-            ResponseParser.matchTrailingNewline(context.text(), code), null, explanation);
+            ResponseParser.matchLineEndings(context.text(), ResponseParser.matchTrailingNewline(context.text(), code)), null, explanation);
     }
 
     /** A new document with the suggested file name. */

@@ -63,4 +63,37 @@ class AiContextTest {
         assertEquals(0, s.selectionStart());
         assertEquals(3, s.selectionEnd());
     }
+
+    @Test void aChangeIsProposedForWholeLinesSoTheModelSeesTheIndentation() throws Exception {
+        String text = "class A {\n    int x = 1;\n    int y = 2;\n}\n";
+        int from = text.indexOf("int x"), to = text.indexOf("1;") + 2; // starts and ends in the middle of a line
+        AiContext c = AiContext.of(AiAction.PROPOSE_CHANGE, source(text, from, to), 1000);
+        assertEquals("    int x = 1;\n", c.text());
+        assertEquals(text.indexOf("    int x"), c.start());
+        assertEquals(text.indexOf("    int y"), c.end());
+        assertEquals(AiContext.Scope.SELECTION, c.scope());
+    }
+
+    @Test void aSelectionThatAlreadyCoversWholeLinesIsNotWidened() throws Exception {
+        String text = "a\nb\nc\n";
+        AiContext c = AiContext.of(AiAction.PROPOSE_CHANGE, source(text, 2, 4), 100);
+        assertEquals("b\n", c.text());
+        assertEquals(2, c.start());
+        assertEquals(4, c.end());
+    }
+
+    @Test void theLastLineWithoutALineBreakIsIncludedWhole() throws Exception {
+        AiContext c = AiContext.of(AiAction.PROPOSE_CHANGE, source("a\n  b = 1", 5, 6), 100);
+        assertEquals("  b = 1", c.text());
+        assertEquals(9, c.end());
+    }
+
+    @Test void onlyAChangeIsWidenedNotWhatTheModelJustReads() throws Exception {
+        assertEquals("de", AiContext.of(AiAction.EXPLAIN, source("abc\ndef\nghi", 4, 6), 100).text());
+    }
+
+    @Test void theLimitCountsTheWholeLinesOfAChange() {
+        String text = "x".repeat(15) + "\n" + "y".repeat(15) + "\n";
+        assertThrows(AiException.class, () -> AiContext.of(AiAction.PROPOSE_CHANGE, source(text, 10, 20), 20));
+    }
 }

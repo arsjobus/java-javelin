@@ -28,7 +28,7 @@ public final class AiService {
         if (SensitiveFiles.isSensitive(source.fileName()))
             throw new AiException(AiException.Kind.REFUSED, source.name() + " is a file for credentials, so it is never sent to an AI model.");
         AiContext context = AiContext.of(action, source, config.maxContextChars());
-        AiRequest request = PromptBuilder.build(action, context, instruction, config.model());
+        AiRequest request = PromptBuilder.build(action, context, instruction, config.model(), config.editBlockMinLines());
         List<String> warnings = new ArrayList<>();
         for (String what : SensitiveFiles.warnings(context.text())) warnings.add("The text to send looks like it contains " + what + ". Check the message below before you send it.");
         String testName = action == AiAction.GENERATE_TESTS ? TestFileNames.suggest(source.fileName(), source.languageId()) : null;
@@ -45,14 +45,20 @@ public final class AiService {
         if (!plan.action().proposes()) return new AiResult(text, null, reply.truncated() ? "The answer was cut off by the model; it may be incomplete." : null);
         if (reply.truncated()) return new AiResult(text, null, "The reply was cut off by the model, so nothing is proposed. Its text is in the AI panel.");
         try {
-            ResponseParser.Parsed parsed = ResponseParser.parse(text);
-            AiProposal proposal = plan.action() == AiAction.GENERATE_TESTS
-                ? AiProposal.newDocument(plan.testFileName(), parsed.code(), parsed.explanation())
-                : AiProposal.replace(plan.context(), parsed.code(), parsed.explanation());
-            String note = parsed.extraBlocks() > 0 ? "The reply had " + (parsed.extraBlocks() + 1) + " code blocks; only the first is proposed." : null;
-            return new AiResult(text, proposal, note);
+            if (plan.action() == AiAction.GENERATE_TESTS) {
+                ResponseParser.Parsed parsed = ResponseParser.parse(text);
+                AiProposal proposal = AiProposal.newDocument(plan.testFileName(), parsed.code(), parsed.explanation());
+                return new AiResult(text, proposal, extraBlocksNote(parsed.extraBlocks()));
+            }
+            ChangeReply.Interpreted change = ChangeReply.interpret(text, plan.context().text());
+            AiProposal proposal = AiProposal.replace(plan.context(), change.code(), change.explanation());
+            List<Finding> findings = new ArrayList<>(change.notes());
+            findings.addAll(ChangeChecker.check(plan.context().languageId(), plan.context().text(), proposal.replacement()));
+            return new AiResult(text, proposal, extraBlocksNote(change.extraBlocks()), findings);
         } catch (AiException ex) {
             return new AiResult(text, null, ex.getMessage());
         }
     }
+
+    private static String extraBlocksNote(int extra) { return extra > 0 ? "The reply had " + (extra + 1) + " code blocks; only the first is proposed." : null; }
 }

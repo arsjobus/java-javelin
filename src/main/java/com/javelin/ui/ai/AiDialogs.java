@@ -2,6 +2,7 @@ package com.javelin.ui.ai;
 
 import com.javelin.ai.AiPlan;
 import com.javelin.ai.AiProposal;
+import com.javelin.ai.Finding;
 import com.javelin.ai.PromptBuilder;
 import com.javelin.ui.Dialogs;
 import java.util.List;
@@ -22,6 +23,8 @@ final class AiDialogs {
 
     static final ButtonType SEND = new ButtonType("Send", javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
     static final ButtonType APPLY = new ButtonType("Apply", javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
+    /** Shown instead of Apply when a check found the change very likely broken, so applying it is a decision and not a habit. */
+    static final ButtonType APPLY_ANYWAY = new ButtonType("Apply anyway", javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
     static final ButtonType REJECT = new ButtonType("Reject", javafx.scene.control.ButtonBar.ButtonData.CANCEL_CLOSE);
 
     /** Shows exactly what would be sent and where; true only if the user chooses Send. */
@@ -31,17 +34,25 @@ final class AiDialogs {
         return Dialogs.show(dialog).filter(SEND::equals).isPresent();
     }
 
-    /** Shows the proposed change as a diff; true only if the user chooses Apply. */
-    static boolean review(AiProposal proposal, String note) {
+    /**
+     * Shows the proposed change as a diff, with what the checks found above it; true only if the user chooses Apply. When a
+     * check found an error the button reads "Apply anyway" and the intro says what is wrong.
+     */
+    static boolean review(AiProposal proposal, String note, List<Finding> findings) {
+        boolean errors = findings.stream().anyMatch(Finding::isError);
         String intro = proposal.kind() == AiProposal.Kind.NEW_DOCUMENT
             ? "Apply opens a new unsaved tab named " + proposal.suggestedName() + "; you choose where to save it."
             : "Apply changes the text in the editor. It stays unsaved and Undo takes it back.";
+        if (errors) intro = "The checks below found problems, so this change is probably broken. Reject it, or Apply anyway and fix it by hand. " + intro;
         StringBuilder body = new StringBuilder();
         if (!proposal.explanation().isBlank()) body.append(proposal.explanation()).append("\n\n");
         if (note != null && !note.isBlank()) body.append("Note: ").append(note).append("\n\n");
+        for (Finding finding : findings) body.append(finding.label()).append("\n");
+        if (!findings.isEmpty()) body.append("\n");
         body.append(proposal.kind() == AiProposal.Kind.NEW_DOCUMENT ? "New file contents:\n" + proposal.replacement() : proposal.diff().text());
-        Dialog<ButtonType> dialog = textDialog("Review proposed change", proposal.summary(), intro, body.toString(), APPLY, REJECT);
-        return Dialogs.show(dialog).filter(APPLY::equals).isPresent();
+        ButtonType accept = errors ? APPLY_ANYWAY : APPLY;
+        Dialog<ButtonType> dialog = textDialog("Review proposed change", proposal.summary(), intro, body.toString(), accept, REJECT);
+        return Dialogs.show(dialog).filter(accept::equals).isPresent();
     }
 
     /** Asks which installed model to use. */

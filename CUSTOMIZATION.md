@@ -46,6 +46,7 @@ the editor from starting; the affected value falls back to its default.
 | `ai.model` | none | user only | The model to ask (for example the name `ollama list` shows). AI > Choose Model... lists the installed models and writes this for you. Until it is set, no AI action runs. |
 | `ai.maxContextChars` | `12000` | user only | 500 to 200000. The most characters of code one request sends; longer text is cut, and the preview says so. |
 | `ai.timeoutSeconds` | `120` | user only | 5 to 1800. How long Ollama may stay silent (for example while loading a large model) before the request is given up. |
+| `ai.editBlockMinLines` | `40` | user only | 0 to 100000. Propose Change asks the model for edit blocks (the lines to find and what they become) when the selected code has at least this many lines, and for a whole replacement below it. `0` always asks for edit blocks, `100000` never. A reply in either form is understood whatever was asked, so this only changes what the model is told; if your model does better with one form, set it here. |
 | `key.<action id>` | see below | user only | Keybinding override. |
 
 `theme`, `key.*`, `search.caseSensitive` and `ai.*` are read from the user file only. A project cannot change your theme,

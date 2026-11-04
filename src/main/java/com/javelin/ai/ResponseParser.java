@@ -49,6 +49,12 @@ public final class ResponseParser {
         return original.endsWith("\n") ? body + "\n" : body;
     }
 
+    /** The code with Windows line endings when the text it replaces has them, so a replaced selection does not mix the two. */
+    public static String matchLineEndings(String original, String code) {
+        String plain = code.replace("\r\n", "\n");
+        return original.contains("\r\n") ? plain.replace("\n", "\r\n") : plain;
+    }
+
     private record Fence(char character, int length) {
         /** A line that starts a fenced block: up to three spaces, three or more backticks or tildes, then an optional word. */
         static Fence opening(String line) {

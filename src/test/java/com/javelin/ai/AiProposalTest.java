@@ -43,4 +43,15 @@ class AiProposalTest {
         assertEquals("Change to Foo.java: +1 -1", p.summary());
         assertEquals("New file T.java: 2 line(s)", AiProposal.newDocument("T.java", "x\ny", "").summary());
     }
+
+    @Test void aReplacementTakesTheLineEndingsOfTheTextItReplaces() throws Exception {
+        String doc = "head\r\nold line\r\ntail\r\n";
+        AiProposal p = change(doc, 6, 16, "new\nline");
+        assertEquals("head\r\nnew\r\nline\r\ntail\r\n", p.applyTo(doc));
+    }
+
+    @Test void unixTextStaysUnixWhateverTheModelSent() throws Exception {
+        String doc = "head\nold\ntail\n";
+        assertEquals("head\nnew\nline\ntail\n", change(doc, 5, 9, "new\r\nline").applyTo(doc));
+    }
 }

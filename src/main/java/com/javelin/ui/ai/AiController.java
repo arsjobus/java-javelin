@@ -173,7 +173,7 @@ public final class AiController {
         AiProposal proposal = result.proposal();
         bottom.ai().finish(result.note());
         if (proposal == null) { bench.status(plan.action().label() + (result.note() == null ? ": done." : ": " + result.note())); return; }
-        if (!AiDialogs.review(proposal, result.note())) { bench.status("Proposed change rejected: nothing was changed."); return; }
+        if (!AiDialogs.review(proposal, result.note(), result.findings())) { bench.status("Proposed change rejected: nothing was changed."); return; }
         apply(proposal, editor);
     }
 

@@ -35,6 +35,8 @@ public final class SettingsTemplates {
             #ai.model=
             #ai.maxContextChars=12000
             #ai.timeoutSeconds=120
+            # Propose Change asks for edit blocks (find these lines, change them) from this many lines up, a whole copy below it. 0 = always, 100000 = never.
+            #ai.editBlockMinLines=40
 
             # Keybindings: key.<action id>=<shortcut>. Modifiers: Ctrl, Shift, Alt, Meta, Shortcut (Cmd on macOS).
             # Use "none" to remove a shortcut. Unlisted actions keep their defaults.

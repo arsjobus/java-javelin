@@ -64,7 +64,7 @@ java -Djava.awt.headless=true -cp target/classes com.javelin.icon.IconExporter p
 
 # jpackage builds the app's own runtime with jlink. Naming the modules replaces its guess, so list everything the app
 # uses: JavaFX, the Java SE API (desktop, prefs, nio, process, net), and the few extras the JDK keeps separate.
-MODULES="javafx.controls,java.se,jdk.unsupported,jdk.charsets,jdk.localedata,jdk.zipfs"
+MODULES="javafx.controls,java.se,jdk.unsupported,jdk.charsets,jdk.localedata,jdk.zipfs,jdk.compiler"
 
 rm -rf dist
 mkdir -p dist
