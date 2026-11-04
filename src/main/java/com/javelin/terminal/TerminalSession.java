@@ -209,7 +209,7 @@ public final class TerminalSession {
         }
         backgroundPids.addAll(fresh);
         backgroundClaimed += fresh.size();
-        boolean done = !fresh.isEmpty() && (!backgroundTail || backgroundClaimed >= backgroundExpected);
+        boolean done = !fresh.isEmpty() && backgroundClaimed >= backgroundExpected;
         // A job that already finished (`echo hi &`) never shows up, so stop looking after a while.
         if (done || System.currentTimeMillis() - backgroundSince > BACKGROUND_WINDOW_MILLIS) backgroundBaseline = null;
     }

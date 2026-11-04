@@ -1,131 +1,116 @@
 # Javelin IDE
 
-A local-first Java code editor built around the principles of intentional computing.
+**A local-first Java IDE for focused, human-directed software development.**
 
-![Javelin IDE screenshot cover image](cover.png)
+![Javelin IDE screenshot](cover.png)
 
-The editor is designed to be a tool for making software, not a platform for consuming information. It should remain useful offline, avoid unnecessary accounts and cloud dependencies, and keep automation and AI explicitly under the programmer's control.
+Javelin is a desktop code editor built around a simple idea: software development tools should help you work on your projects without becoming a platform you have to depend on. Your projects remain ordinary files on your computer. Editing works offline, there is no account to create, and commands and AI assistance run only when you choose them.
 
-## Current status
+## What you can do
 
-Roadmap progress is tracked in `ROADMAP.md`; v0.9 (build and run) is the latest milestone. Note: v0.6 & v0.7 deferred maybe skipped to keep this IDE simple.
+- **Edit and navigate code:** Work with multiple files and tabs, syntax highlighting for common programming and markup languages, search and replace, bracket matching, indentation, and line navigation.
+- **Work with projects:** Browse and manage project files, open recent projects, find files by name, and recover unsaved tabs after a crash. File deletion goes to the system Trash or Recycle Bin.
+- **Build and run:** Build projects using detected Maven, Gradle, Make, Cargo, or npm commands. Run a command you review first, inspect output and compiler problems, and manage processes from the editor.
+- **Use an integrated terminal:** Keep terminal sessions in tabs alongside your editor and project output.
+- **Add language intelligence:** Start a language server when you want features such as diagnostics, completion, hover, go to definition, references, rename, and formatting. Javelin does not bundle language servers.
+- **Use optional local AI:** Connect to Ollama on your own computer to explain or debug a selection, generate tests, or propose a code change. Requests require your approval, and proposed edits are shown for review before you apply them.
+- **Make it yours:** Configure themes, keybindings, editor preferences, and project settings using readable text files.
 
-Included:
-- Maven build
-- JavaFX application
-- Basic editor window
-- File open/save support
-- Image viewer: PNG, JPEG, GIF and BMP files open in a read-only tab with fit, 100% and zoom (SVG still opens as text)
-- Project documentation and design principles
-- Build and run: output panel, problems panel, line-oriented terminal, process management
+Javelin does not include a built-in Git interface; use Git and your preferred Git tools as usual. See [FEATURES.md](FEATURES.md) for the complete feature list and its verification.
 
-## Build and run (v0.4)
+## Privacy and control
 
-Open a project directory, then use the **Run** menu:
+Javelin is designed to work offline without accounts, telemetry, cloud sync, or remote project storage. The optional AI integration communicates only with an Ollama service on the same computer. Language servers are started by you; their behavior and any network access they initiate depend on the server you choose.
 
-| Action | Shortcut | What it does |
-| --- | --- | --- |
-| Build | Cmd+B (Ctrl+B on Windows/Linux) | Runs the detected build command (Maven, Gradle, Make, Cargo, npm) in the project directory. |
-| Run Command... | F5 | Shows an editable command (remembered per project), then runs it. |
-| Stop All Processes | Cmd+. (Ctrl+. on Windows/Linux) | Stops every process the editor started. |
-| Processes... | | Pick one running process to stop. |
+AI is off unless you select an AI command. Before a request, Javelin shows the model, destination, scope, and full message. It does not apply proposed changes automatically. Read [PRIVACY.md](PRIVACY.md) and [AI.md](AI.md) for details.
 
-Output appears in the **Output** panel. Compiler diagnostics (javac, Maven, gcc-style) are collected in
-**Problems**; double-click one to jump to the line. **Terminal** (Cmd+` on macOS, Ctrl+` elsewhere) is a persistent shell fed one line
-at a time. Toggle the bottom panel with Ctrl+J.
+## Get started
 
-Terminals:
-- **Tabs:** `+ New Terminal` or Ctrl+Shift+` opens another terminal; each tab has its own shell and environment.
-- **Long-running commands:** while a command such as `uvicorn api.main:app --reload` runs, the tab stays bound to it. The
-  tab title shows a dot, the header shows the command, and typed lines go to the program's stdin.
-- **Standard keys:** Ctrl+C interrupts the running command (SIGINT; the shell stays alive; copies instead when text is
-  selected), Ctrl+D exits an idle shell, Ctrl+L clears the transcript, Up/Down walk history. Closing a busy tab asks first.
-- **Python virtualenvs:** after `. .venv/bin/activate` the prompt shows `(.venv) $` and the tab title shows the venv;
-  `deactivate` removes both. To do this the terminal sends one read-only `printf` of `$VIRTUAL_ENV` to the shell after a
-  command finishes (never while a command is running) and hides its output.
-- **Limits:** there is no PTY, so full-screen programs (vim, top) and job control are unsupported. Python output is
-  unbuffered (`PYTHONUNBUFFERED=1`) so servers show logs immediately. On Windows, Ctrl+C terminates the command instead of
-  sending SIGINT, and venv detection is untested.
+### Requirements
 
-Nothing runs unless you ask for it, commands are echoed before they run, and all child processes are stopped when the editor exits.
+- Java 25+
+- Maven 3.9 or newer
 
-See [FEATURES.md](FEATURES.md) for every feature and the test that verifies it.
-
-## Requirements
-
-- Java 25+ (JavaFX 25 needs JDK 23 or newer; 25 is the long-term-support release)
-- Maven 3.9+
-
-## Run
+### Run from source
 
 ```bash
+git clone https://github.com/arsjobus/java-javelin.git
+cd java-javelin
 mvn javafx:run
 ```
 
-## Build
+To open a project, use **File > Open Project**. To build the application artifacts, run:
 
 ```bash
 mvn clean package
 ```
 
-## Install on macOS
+### Download a release
 
-Build a real app that starts without a Terminal window, and install the `Javelin` command:
+Download the latest available installers from [GitHub Releases](https://github.com/arsjobus/java-javelin/releases). Release automation produces a macOS DMG and a Windows MSI for version tags. The macOS app is currently unsigned and not notarized, so macOS may display a Gatekeeper warning.
 
-```
-packaging/macos/build-app.sh      # needs JDK 25+ (with jpackage) and Maven; writes dist/Javelin IDE.app
-packaging/macos/install.sh        # copies the app to /Applications and `Javelin` to /usr/local/bin (or ~/.local/bin)
-```
+### Install on macOS from source
 
-Then, in any folder in the terminal:
+With Java 25+ and Maven installed, build and install the app bundle and the `Javelin` terminal command:
 
-```
-Javelin            # open the current folder as a project
-Javelin ~/code/x   # open that folder
+```bash
+packaging/macos/build-app.sh
+packaging/macos/install.sh
 ```
 
-Every call opens its own editor window (a new instance), so you can run `Javelin` in several folders to edit several projects at once and switch between them with Cmd+Tab or the Dock. If a folder is already open in another window you are asked before it is opened a second time (Cancel closes the new window). `packaging/macos/install.sh --uninstall` removes both. The command is installed as `Javelin`, and nothing is installed under a lowercase name any more; an older lowercase command is replaced. macOS volumes are usually case-insensitive, so the command also answers to its name typed in lowercase.
-To install somewhere else, set `JAVELIN_APPS_DIR` and `JAVELIN_BIN_DIR` (for example `JAVELIN_APPS_DIR=~/Applications`).
-Settings are kept in `~/Library/Application Support/javelin-ide`.
+Then open the current directory or a specified project:
 
-## App icon
-
-The icon is drawn in code, so it is the same on Windows, macOS and Linux. To use your own, set `app.icon` in the user
-settings to a PNG, JPEG or GIF (see `CUSTOMIZATION.md`). To get the built-in icon as files for a native packager:
-
-```
-mvn compile
-java -cp target/classes com.javelin.icon.IconExporter packaging/icons
+```bash
+Javelin
+Javelin ~/code/my-project
 ```
 
-This writes `icon.ico` (Windows), `icon.icns` (macOS) and `icon.png` (Linux).
+The install script also supports `--uninstall`. See the script or [FEATURES.md](FEATURES.md) for installation details and options.
 
-## Project structure
+## Optional integrations
 
-```text
-java-javelin/
-├── pom.xml
-├── README.md
-├── PRINCIPLES.md
-├── QUICK_RULES.md
-├── ROADMAP.md
-├── ARCHITECTURE.md
-├── DESIGN.md
-├── PRIVACY.md
-├── AI.md
-├── AI-EDITING.md
-├── EXTENSIONS.md
-├── SECURITY.md
-├── CUSTOMIZATION.md
-├── BUGS.md
-├── packaging/macos/   (build-app.sh, install.sh, the Javelin command)
-└── src/
-    ├── main/java/com/javelin/App.java (creates and connects the window's features)
-    ├── main/java/com/javelin/build/   (process, build, and diagnostics services; likewise editor, io, language, launch, settings, terminal: JavaFX-free)
-    ├── main/java/com/javelin/ui/      (JavaFX: panels and dialogs, plus one package per feature: shell, editor, project, language, run, customize, recovery, menu)
-    └── main/resources/styles/editor.css
+### Language servers
+
+Javelin provides the Language Server Protocol client; language servers are installed separately and started explicitly from the **Language** menu. Their setup commands and required runtimes depend on the server. Review project-provided commands before running them.
+
+### Local AI with Ollama
+
+Install [Ollama](https://ollama.com) and download a model, for example:
+
+```bash
+ollama pull <model>
 ```
 
-## Philosophy
+Then choose **AI > Choose Model...** in Javelin. AI features remain unavailable until you configure a local model. Javelin refuses non-local Ollama addresses; external AI providers are not supported. See [AI.md](AI.md) for usage and safeguards.
 
-The editor should stay quiet, local, understandable, durable, and human-directed. See `PRINCIPLES.md` and `QUICK_RULES.md`.
+## Configuration
+
+Settings are stored in readable `settings.conf` files. User settings are kept in the operating system's standard application configuration location; optional project settings live in `.javelin-ide/settings.conf` inside a project. Settings cover themes, shortcuts, editor preferences, commands, and more.
+
+See [CUSTOMIZATION.md](CUSTOMIZATION.md) for settings, built-in themes, custom themes, and keybindings.
+
+## Project documentation
+
+| Document | Description |
+| --- | --- |
+| [FEATURES.md](FEATURES.md) | Current features, usage notes, and the tests that verify them |
+| [PRINCIPLES.md](PRINCIPLES.md) | Product goals and design principles |
+| [QUICK_RULES.md](QUICK_RULES.md) | Short rules for product and architecture decisions |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Application layers, package boundaries, and technology choices |
+| [CUSTOMIZATION.md](CUSTOMIZATION.md) | Settings, themes, and keybindings |
+| [PRIVACY.md](PRIVACY.md) | Network behavior, privacy, and AI data handling |
+| [AI.md](AI.md) | Local AI workflow and safeguards |
+| [SECURITY.md](SECURITY.md) | Security notes |
+| [ROADMAP.md](ROADMAP.md) | Project roadmap |
+
+## Development
+
+Javelin is a Java 25 and JavaFX desktop application built with Maven. Core editor, file, build, language, settings, and terminal behavior is kept separate from the JavaFX UI so it can be tested without opening a window.
+
+Run the automated test suite with:
+
+```bash
+mvn test
+```
+
+The JavaFX UI requires a graphical desktop session to launch and use.

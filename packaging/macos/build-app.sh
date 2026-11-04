@@ -11,6 +11,9 @@ set -eu
 APP_NAME="Javelin IDE"
 # jpackage refuses a macOS app version that starts with 0, so the bundle version is kept apart from the Maven one.
 APP_VERSION="${APP_VERSION:-1.0.0}"
+case "$APP_VERSION" in
+  0.*) APP_VERSION="1.${APP_VERSION#0.}" ;;
+esac
 
 here=$(cd "$(dirname "$0")" && pwd -P)
 root=$(cd "$here/../.." && pwd -P)

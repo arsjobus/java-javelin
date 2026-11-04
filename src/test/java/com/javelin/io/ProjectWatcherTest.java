@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -83,6 +84,11 @@ class ProjectWatcherTest {
     @Test void editingTheContentsOfAFileIsNoticed() throws IOException {
         Files.writeString(project.resolve("Main.java"), "class Main { int x; }");
         assertTrue(watcher.poll());
+    }
+
+    @Test void directoryMetadataChangesAreIgnored() throws IOException {
+        Files.setLastModifiedTime(project.resolve("src"), FileTime.fromMillis(1));
+        assertFalse(watcher.poll());
     }
 
     @Test void aDeletedProjectFolderIsNoticed() throws IOException {
@@ -208,11 +214,12 @@ class ProjectWatcherTest {
 
     @Test void aCallbackThatThrowsDoesNotStopTheTimer() throws Exception {
         CountDownLatch twice = new CountDownLatch(2);
-        try (ProjectWatcher timed = new ProjectWatcher(excludes::get, () -> { twice.countDown(); throw new IllegalStateException("boom"); })) {
+        CountDownLatch first = new CountDownLatch(1);
+        try (ProjectWatcher timed = new ProjectWatcher(excludes::get, () -> { first.countDown(); twice.countDown(); throw new IllegalStateException("boom"); })) {
             timed.watch(project);
             timed.start(20);
             Files.writeString(project.resolve("one.txt"), "");
-            Thread.sleep(100);
+            assertTrue(first.await(5, TimeUnit.SECONDS), "the first change must be noticed");
             Files.writeString(project.resolve("two.txt"), "");
             assertTrue(twice.await(5, TimeUnit.SECONDS), "the second change must still be noticed");
         }

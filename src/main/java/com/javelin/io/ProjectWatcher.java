@@ -83,7 +83,7 @@ public final class ProjectWatcher implements AutoCloseable {
      * The structure below {@code projectRoot} as sorted relative paths, folders ending in {@code /}. Empty when there is
      * no root or it is not a folder (e.g. it was deleted). A folder that cannot be read is listed but not entered, and other unreadable entries are skipped, rather than failing the check.
      */
-    private record Fingerprint(boolean directory, long size, FileTime modified, Object fileKey) {}
+    private record Fingerprint(boolean directory, long size, FileTime modified) {}
 
     static Map<String, Fingerprint> snapshot(Path projectRoot, Set<String> excluded) {
         Map<String, Fingerprint> found = new HashMap<>();
@@ -117,6 +117,8 @@ public final class ProjectWatcher implements AutoCloseable {
     }
 
     private static Fingerprint fingerprint(BasicFileAttributes attrs, boolean directory) {
-        return new Fingerprint(directory, attrs.size(), attrs.lastModifiedTime(), attrs.fileKey());
+        // Directory metadata varies by filesystem; child entries capture the relevant changes.
+        if (directory) return new Fingerprint(true, 0, null);
+        return new Fingerprint(directory, attrs.size(), attrs.lastModifiedTime());
     }
 }

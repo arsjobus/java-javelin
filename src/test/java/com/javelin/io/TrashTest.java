@@ -48,10 +48,13 @@ class TrashTest {
         Trash.fallbackFor("Linux", dir, custom.toString()).moveToTrash(file("a.txt", "a"));
         assertTrue(Files.exists(custom.resolve("Trash/files/a.txt")));
 
-        for (String unset : new String[] {null, "", "  "}) {
-            Path home = Files.createDirectories(dir.resolve("home-" + unset));
-            Trash.fallbackFor("Linux", home, unset).moveToTrash(file("b-" + unset + ".txt", "b"));
-            assertTrue(Files.exists(home.resolve(".local/share/Trash/files/b-" + unset + ".txt")), "unset XDG_DATA_HOME = '" + unset + "'");
+        String[] unsetValues = {null, "", "  "};
+        for (int i = 0; i < unsetValues.length; i++) {
+            String unset = unsetValues[i];
+            String suffix = Integer.toString(i);
+            Path home = Files.createDirectories(dir.resolve("home-" + suffix));
+            Trash.fallbackFor("Linux", home, unset).moveToTrash(file("b-" + suffix + ".txt", "b"));
+            assertTrue(Files.exists(home.resolve(".local/share/Trash/files/b-" + suffix + ".txt")), "unset XDG_DATA_HOME = '" + unset + "'");
         }
     }
 

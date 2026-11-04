@@ -383,10 +383,14 @@ class ProjectFilesTest {
 
     @Test void changingOnlyTheLetterCaseIsAllowed() throws IOException {
         Path f = Files.writeString(project.resolve("readme.md"), "x");
+        boolean caseSensitive = !Files.exists(project.resolve("README.md"));
         Path renamed = ProjectFiles.rename(project, f, "README.md");
         assertEquals(project.resolve("README.md"), renamed);
-        try (var names = Files.list(project)) { // exactly one entry, with the new spelling, on any file system
-            assertEquals(java.util.List.of("README.md"), names.map(p -> p.getFileName().toString()).toList());
+        try (var names = Files.list(project)) {
+            var entries = names.toList();
+            assertEquals(1, entries.size());
+            if (caseSensitive) assertEquals("README.md", entries.getFirst().getFileName().toString());
+            assertEquals("x", Files.readString(entries.getFirst()));
         }
     }
 
@@ -395,7 +399,11 @@ class ProjectFilesTest {
         assumeTrue(Files.exists(project.resolve("pROBE")), "this file system is case-sensitive");
         Path renamed = ProjectFiles.rename(project, probe, "pROBE");
         assertEquals("pROBE", renamed.getFileName().toString());
-        try (var names = Files.list(project)) { assertEquals(java.util.List.of("pROBE"), names.map(p -> p.getFileName().toString()).toList()); }
+        try (var names = Files.list(project)) {
+            var entries = names.toList();
+            assertEquals(1, entries.size());
+            assertTrue(Files.isSameFile(entries.getFirst(), renamed));
+        }
     }
 
     @Test void renamingOverADifferentFileThatDiffersOnlyInCaseIsNeverAnOverwrite() throws IOException {

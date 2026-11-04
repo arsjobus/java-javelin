@@ -96,9 +96,8 @@ class ProjectInstancesTest {
 
     @Test void theLockFileSaysWhichProjectItIsFor() throws IOException {
         Path demo = project("demo");
-        try (ProjectInstances.Claim claim = instances().claim(demo).orElseThrow()) {
-            assertEquals(demo.toRealPath() + "\n", Files.readString(onlyLockFile()));
-        }
+        try (ProjectInstances.Claim claim = instances().claim(demo).orElseThrow()) { assertEquals(demo.toRealPath(), claim.project()); }
+        assertEquals(demo.toRealPath() + "\n", Files.readString(onlyLockFile()));
     }
 
     @Test void aFailedClaimLeavesNothingBehind() throws IOException {

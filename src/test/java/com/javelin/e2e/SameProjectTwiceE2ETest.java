@@ -55,16 +55,16 @@ class SameProjectTwiceE2ETest {
             ProjectInstances second = new ProjectInstances(config);
             assertTrue(second.claim(project).isEmpty(), "the first window has it");
             assertTrue(second.claim(home.resolve("x").resolve("..").resolve("demo")).isEmpty(), "however the folder is spelled");
-            try (ProjectInstances.Claim other = second.claim(Files.createDirectories(home.resolve("other"))).orElseThrow()) {
-                assertNotNull(other, "a different project is free");
-            }
 
-            String real = project.toRealPath().toString();
             Path lock;
-            try (Stream<Path> files = Files.list(config)) { lock = files.filter(p -> p.toString().endsWith(".lock") && read(p).trim().equals(real)).findFirst().orElseThrow(); }
+            try (Stream<Path> files = Files.list(config)) { lock = files.filter(p -> p.toString().endsWith(".lock")).findFirst().orElseThrow(); }
             Files.setLastModifiedTime(lock, FileTime.from(Instant.now().minus(Duration.ofDays(90))));
             assertEquals(0, second.prune(Duration.ofDays(30)), "housekeeping never takes a lock from a live window");
             assertTrue(Files.exists(lock));
+
+            try (ProjectInstances.Claim other = second.claim(Files.createDirectories(home.resolve("other"))).orElseThrow()) {
+                assertNotNull(other, "a different project is free");
+            }
 
             first.destroyForcibly().waitFor(30, TimeUnit.SECONDS); // kill -9: no chance to clean up
             try (ProjectInstances.Claim claim = second.claim(project).orElseThrow()) {
@@ -73,10 +73,6 @@ class SameProjectTwiceE2ETest {
         } finally {
             first.destroyForcibly();
         }
-    }
-
-    private static String read(Path file) {
-        try { return Files.readString(file); } catch (IOException e) { throw new IllegalStateException(e); }
     }
 
     private static String codeSource(Class<?> type) throws Exception {

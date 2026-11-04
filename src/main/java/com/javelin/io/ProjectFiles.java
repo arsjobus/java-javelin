@@ -163,7 +163,7 @@ public final class ProjectFiles {
         if (from.equals(root)) throw new IOException("The project folder itself cannot be moved or renamed from here.");
         requireConfined(root, from, toDir, "moved");
         Path target = toDir.resolve(name.strip());
-        if (target.equals(from)) return from; // nothing to do
+        if (target.equals(from) && target.getFileName().toString().equals(from.getFileName().toString())) return from; // nothing to do
         boolean caseOnly = Files.exists(target, LinkOption.NOFOLLOW_LINKS) && onlyCaseDiffers(from, target);
         if (Files.exists(target, LinkOption.NOFOLLOW_LINKS) && !caseOnly)
             throw new IOException("\"" + target.getFileName() + "\" already exists in " + toDir.getFileName() + ".");
