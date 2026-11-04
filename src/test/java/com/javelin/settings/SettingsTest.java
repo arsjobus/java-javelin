@@ -101,6 +101,8 @@ class SettingsTest {
         assertTrue(Settings.isUserOnly("theme"));
         assertTrue(Settings.isUserOnly("key.anything"));
         assertTrue(Settings.isUserOnly("app.icon"));
+        assertTrue(Settings.isUserOnly("ai.model"));
+        assertTrue(Settings.isUserOnly("ai.ollama.endpoint"));
         assertFalse(Settings.isUserOnly("editor.tabSize"));
         assertFalse(Settings.isUserOnly("themes"));
     }

@@ -65,14 +65,16 @@
 
 ## v0.7 — AI
 
-- [ ] Explicit AI invocation
-- [ ] Local Ollama integration
-- [ ] Explain selection
-- [ ] Debug selection
-- [ ] Generate tests
-- [ ] Proposed changes
-- [ ] Apply/reject workflow
-- [ ] Provider-independent AI interface
+Implemented as an optional, explicit, local workflow: see [AI.md](AI.md) and the AI section of [FEATURES.md](FEATURES.md).
+
+- [x] Explicit AI invocation
+- [x] Local Ollama integration
+- [x] Explain selection
+- [x] Debug selection
+- [x] Generate tests
+- [x] Proposed changes
+- [x] Apply/reject workflow
+- [x] Provider-independent AI interface
 
 ## v0.8 — Customization
 
@@ -101,7 +103,7 @@ See [HARDENING.md](HARDENING.md) for what each item covers, how it is verified, 
 - [ ] Reliable language integration
 - [ ] Reliable build/run workflow
 - [ ] Git workflow
-- [ ] Explicit local AI workflow
+- [x] Explicit local AI workflow (v0.7; `AiWorkflowE2ETest`, `OllamaProviderTest`, `OfflineGuardTest`)
 - [x] Documentation (see [FEATURES.md](FEATURES.md): every feature mapped to the test that verifies it)
 - [x] Resizable project sidebar (drag its border; works with the terminal showing; `WorkAreaTest`)
 - [x] Shell script highlighting (`ShellSyntaxTest`)
@@ -124,7 +126,7 @@ Each open item above, with what would let it be ticked. Items marked *decision* 
 | Reliable language integration | `LspTest`, `LanguageServiceTest`, `LanguageWorkflowE2ETest` (start, diagnostics, rename planned and applied to real files) | *Decision:* keep servers manual-start for 1.0 (documented) or add an explicit auto-start setting; `workspace/applyEdit` and code actions are listed as unsupported in BUGS.md |
 | Reliable build/run workflow | `BuildSystemTest`, `ProcessManagerTest`, `ProblemParserTest`, `BuildPipelineE2ETest` | A pipeline test per supported build tool that is installed on the CI machine; no PTY (documented limit) |
 | Git workflow | nothing (v0.6 was skipped) | *Decision:* build it, or move it out of 1.0 |
-| Explicit local AI workflow | nothing (v0.7 is documentation only) | *Decision:* build it, or move it out of 1.0 |
+| Explicit local AI workflow (done) | `AiWorkflowE2ETest`, `OllamaProviderTest`, `AiServiceTest`, `OfflineGuardTest` | Nothing for 1.0. Not built, on purpose: streaming a proposal into the editor, an external (non-local) provider, chat history, inline completion |
 | Release packaging | `packaging/macos/` recipe, `InstallPipelineE2ETest` (build, install, launch, uninstall with the real scripts), `BrandingTest` | Signed and notarized macOS build; a Windows and a Linux recipe, or state macOS as the only 1.0 platform |
 
 ### Maintainability: taking logic out of `App`

@@ -75,6 +75,12 @@ The text and planning logic that used to sit inside `App` now lives here as smal
 
 Beyond the v0.5 roadmap items, `LanguageServerSession` also offers signature help, document symbols and whole-document formatting. Each is an explicit menu command under Language; formatting edits are applied to the editor buffer only (unsaved, undoable) and are discarded if the text changed while the server was working.
 
+## AI (v0.7)
+
+`com.javelin.ai` is JavaFX-free and has no vendor in its middle. `AiService` is the whole workflow without a window: `prepare` turns an action and the editor's text into an `AiPlan` (what exactly will be sent, to which provider and model, with warnings) and refuses what must not be sent (no model, a credentials file, nothing selected, a selection too long to replace safely); `run` sends the plan and turns the reply into text or an `AiProposal`. It never applies anything: a proposal records the text it was made for and `isStillValid` says whether it may still be applied. Smaller pieces each do one thing: `PromptBuilder` (the wording, with the code marked as data), `AiContext` (selection or file, cut to the budget), `ResponseParser` (finds the one complete fenced code block, otherwise no proposal), `LineDiff` (the unified diff the user reviews), `TestFileNames`, `SensitiveFiles`, `AiConfig` (the user-only `ai.*` settings), `LoopbackEndpoint` (what an address may be).
+
+`AiProvider` is the seam. `OllamaProvider` implements it with the JDK's HTTP client against Ollama's streaming chat API; it is created in one place, `AiProviders`, from the user's settings, and it is the only class that may touch the network (`OfflineGuardTest` checks this, and that the client has no proxy and no redirects). Tests use a scripted provider for the logic and a fake Ollama on a loopback port for the real client. `ui.ai.AiController` runs a request on its own worker thread, so the window never waits, and applies a proposal as an ordinary editor edit.
+
 ## Customization (v0.8)
 
 `com.javelin.settings` is JavaFX-free, like `language`. `Settings` layers a user file and a project file over defaults held by the caller; the file format is deliberately trivial (`key=value`, `#` comments, values verbatim) and writes preserve the user's comments and ordering. `Keybindings` is a registry of action ids and shortcut strings, `EditorPreferences` is the validated `editor.*` view of the settings, and `Themes` discovers built-in and custom themes. `ui.shell.KeyBinder` registers each menu item with `Keybindings`, and `ui.Shortcuts` is the only place shortcut strings become JavaFX key combinations. `ui.SettingsDialog` is a thin editor over the same files.
@@ -89,7 +95,7 @@ Three layers; dependencies only point inward, and `ArchitectureTest` fails the b
 Bootstrap (App, Launcher)  ->  ui (JavaFX, one package per feature)  ->  core (JavaFX-free services)
 ```
 
-- **Core** is `build`, `editor`, `io`, `language`, `launch`, `settings`, `terminal` and `icon`. It never imports JavaFX,
+- **Core** is `ai`, `build`, `editor`, `io`, `language`, `launch`, `settings`, `terminal` and `icon`. It never imports JavaFX,
   RichTextFX, anything under `ui`, or `App`, so it is unit tested without a display. Its packages have no cycles
   (`language` and `terminal` use `build`, `settings` uses `io`). `Branding` is the one shared constant every layer may use.
 - **ui** is everything with a JavaFX type. The loose widgets in `ui/` (panels, dialogs, popups) are plain building
@@ -104,9 +110,10 @@ Bootstrap (App, Launcher)  ->  ui (JavaFX, one package per feature)  ->  core (J
   | `ui.run` | `RunController`: build, run, processes |
   | `ui.customize` | `SettingsController` and `ThemeController` |
   | `ui.recovery` | `RecoveryController`: crash recovery |
+  | `ui.ai` | `AiController` (every AI menu command, the review and the apply) and `AiDialogs` (preview, review, model choice); the AI tab is `ui.AiPanel` |
   | `ui.menu` | `MainMenu`: labels, ids, default shortcuts, and which controller method each item calls |
 
-  Inside `ui`, `shell` knows no feature; `editor` knows only `shell`; `language`, `run`, `recovery` and `customize` know
+  Inside `ui`, `shell` knows no feature; `editor` knows only `shell`; `language`, `run`, `recovery`, `ai` and `customize` know
   only `shell` and `editor`; `project` also knows `customize`; only `App` uses `menu`. The editor tells the rest of the
   window what happened to a document through `EditorListener` (opened, changed, saved, closed, settled), so the language
   servers, the project tree, settings and crash recovery react to documents without the editor knowing any of them.

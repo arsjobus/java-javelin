@@ -41,9 +41,14 @@ the editor from starting; the affected value falls back to its default.
 | `build.command` | detected | user, project | Replaces the detected command for Run > Build. The command is printed in Output when it runs. |
 | `tree.exclude` | `.git,target` | user, project | Comma-separated names hidden from the project tree and Go to File. Write `tree.exclude=` to hide nothing. |
 | `language.server.<id>` | suggestion | user, project | Pre-filled into Language > Start Language Server...; servers are still started only after you confirm. |
+| `ai.provider` | `ollama` | user only | The AI provider. Only `ollama` exists in this version. |
+| `ai.ollama.endpoint` | `http://127.0.0.1:11434` | user only | Where Ollama listens. Must be `localhost`, `127.x.y.z` or `[::1]`: anything else is refused, so your code cannot be sent to another machine by a settings line. |
+| `ai.model` | none | user only | The model to ask (for example the name `ollama list` shows). AI > Choose Model... lists the installed models and writes this for you. Until it is set, no AI action runs. |
+| `ai.maxContextChars` | `12000` | user only | 500 to 200000. The most characters of code one request sends; longer text is cut, and the preview says so. |
+| `ai.timeoutSeconds` | `120` | user only | 5 to 1800. How long Ollama may stay silent (for example while loading a large model) before the request is given up. |
 | `key.<action id>` | see below | user only | Keybinding override. |
 
-`theme`, `key.*` and `search.caseSensitive` are read from the user file only. A project cannot change your theme,
+`theme`, `key.*`, `search.caseSensitive` and `ai.*` are read from the user file only. A project cannot change your theme,
 shortcuts or Search behavior by being opened;
 if a project file contains them they are ignored with a warning.
 

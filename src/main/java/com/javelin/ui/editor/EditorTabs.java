@@ -40,6 +40,9 @@ import org.reactfx.Subscription;
  * (language servers, crash recovery, the project tree, settings files) listens through {@link EditorListener}.
  */
 public final class EditorTabs {
+    /** Tab property holding the file name Save As should offer for a document that was created with a name in mind. */
+    private static final String SUGGESTED_NAME = "suggestedName";
+
     /** An unsaved text buffer, as crash recovery needs to see it. */
     public record DirtyBuffer(Tab tab, File file, String text, int caret, int tabIndex) {}
 
@@ -184,6 +187,19 @@ public final class EditorTabs {
         tabs.getTabs().add(tab); tabs.getSelectionModel().select(tab); dirty.put(tab, false); bench.status("New document");
     }
 
+    /**
+     * Opens an unsaved tab holding {@code text} (generated tests, for one). Save As offers {@code suggestedName}; the
+     * tab is marked changed, so closing it asks first, and the work-recovery copy covers it like any unsaved document.
+     */
+    public void newDocument(String text, String suggestedName) {
+        CodeArea editor = factory.create(); editor.replaceText(text); editor.moveTo(0);
+        Tab tab = createTab("Untitled", editor, null);
+        if (suggestedName != null) tab.getProperties().put(SUGGESTED_NAME, suggestedName);
+        tabs.getTabs().add(tab); tabs.getSelectionModel().select(tab);
+        dirty.put(tab, true); updateTabTitle(tab);
+        bench.status("New document: " + (suggestedName == null ? "Untitled" : suggestedName));
+    }
+
     /** Brings back an unsaved document after a crash: a dirty tab with the recovered text and caret. */
     public Tab addRecovered(File original, String text, int caret) {
         CodeArea editor = factory.create(); editor.replaceText(text); editor.moveTo(caret);
@@ -236,6 +252,7 @@ public final class EditorTabs {
         File previous = file;
         if (file == null || forceChoose) {
             FileChooser chooser = new FileChooser(); chooser.setTitle("Save File");
+            if (file == null && tab.getProperties().get(SUGGESTED_NAME) instanceof String suggested) chooser.setInitialFileName(suggested);
             file = Dialogs.guarded(() -> chooser.showSaveDialog(tabs.getScene().getWindow())); if (file == null) return;
         }
         CodeArea editor = currentEditor().orElse(null); if (editor == null) return;

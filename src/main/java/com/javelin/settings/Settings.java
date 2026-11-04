@@ -79,9 +79,9 @@ public final class Settings {
         return null;
     }
 
-    /** Keys that only the user file may set. */
+    /** Keys that only the user file may set. {@code ai.*} is among them: a project must not choose where your code is sent. */
     public static boolean isUserOnly(String key) {
-        return key.equals("theme") || key.equals("app.icon") || key.equals(SEARCH_CASE_SENSITIVE) || key.startsWith("key.") || key.startsWith("layout.");
+        return key.equals("theme") || key.equals("app.icon") || key.equals(SEARCH_CASE_SENSITIVE) || key.startsWith("key.") || key.startsWith("layout.") || key.startsWith("ai.");
     }
 
     public Path userFile() { return userFile; }

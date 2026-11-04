@@ -2,6 +2,7 @@ package com.javelin.ui.menu;
 
 import com.javelin.settings.DefaultShortcuts;
 import com.javelin.settings.Settings;
+import com.javelin.ui.ai.AiController;
 import com.javelin.ui.customize.SettingsController;
 import com.javelin.ui.customize.ThemeController;
 import com.javelin.ui.editor.EditorTabs;
@@ -34,9 +35,10 @@ public final class MainMenu {
     private final LanguageController language;
     private final RunController run;
     private final SettingsController settings;
+    private final AiController ai;
 
     public MainMenu(KeyBinder binder, EditorTabs editors, SearchController search, ProjectSession session, ProjectTree tree, BottomPanel bottom,
-                    ThemeController themes, LanguageController language, RunController run, SettingsController settings) {
+                    ThemeController themes, LanguageController language, RunController run, SettingsController settings, AiController ai) {
         this.binder = binder;
         this.editors = editors;
         this.search = search;
@@ -47,6 +49,7 @@ public final class MainMenu {
         this.language = language;
         this.run = run;
         this.settings = settings;
+        this.ai = ai;
     }
 
     public MenuBar create(Stage stage) {
@@ -108,6 +111,16 @@ public final class MainMenu {
             binder.bound("Language", "Rename Symbol...", "language.rename", DefaultShortcuts.RENAME, language::renameSymbol),
             binder.bound("Language", "Format Document", "language.format", DefaultShortcuts.FORMAT, language::formatDocument));
 
+        Menu aiMenu = new Menu("AI");
+        aiMenu.getItems().addAll(
+            binder.bound("AI", "Explain Selection", "ai.explain", "", ai::explain),
+            binder.bound("AI", "Debug Selection", "ai.debug", "", ai::debug),
+            binder.bound("AI", "Generate Tests", "ai.generateTests", "", ai::generateTests),
+            binder.bound("AI", "Propose Change...", "ai.proposeChange", "", ai::proposeChange),
+            new SeparatorMenuItem(),
+            binder.bound("AI", "Choose Model...", "ai.chooseModel", "", ai::chooseModel),
+            binder.bound("AI", "Cancel AI Request", "ai.cancel", "", ai::cancel));
+
         Menu runMenu = new Menu("Run");
         runMenu.getItems().addAll(
             binder.bound("Run", "Build", "run.build", DefaultShortcuts.BUILD, run::build),
@@ -124,6 +137,6 @@ public final class MainMenu {
             binder.bound("Settings", "Open User Settings File", "settings.openUserFile", "", () -> settings.openFile(Settings.Scope.USER)),
             binder.bound("Settings", "Open Project Settings File", "settings.openProjectFile", "", () -> settings.openFile(Settings.Scope.PROJECT)),
             binder.bound("Settings", "Reload Settings", "settings.reload", "", settings::reload));
-        return new MenuBar(file, edit, view, languageMenu, runMenu, settingsMenu);
+        return new MenuBar(file, edit, view, languageMenu, aiMenu, runMenu, settingsMenu);
     }
 }

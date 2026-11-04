@@ -32,6 +32,14 @@ Before sending source code externally, the user should know:
 - What scope is being sent
 - What action will occur
 
+### What the AI menu sends (v0.7)
+
+AI is off until you choose a command in the AI menu, and it only talks to [Ollama](https://ollama.com) on this computer (the address must be `localhost`, `127.x.y.z` or `[::1]`; anything else is refused, there is no proxy and no redirect is followed). Nothing is sent when a file is opened, while you type, or in the background.
+
+Before each request a dialog shows the provider, the model, where the request goes, the scope (the selection, or the whole file for Generate Tests), the number of characters and the complete message. Nothing leaves the editor until you choose Send. The message holds the selected text, the file's name as shown in the project, its language, and a short task; it holds no other file, no settings and no earlier request. The answer is shown to you and is never applied without your review. The model that answers is whatever you installed: what it does with the text is up to it, and Ollama's own settings and logs are Ollama's.
+
+Files made for credentials (`.env`, private keys, key stores, cloud credential files) are refused by name, and text that looks like a key or token is flagged in the preview. These checks catch the common cases only: read the preview. The `ai.*` settings are read from your user settings file only, so a project you open cannot choose the model, the address or the limits.
+
 ## Language servers
 
 Javelin IDE itself sends nothing over the network for language features. It talks to a language server over that process's stdin/stdout, and only after the user has chosen to start one. What the server does beyond that (for example downloading indexes) is up to the server the user selected.

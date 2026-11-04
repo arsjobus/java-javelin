@@ -10,6 +10,7 @@ import com.javelin.ui.customize.SettingsController;
 import com.javelin.ui.customize.ThemeController;
 import com.javelin.ui.editor.EditorTabs;
 import com.javelin.ui.editor.SearchController;
+import com.javelin.ui.ai.AiController;
 import com.javelin.ui.language.LanguageController;
 import com.javelin.ui.menu.MainMenu;
 import com.javelin.ui.project.ProjectSession;
@@ -53,6 +54,7 @@ public final class App extends Application {
     private final SearchController search = new SearchController(bench, editors);
     private final RunController run = new RunController(bench, editors, bottom, processes);
     private final LanguageController language = new LanguageController(bench, editors, bottom, diagnostics, themes::stylePopup);
+    private final AiController ai = new AiController(bench, editors, bottom);
     private final RecoveryController recovery = new RecoveryController(bench, editors);
 
     @Override public void start(Stage stage) {
@@ -75,13 +77,13 @@ public final class App extends Application {
         settings.onApplied(tree::refresh);
 
         BorderPane root = new BorderPane();
-        root.setTop(new MainMenu(binder, editors, search, session, tree, bottom, themes, language, run, settings).create(stage));
+        root.setTop(new MainMenu(binder, editors, search, session, tree, bottom, themes, language, run, settings, ai).create(stage));
         WorkArea workArea = new WorkArea(tree.sidebar(), bottom.node());
         LayoutMemory layout = new LayoutMemory(bench.settings(), workArea, bottom, bench::status);
         root.setCenter(workArea.node());
         Region statusSpacer = new Region();
         HBox.setHgrow(statusSpacer, Priority.ALWAYS);
-        HBox statusBar = new HBox(bench.statusLabel(), statusSpacer, language.statusLabel());
+        HBox statusBar = new HBox(8, bench.statusLabel(), statusSpacer, ai.statusLabel(), language.statusLabel());
         statusBar.setPadding(new Insets(4, 8, 4, 8));
         root.setBottom(statusBar);
         Scene scene = new Scene(root, 1200, 760);
@@ -121,6 +123,7 @@ public final class App extends Application {
         recovery.stopAutosave();
         bench.background().shutdown();
         language.dispose();
+        ai.dispose();
         processes.stopAll();
         editors.dispose();
     }

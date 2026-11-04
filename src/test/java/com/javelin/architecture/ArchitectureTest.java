@@ -36,7 +36,7 @@ class ArchitectureTest {
     private static final String ROOT = "com.javelin";
     /** JavaFX-free services: they can be tested without a display and must never know a window exists. */
     private static final String[] CORE = {ROOT + ".build..", ROOT + ".editor..", ROOT + ".io..", ROOT + ".language..", ROOT + ".launch..",
-        ROOT + ".settings..", ROOT + ".terminal..", ROOT + ".icon.."};
+        ROOT + ".settings..", ROOT + ".terminal..", ROOT + ".icon..", ROOT + ".ai.."};
     private static final String[] TOOLKIT = {"javafx..", "org.fxmisc..", "org.reactfx.."};
 
     private static JavaClasses classes;
@@ -90,7 +90,7 @@ class ArchitectureTest {
     // ---- inside the ui layer: shell <- editor <- features <- menu ----
 
     private static ArchRule onlyDependOn(String feature, String... allowed) {
-        List<String> others = new ArrayList<>(List.of("shell", "editor", "project", "customize", "language", "run", "recovery", "menu"));
+        List<String> others = new ArrayList<>(List.of("shell", "editor", "project", "customize", "language", "run", "recovery", "ai", "menu"));
         others.remove(feature);
         others.removeAll(List.of(allowed));
         return noClasses().that().resideInAPackage(ROOT + ".ui." + feature + "..").should().dependOnClassesThat()
@@ -101,6 +101,7 @@ class ArchitectureTest {
     @Test void theEditorKnowsOnlyTheShell() { onlyDependOn("editor", "shell").check(classes); }
     @Test void languageKnowsOnlyTheShellAndTheEditor() { onlyDependOn("language", "shell", "editor").check(classes); }
     @Test void runKnowsOnlyTheShellAndTheEditor() { onlyDependOn("run", "shell", "editor").check(classes); }
+    @Test void aiKnowsOnlyTheShellAndTheEditor() { onlyDependOn("ai", "shell", "editor").check(classes); }
     @Test void recoveryKnowsOnlyTheShellAndTheEditor() { onlyDependOn("recovery", "shell", "editor").check(classes); }
     @Test void customizationKnowsOnlyTheShellAndTheEditor() { onlyDependOn("customize", "shell", "editor").check(classes); }
     @Test void theProjectKnowsTheShellTheEditorAndSettings() { onlyDependOn("project", "shell", "editor", "customize").check(classes); }
@@ -112,12 +113,19 @@ class ArchitectureTest {
     @Test void sharedWidgetsDoNotDependOnFeatures() {
         noClasses().that().resideInAPackage(ROOT + ".ui").should().dependOnClassesThat().resideInAnyPackage(
             ROOT + ".ui.shell..", ROOT + ".ui.editor..", ROOT + ".ui.project..", ROOT + ".ui.customize..", ROOT + ".ui.language..",
-            ROOT + ".ui.run..", ROOT + ".ui.recovery..", ROOT + ".ui.menu..").because("panels and dialogs in ui/ are plain widgets that features use").check(classes);
+            ROOT + ".ui.run..", ROOT + ".ui.recovery..", ROOT + ".ui.ai..", ROOT + ".ui.menu..").because("panels and dialogs in ui/ are plain widgets that features use").check(classes);
+    }
+
+    @Test void theWindowAndTheServiceKnowProvidersOnlyByTheirInterface() {
+        noClasses().that().resideOutsideOfPackage(ROOT + ".ai").should().dependOnClassesThat().haveFullyQualifiedName(ROOT + ".ai.OllamaProvider")
+            .because("a vendor is chosen in one place (AiProviders) from the user's settings; everything else uses AiProvider").check(classes);
     }
 
     @Test void theRulesSeeTheRealPackages() {
         assertTrue(anyClass(resideInAnyPackage(ROOT + ".ui.editor")), "ui.editor");
         assertTrue(anyClass(resideInAnyPackage(ROOT + ".language")), "language");
+        assertTrue(anyClass(resideInAnyPackage(ROOT + ".ai")), "ai");
+        assertTrue(anyClass(resideInAnyPackage(ROOT + ".ui.ai")), "ui.ai");
         assertTrue(anyClass(BOOTSTRAP), "the bootstrap classes");
     }
 

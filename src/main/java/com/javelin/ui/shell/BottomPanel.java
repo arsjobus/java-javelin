@@ -2,6 +2,7 @@ package com.javelin.ui.shell;
 
 import com.javelin.build.Problem;
 import com.javelin.build.ProcessManager;
+import com.javelin.ui.AiPanel;
 import com.javelin.ui.OutputPanel;
 import com.javelin.ui.ProblemsPanel;
 import com.javelin.ui.ReferencesPanel;
@@ -20,7 +21,7 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Region;
 
 /**
- * The editor area with the Output, Problems, References and Terminal panels under it, which can be shown and hidden.
+ * The editor area with the Output, Problems, References, AI and Terminal panels under it, which can be shown and hidden.
  *
  * <p>Like the sidebar (see {@link WorkArea}), the panel keeps the height in pixels that the user gave it: a taller
  * window gives the extra space to the editors. Until the user drags the divider (or a height is set from the last run)
@@ -38,6 +39,8 @@ public final class BottomPanel {
     private final Tab outputTab = new Tab("Output", output);
     private final Tab problemsTab = new Tab("Problems (0)", problems);
     private final Tab referencesTab = new Tab("References", references);
+    private final AiPanel ai = new AiPanel();
+    private final Tab aiTab = new Tab("AI", ai);
     private final Tab terminalTab;
     private final TabPane bottomTabs;
     private final SplitPane editorSplit;
@@ -51,7 +54,7 @@ public final class BottomPanel {
     public BottomPanel(Node editors, ProcessManager processes, Supplier<File> projectDirectory) {
         terminals = new TerminalsPanel(processes, projectDirectory);
         terminalTab = new Tab("Terminal", terminals);
-        bottomTabs = new TabPane(outputTab, problemsTab, referencesTab, terminalTab);
+        bottomTabs = new TabPane(outputTab, problemsTab, referencesTab, aiTab, terminalTab);
         editorSplit = new SplitPane(editors);
         bottomTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         editorSplit.setOrientation(Orientation.VERTICAL);
@@ -71,10 +74,12 @@ public final class BottomPanel {
     public OutputPanel output() { return output; }
     public ProblemsPanel problems() { return problems; }
     public ReferencesPanel references() { return references; }
+    public AiPanel ai() { return ai; }
     public TerminalsPanel terminals() { return terminals; }
     public Tab outputTab() { return outputTab; }
     public Tab problemsTab() { return problemsTab; }
     public Tab referencesTab() { return referencesTab; }
+    public Tab aiTab() { return aiTab; }
     public Tab terminalTab() { return terminalTab; }
 
     public void show(Tab tab) {

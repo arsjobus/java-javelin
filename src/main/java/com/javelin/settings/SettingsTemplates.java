@@ -27,6 +27,15 @@ public final class SettingsTemplates {
             #editor.lineNumbers=true
             #editor.autoIndent=true
 
+            # Optional AI (AI menu). Used only when you choose an AI action, and only with a model on THIS computer:
+            # the address must be localhost, 127.x.y.z or [::1]. These keys are read from this file only (a project cannot set them).
+            # AI > Choose Model... writes ai.model for you.
+            #ai.provider=ollama
+            #ai.ollama.endpoint=http://127.0.0.1:11434
+            #ai.model=
+            #ai.maxContextChars=12000
+            #ai.timeoutSeconds=120
+
             # Keybindings: key.<action id>=<shortcut>. Modifiers: Ctrl, Shift, Alt, Meta, Shortcut (Cmd on macOS).
             # Use "none" to remove a shortcut. Unlisted actions keep their defaults.
             """ + keys.template();

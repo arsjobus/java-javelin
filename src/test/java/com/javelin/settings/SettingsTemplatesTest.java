@@ -21,6 +21,7 @@ class SettingsTemplatesTest {
         assertTrue(user.contains("#key.file.save=Ctrl+S"));
         assertTrue(user.contains("#theme=light"));
         assertTrue(user.contains("#app.icon="));
+        assertTrue(user.contains("#ai.model=") && user.contains("#ai.ollama.endpoint=http://127.0.0.1:11434"));
         assertTrue(everyLineIsCommentedOrBlank(SettingsTemplates.project()));
         assertTrue(SettingsTemplates.project().contains("#tree.exclude=.git,target"));
     }
