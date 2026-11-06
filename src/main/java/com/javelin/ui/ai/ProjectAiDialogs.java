@@ -94,7 +94,12 @@ final class ProjectAiDialogs {
                 + " you choose Send.");
     note.setWrapText(true);
     VBox box = new VBox(8, new Label("What do you want?"), text, smart, full, note);
-    box.setPadding(new Insets(4, 0, 0, 0));
+    // Add margins to each element for consistent spacing like other dialogs
+    VBox.setMargin(box.getChildren().get(0), new Insets(12, 16, 8, 16));
+    VBox.setMargin(text, new Insets(8, 16, 8, 16));
+    VBox.setMargin(smart, new Insets(8, 16, 8, 16));
+    VBox.setMargin(full, new Insets(8, 16, 8, 16));
+    VBox.setMargin(note, new Insets(8, 16, 0, 16));
     dialog.getDialogPane().setContent(box);
     dialog.getDialogPane().getButtonTypes().setAll(CONTINUE, ButtonType.CANCEL);
     dialog.setResizable(true);
