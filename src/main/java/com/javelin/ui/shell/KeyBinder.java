@@ -28,7 +28,14 @@ public final class KeyBinder {
     item.setOnAction(e -> action.run());
     keys.register(id, menu + " > " + text.replace("...", ""), defaultBinding);
     menuItems.put(id, item);
-    item.setAccelerator(Shortcuts.parse(keys.binding(id)));
+    String binding = keys.binding(id);
+    if (!binding.isEmpty()) {
+      var combination = Shortcuts.parse(binding);
+      if (combination != null) {
+        item.setText(text + " (" + combination.getDisplayText() + ")");
+      }
+    }
+    item.setAccelerator(Shortcuts.parse(binding));
     return item;
   }
 

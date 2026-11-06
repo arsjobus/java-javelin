@@ -67,6 +67,18 @@ public final class SmartSelector {
 
     Map<String, Scored> chosen = new LinkedHashMap<>();
     List<Scored> direct = new ArrayList<>();
+    
+    // Ensure AGENTS.md and CLAUDE.md are always included at the beginning
+    for (ProjectFile f : index.files()) {
+      String name = f.name().toLowerCase(Locale.ROOT);
+      if (name.equals("agents.md") || name.equals("claude.md")) {
+        Scored s = new Scored(f);
+        s.score = 10.0; // Highest priority, unconditional inclusion
+        s.reasons.add("always included for agent instructions and model guidance");
+        merge(chosen, f, s.score, s.reasons, true);
+      }
+    }
+    
     for (CodeFacts f : facts.values()) {
       Scored s = score(f, terms);
       if (s.score > 0) direct.add(s);

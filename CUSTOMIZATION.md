@@ -127,8 +127,8 @@ Ctrl+A) are not.
 | `file.saveAs` | File > Save As | `Shortcut+Shift+S` |
 | `file.close` | File > Close | (none) |
 | `file.exit` | File > Exit | (none) |
-| `edit.undo` | Edit > Undo | (none) |
-| `edit.redo` | Edit > Redo | (none) |
+| `edit.undo` | Edit > Undo | `Shortcut+Z` |
+| `edit.redo` | Edit > Redo | `Shortcut+Y` |
 | `edit.search` | Edit > Search | `Shortcut+F` |
 | `edit.findNext` | Edit > Find Next | `F3` |
 | `edit.findPrevious` | Edit > Find Previous | `Shift+F3` |

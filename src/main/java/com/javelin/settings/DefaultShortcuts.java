@@ -26,6 +26,9 @@ public final class DefaultShortcuts {
   public static final String MATCH_BRACKET = "Shortcut+M";
   public static final String ADD_CURSOR = "Shortcut+D";
 
+  public static final String UNDO_DEFAULT = "Shortcut+Z";
+  public static final String REDO_DEFAULT = "Shortcut+Y";
+
   public static final String BOTTOM_PANEL = "Shortcut+J";
   public static final String TERMINAL = "Shortcut+BACK_QUOTE";
   public static final String NEW_TERMINAL = "Shortcut+Shift+BACK_QUOTE";
@@ -62,6 +65,8 @@ public final class DefaultShortcuts {
     all.put("edit.goToFile", GO_TO_FILE);
     all.put("edit.matchBracket", MATCH_BRACKET);
     all.put("edit.addCursor", ADD_CURSOR);
+    all.put("edit.undo", UNDO_DEFAULT);
+    all.put("edit.redo", REDO_DEFAULT);
     all.put("view.bottomPanel", BOTTOM_PANEL);
     all.put("view.terminal", TERMINAL);
     all.put("view.newTerminal", NEW_TERMINAL);
