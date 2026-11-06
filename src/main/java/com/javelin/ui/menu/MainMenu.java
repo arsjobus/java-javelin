@@ -303,6 +303,14 @@ public final class MainMenu {
             binder.bound("AI", "Generate Tests", "ai.generateTests", "", ai::generateTests),
             binder.bound("AI", "Propose Change...", "ai.proposeChange", "", ai::proposeChange),
             new SeparatorMenuItem(),
+            binder.bound("AI", "Project Request...", "ai.projectRequest", "", ai::projectRequest),
+            binder.bound(
+                "AI",
+                "Undo Last Project Change",
+                "ai.undoProjectChange",
+                "",
+                ai::undoProjectChange),
+            new SeparatorMenuItem(),
             binder.bound("AI", "Choose Model...", "ai.chooseModel", "", ai::chooseModel),
             binder.bound("AI", "Cancel AI Request", "ai.cancel", "", ai::cancel));
 

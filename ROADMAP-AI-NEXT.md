@@ -280,3 +280,25 @@ Run `mvn test` throughout development and `mvn verify` before completing the ove
 8. Evaluation and Improvements
 
 **First milestone:** Get Full Project Context working reliably with Ollama. Once Javelin can safely and transparently provide the entire repository when it fits, build smarter context selection on top of it.
+## Status
+
+All eight phases are built. `FEATURES.md` (AI section) lists each behavior with the test that proves it; the design is in `AI.md` (project requests) and `ARCHITECTURE.md` (project context). The code is `com.javelin.ai.project` (JavaFX-free) plus `ui.ai.ProjectAiController` and `ProjectAiDialogs`; the AI menu has *Project Request...* and *Undo Last Project Change*.
+
+| Phase | Where it lives | Acceptance, shown by |
+| --- | --- | --- |
+| 1 Repository Scanner | `ProjectScanner`, `GitIgnore`, `FileKinds`, `ProjectReader` | `ProjectScannerTest`, `GitIgnoreTest`, `ProjectReaderTest` |
+| 2 Project Context Builder | `ContextBuilder`, `ProjectDependencies`, `ProjectContext` | `ContextBuilderTest`, `ProjectDependenciesTest` |
+| 3 Context Budget | `ContextBudget`, `AiProvider.contextLimit`, `AiRequest.contextTokens` | `ContextBudgetTest`, `OllamaContextLimitTest` |
+| 4 Full Project context | `FullProjectSelector`, `ProjectAiService`, `ProjectPlan` | `FullProjectSelectorTest`, `ProjectAiServiceTest` |
+| 5 Smart Project Context | `SmartSelector`, `Vocabulary`, `CodeFacts`, `CodeIndex` | `SmartSelectorTest`, `VocabularyTest`, `CodeIndexTest` |
+| 6 Context Refresh | `ProjectSnapshot`, `ProjectRefresh`, `ProjectScanner.refresh` | `ProjectSnapshotTest` |
+| 7 Multi-File Proposals | `MultiFileReply`, `ProposalApplier`, `AppliedChanges` | `MultiFileReplyTest`, `ProposalApplierTest`, `ProjectAiWorkflowTest` |
+| 8 Evaluation | `SelectionEvaluation` | `SelectionEvaluationTest` |
+
+Decisions worth knowing:
+
+- **Token counts are estimates** (3 characters per token, on the high side). No tokenizer is bundled, in keeping with "avoid unnecessary dependencies"; the preview says "estimates".
+- **Runtime window versus model maximum.** `ai.contextTokens` is what a request asks Ollama for (`num_ctx`); the model's own maximum is read once per model from `/api/show` and the smaller number counts. Defaults: 32768 window, 4096 kept for the answer.
+- **Smart Context is deterministic and has no index.** It scores names, folders, declared types, mentioned words, imports (Java, Kotlin, Scala, JavaScript, TypeScript, Python), tests and documents, and softens the score of large files so one big file that merely mentions the request's words does not push out several small files the answer depends on. That softening came from the first evaluation on this repository, where a needed dependency (`LineMatch`) was dropped for it; the case is kept in `SelectionEvaluationTest`.
+- **Applying writes to disk** after per-file review, all files or none, so it can be reversed with *Undo Last Project Change* (which leaves a file edited since). A file with unsaved edits in a tab is never touched. Deleting or renaming files is not offered.
+- **Not done:** a language-server-backed or embedding-based selection (the roadmap rules out vector databases), following imports in other languages, and running the project's build or tests on a proposal (no command is ever run by the AI).

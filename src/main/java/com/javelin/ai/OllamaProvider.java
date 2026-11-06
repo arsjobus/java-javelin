@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -131,6 +132,46 @@ public final class OllamaProvider implements AiProvider {
     }
   }
 
+  /**
+   * Asks Ollama what the model's largest context is ({@code /api/show}); only the model's name is
+   * sent. Empty when Ollama does not say.
+   */
+  @Override
+  public OptionalInt contextLimit(String model, AiCancel cancel) throws AiException {
+    cancel.throwIfCancelled();
+    HttpRequest request =
+        HttpRequest.newBuilder(base.resolve("/api/show"))
+            .header("Content-Type", "application/json")
+            .POST(
+                HttpRequest.BodyPublishers.ofString(
+                    Json.write(Json.obj("model", model)), StandardCharsets.UTF_8))
+            .build();
+    try (Call call = new Call(cancel)) {
+      HttpResponse<InputStream> response = call.send(request);
+      String body;
+      try {
+        body = new String(response.body().readNBytes(4 << 20), StandardCharsets.UTF_8);
+      } catch (IOException ex) {
+        throw call.failure(ex);
+      }
+      if (response.statusCode() == 404) throw httpError(404, body, model);
+      if (response.statusCode() != 200) return OptionalInt.empty();
+      Object json;
+      try {
+        json = Json.parse(body);
+      } catch (IllegalArgumentException ex) {
+        return OptionalInt.empty();
+      }
+      var info = Json.asObject(Json.get(json, "model_info"));
+      if (info == null) return OptionalInt.empty();
+      int best = 0;
+      for (var entry : info.entrySet())
+        if (entry.getKey().endsWith(".context_length") && entry.getValue() instanceof Number n)
+          best = Math.max(best, n.intValue());
+      return best > 0 ? OptionalInt.of(best) : OptionalInt.empty();
+    }
+  }
+
   @Override
   public AiReply complete(AiRequest request, Consumer<String> onText, AiCancel cancel)
       throws AiException {
@@ -219,9 +260,11 @@ public final class OllamaProvider implements AiProvider {
   /**
    * The context window to ask Ollama for. Ollama silently cuts a prompt that does not fit its
    * window, which would make the model answer about code it was only half shown; so the window is
-   * sized from the request, with room for the answer.
+   * sized from the request, with room for the answer. A request that carries its own window (a
+   * project request, whose budget was worked out against it) is asked for exactly that.
    */
   static int contextTokens(AiRequest request) {
+    if (request.contextTokens() > 0) return Math.max(2048, request.contextTokens());
     int estimate = request.size() / 3 + 2048;
     int rounded = ((estimate + 1023) / 1024) * 1024;
     return Math.max(4096, Math.min(32768, rounded));
