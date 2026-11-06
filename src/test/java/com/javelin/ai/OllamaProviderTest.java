@@ -3,14 +3,20 @@ package com.javelin.ai;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.javelin.language.Json;
+import com.javelin.settings.Settings;
+import com.javelin.settings.Settings.Scope;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /** The real HTTP client against a fake Ollama on a loopback port. */
 class OllamaProviderTest {
+  @TempDir Path dir;
+
   private static final AiRequest REQUEST = new AiRequest("llama3", "system text", "user text");
 
   private static OllamaProvider provider(FakeOllama server, int seconds) throws AiException {
@@ -43,7 +49,21 @@ class OllamaProviderTest {
       assertEquals("system text", Json.string(messages.get(0), "content"));
       assertEquals("user", Json.string(messages.get(1), "role"));
       assertEquals("user text", Json.string(messages.get(1), "content"));
+      assertEquals("medium", Json.string(json, "think"));
       assertNotNull(Json.get(Json.get(json, "options"), "num_ctx"));
+    }
+  }
+
+  @Test
+  void theConfiguredThinkLevelIsSentToOllama() throws Exception {
+    try (FakeOllama server = new FakeOllama()) {
+      server.lines = FakeOllama.reply("ok");
+      Settings settings = new Settings(dir.resolve("settings.conf"));
+      settings.put(Scope.USER, AiConfig.ENDPOINT, server.endpoint());
+      settings.put(Scope.USER, AiConfig.THINK_LEVEL, "xhigh");
+      AiProviders.create(AiConfig.from(settings)).complete(REQUEST, s -> {}, new AiCancel());
+      Object json = Json.parse(server.requestBodies.get(0));
+      assertEquals("xhigh", Json.string(json, "think"));
     }
   }
 

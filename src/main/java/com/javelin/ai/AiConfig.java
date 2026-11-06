@@ -16,10 +16,12 @@ public record AiConfig(
     String model,
     int maxContextChars,
     Duration timeout,
-    int editBlockMinLines) {
+    int editBlockMinLines,
+    String thinkLevel) {
   public static final String PROVIDER = "ai.provider";
   public static final String ENDPOINT = "ai.ollama.endpoint";
   public static final String MODEL = "ai.model";
+  public static final String THINK_LEVEL = "ai.ollama.think";
   public static final String MAX_CONTEXT_CHARS = "ai.maxContextChars";
   public static final String TIMEOUT_SECONDS = "ai.timeoutSeconds";
 
@@ -30,6 +32,8 @@ public record AiConfig(
   public static final String EDIT_BLOCK_MIN_LINES = "ai.editBlockMinLines";
 
   public static final String DEFAULT_PROVIDER = "ollama";
+  public static final String DEFAULT_THINK_LEVEL = "medium";
+  public static final List<String> THINK_LEVELS = List.of("low", "medium", "high", "xhigh", "none");
   public static final int DEFAULT_MAX_CONTEXT_CHARS = 12_000,
       MIN_MAX_CONTEXT_CHARS = 500,
       MAX_MAX_CONTEXT_CHARS = 200_000;
@@ -57,7 +61,8 @@ public record AiConfig(
         clamp(
             settings.getInt(EDIT_BLOCK_MIN_LINES, DEFAULT_EDIT_BLOCK_MIN_LINES),
             MIN_EDIT_BLOCK_MIN_LINES,
-            MAX_EDIT_BLOCK_MIN_LINES));
+            MAX_EDIT_BLOCK_MIN_LINES),
+        thinkLevel(settings.get(THINK_LEVEL, DEFAULT_THINK_LEVEL)));
   }
 
   /**
@@ -88,6 +93,16 @@ public record AiConfig(
         MIN_EDIT_BLOCK_MIN_LINES,
         MAX_EDIT_BLOCK_MIN_LINES,
         problems);
+    String thinkLevel = settings.get(THINK_LEVEL, null);
+    if (thinkLevel != null
+        && !THINK_LEVELS.contains(thinkLevel.strip().toLowerCase(java.util.Locale.ROOT)))
+      problems.add(
+          THINK_LEVEL
+              + ": '"
+              + thinkLevel
+              + "' is not a supported level; choose one of: "
+              + String.join(", ", THINK_LEVELS)
+              + "; the default is used");
     return problems;
   }
 
@@ -102,7 +117,13 @@ public record AiConfig(
         name == null ? "" : name.strip(),
         maxContextChars,
         timeout,
-        editBlockMinLines);
+        editBlockMinLines,
+        thinkLevel);
+  }
+
+  private static String thinkLevel(String value) {
+    String normalized = value.strip().toLowerCase(java.util.Locale.ROOT);
+    return THINK_LEVELS.contains(normalized) ? normalized : DEFAULT_THINK_LEVEL;
   }
 
   private static void checkInt(

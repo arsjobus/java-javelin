@@ -36,6 +36,8 @@ public final class SettingsTemplates {
             #ai.provider=ollama
             #ai.ollama.endpoint=http://127.0.0.1:11434
             #ai.model=
+            # Ollama thinking level: low, medium, high or xhigh.
+            #ai.ollama.think=medium
             #ai.maxContextChars=12000
             #ai.timeoutSeconds=120
             # Propose Change asks for edit blocks (find these lines, change them) from this many lines up, a whole copy below it. 0 = always, 100000 = never.

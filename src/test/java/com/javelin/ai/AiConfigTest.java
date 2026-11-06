@@ -29,6 +29,7 @@ class AiConfigTest {
     assertEquals(12_000, c.maxContextChars());
     assertEquals(Duration.ofSeconds(120), c.timeout());
     assertEquals(40, c.editBlockMinLines());
+    assertEquals("medium", c.thinkLevel());
     assertTrue(AiConfig.validate(settings).isEmpty());
   }
 
@@ -68,11 +69,16 @@ class AiConfigTest {
     Files.createDirectories(project.resolve(Settings.PROJECT_DIRECTORY));
     Files.writeString(
         project.resolve(Settings.PROJECT_DIRECTORY).resolve(Settings.FILE_NAME),
-        "ai.ollama.endpoint=http://evil.example:1\nai.model=evil\nai.provider=evil\nai.maxContextChars=200000\n");
+        "ai.ollama.endpoint=http://evil.example:1\nai.model=evil\nai.provider=evil\nai.ollama.think=xhigh\nai.maxContextChars=200000\n");
     settings.setProject(project);
     for (String key :
         new String[] {
-          "ai.model", "ai.ollama.endpoint", "ai.provider", "ai.maxContextChars", "ai.timeoutSeconds"
+          "ai.model",
+          "ai.ollama.endpoint",
+          "ai.provider",
+          "ai.ollama.think",
+          "ai.maxContextChars",
+          "ai.timeoutSeconds"
         }) {
       assertTrue(Settings.isUserOnly(key), key);
       assertThrows(
@@ -117,5 +123,20 @@ class AiConfigTest {
     settings.put(Scope.USER, "ai.editBlockMinLines", "many");
     assertEquals(40, AiConfig.from(settings).editBlockMinLines());
     assertTrue(AiConfig.validate(settings).get(0).startsWith("ai.editBlockMinLines"));
+  }
+
+  @Test
+  void ollamaThinkLevelsAreReadAndValidated() {
+    for (String level : AiConfig.THINK_LEVELS) {
+      settings.put(Scope.USER, AiConfig.THINK_LEVEL, level.toUpperCase());
+      assertEquals(level, AiConfig.from(settings).thinkLevel());
+      assertTrue(AiConfig.validate(settings).isEmpty());
+    }
+
+    settings.put(Scope.USER, AiConfig.THINK_LEVEL, "extreme");
+    assertEquals(AiConfig.DEFAULT_THINK_LEVEL, AiConfig.from(settings).thinkLevel());
+    assertTrue(AiConfig.validate(settings).get(0).startsWith(AiConfig.THINK_LEVEL));
+    settings.put(Scope.USER, AiConfig.THINK_LEVEL, "high");
+    assertEquals("high", AiConfig.from(settings).withModel("model").thinkLevel());
   }
 }

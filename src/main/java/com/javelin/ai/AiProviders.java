@@ -15,7 +15,7 @@ public final class AiProviders {
 
   public static AiProvider create(AiConfig config) throws AiException {
     if (config.provider().equals(OllamaProvider.ID))
-      return new OllamaProvider(config.endpoint(), config.timeout());
+      return new OllamaProvider(config.endpoint(), config.timeout(), config.thinkLevel());
     throw new AiException(
         AiException.Kind.REFUSED,
         "'"

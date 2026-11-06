@@ -55,14 +55,23 @@ public final class OllamaProvider implements AiProvider {
 
   private final URI base;
   private final Duration timeout;
+  private final String thinkLevel;
   private final HttpClient http;
 
   /**
    * @throws AiException REFUSED when {@code endpoint} is not an address on this computer
    */
   public OllamaProvider(String endpoint, Duration timeout) throws AiException {
+    this(endpoint, timeout, AiConfig.DEFAULT_THINK_LEVEL);
+  }
+
+  /**
+   * @throws AiException REFUSED when {@code endpoint} is not an address on this computer
+   */
+  public OllamaProvider(String endpoint, Duration timeout, String thinkLevel) throws AiException {
     this.base = LoopbackEndpoint.require(endpoint);
     this.timeout = timeout;
+    this.thinkLevel = thinkLevel;
     this.http =
         HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
@@ -185,6 +194,7 @@ public final class OllamaProvider implements AiProvider {
                     List.of(
                         Json.obj("role", "system", "content", request.system()),
                         Json.obj("role", "user", "content", request.prompt())),
+                "think", thinkLevel,
                 "options", Json.obj("temperature", 0.2, "num_ctx", contextTokens(request))));
     HttpRequest http =
         HttpRequest.newBuilder(base.resolve("/api/chat"))
