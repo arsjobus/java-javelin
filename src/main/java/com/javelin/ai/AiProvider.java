@@ -1,6 +1,7 @@
 package com.javelin.ai;
 
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.function.Consumer;
 
 /**
@@ -23,6 +24,14 @@ public interface AiProvider {
 
   /** The models the provider can run now, sorted. */
   List<String> models(AiCancel cancel) throws AiException;
+
+  /**
+   * The most tokens of context the model supports, when the provider can say. It is information for
+   * the context budget; it carries no code. The default is "unknown".
+   */
+  default OptionalInt contextLimit(String model, AiCancel cancel) throws AiException {
+    return OptionalInt.empty();
+  }
 
   /**
    * Sends the request and waits for the whole answer, passing each piece of text to {@code onText}

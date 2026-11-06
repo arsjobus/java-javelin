@@ -34,7 +34,7 @@ public final class ChangeReply {
    * first code block must come from after it. A reasoning section that never closes swallows the
    * rest, so such a reply proposes nothing.
    */
-  static String withoutReasoning(String reply) {
+  public static String withoutReasoning(String reply) {
     return REASONING.matcher(reply).replaceAll("").strip();
   }
 

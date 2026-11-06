@@ -47,6 +47,12 @@ the editor from starting; the affected value falls back to its default.
 | `ai.maxContextChars` | `12000` | user only | 500 to 200000. The most characters of code one request sends; longer text is cut, and the preview says so. |
 | `ai.timeoutSeconds` | `120` | user only | 5 to 1800. How long Ollama may stay silent (for example while loading a large model) before the request is given up. |
 | `ai.editBlockMinLines` | `40` | user only | 0 to 100000. Propose Change asks the model for edit blocks (the lines to find and what they become) when the selected code has at least this many lines, and for a whole replacement below it. `0` always asks for edit blocks, `100000` never. A reply in either form is understood whatever was asked, so this only changes what the model is told; if your model does better with one form, set it here. |
+| `ai.contextTokens` | `32768` | user only | 2048 to 262144. The context window a project request asks Ollama for (`num_ctx`). It is not what the model supports: if the model supports less, the smaller number is used and the preview says so. A bigger window needs more memory. |
+| `ai.reserveTokens` | `4096` | user only | 256 to 65536. Room kept free in the window for the model's answer; project files only get what is left. |
+| `ai.project.exclude` | none | user only | Comma-separated patterns, written like `.gitignore` lines (`*.sql`, `docs/old/`, `src/generated/`), for files and folders a project request never reads. Added to what is always left out. |
+| `ai.project.maxFileBytes` | `100000` | user only | 1000 to 2000000. Files larger than this are not sent. |
+| `ai.project.maxFiles` | `5000` | user only | 10 to 100000. The scan stops taking files after this many (in path order) and says so. |
+| `ai.project.gitignore` | `true` | user only | Whether `.gitignore` files in the project are respected. Build output, caches, binaries and credentials files are left out either way.
 | `key.<action id>` | see below | user only | Keybinding override. |
 
 `theme`, `key.*`, `search.caseSensitive` and `ai.*` are read from the user file only. A project cannot change your theme,

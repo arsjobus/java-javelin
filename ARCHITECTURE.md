@@ -81,6 +81,10 @@ Beyond the v0.5 roadmap items, `LanguageServerSession` also offers signature hel
 
 `AiProvider` is the seam. `OllamaProvider` implements it with the JDK's HTTP client against Ollama's streaming chat API; it is created in one place, `AiProviders`, from the user's settings, and it is the only class that may touch the network (`OfflineGuardTest` checks this, and that the client has no proxy and no redirects). Tests use a scripted provider for the logic and a fake Ollama on a loopback port for the real client. `ui.ai.AiController` runs a request on its own worker thread, so the window never waits, and applies a proposal as an ordinary editor edit.
 
+### Project context (v0.9)
+
+`com.javelin.ai.project` is part of the `ai` slice and equally JavaFX-free. It is a pipeline of small, pure steps: `ProjectScanner` (with `GitIgnore` and `FileKinds`) makes a `ProjectIndex`; a selector (`FullProjectSelector` or `SmartSelector`, the latter using `Vocabulary`, `CodeFacts` and `CodeIndex`) returns ordered `Pick`s with reasons; `ContextBuilder` fits them to a `ContextBudget` and writes the text and a `ProjectSnapshot`; `ProjectPromptBuilder` wraps it as an `AiRequest` that carries its own window; `ProjectAiService` returns a `ProjectPlan` (what would be sent, for the preview) and runs it. Replies become a `ProjectProposal` through `MultiFileReply`, which reuses the single-file `ChangeReply` per file; `ProposalApplier` checks and writes it and `AppliedChanges` reverses it. Every file access goes through `ProjectReader.resolve`, the one place that decides a path is inside the project. The model's own maximum context comes from `AiProvider.contextLimit`, so no provider detail leaks into the pipeline. The window side is `ui.ai.ProjectAiController` and `ProjectAiDialogs`.
+
 ## Customization (v0.8)
 
 `com.javelin.settings` is JavaFX-free, like `language`. `Settings` layers a user file and a project file over defaults held by the caller; the file format is deliberately trivial (`key=value`, `#` comments, values verbatim) and writes preserve the user's comments and ordering. `Keybindings` is a registry of action ids and shortcut strings, `EditorPreferences` is the validated `editor.*` view of the settings, and `Themes` discovers built-in and custom themes. `ui.shell.KeyBinder` registers each menu item with `Keybindings`, and `ui.Shortcuts` is the only place shortcut strings become JavaFX key combinations. `ui.SettingsDialog` is a thin editor over the same files.
@@ -110,7 +114,7 @@ Bootstrap (App, Launcher)  ->  ui (JavaFX, one package per feature)  ->  core (J
   | `ui.run` | `RunController`: build, run, processes |
   | `ui.customize` | `SettingsController` and `ThemeController` |
   | `ui.recovery` | `RecoveryController`: crash recovery |
-  | `ui.ai` | `AiController` (every AI menu command, the review and the apply) and `AiDialogs` (preview, review, model choice); the AI tab is `ui.AiPanel` |
+  | `ui.ai` | `AiController` (every AI menu command, the review and the apply), `AiDialogs` (preview, review, model choice), `ProjectAiController` and `ProjectAiDialogs` (project requests: the file preview, the multi-file review, undo); the AI tab is `ui.AiPanel` |
   | `ui.menu` | `MainMenu`: labels, ids, default shortcuts, and which controller method each item calls |
 
   Inside `ui`, `shell` knows no feature; `editor` knows only `shell`; `language`, `run`, `recovery`, `ai` and `customize` know

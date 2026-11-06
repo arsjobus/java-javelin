@@ -48,6 +48,7 @@ public final class AiController {
             thread.setDaemon(true);
             return thread;
           });
+  private final ProjectAiController project;
   private AiCancel running; // the request in flight; FX thread only
 
   public AiController(Workbench bench, EditorTabs editors, BottomPanel bottom) {
@@ -55,6 +56,7 @@ public final class AiController {
     this.editors = editors;
     this.bottom = bottom;
     bottom.ai().onCancel(this::cancel);
+    this.project = new ProjectAiController(this, bench, editors, bottom);
   }
 
   /** The network indicator for the status bar: empty unless a request is in flight. */
@@ -76,6 +78,16 @@ public final class AiController {
 
   public void proposeChange() {
     start(AiAction.PROPOSE_CHANGE);
+  }
+
+  /** AI > Project Request...: a request about the whole open project. */
+  public void projectRequest() {
+    project.request();
+  }
+
+  /** AI > Undo Last Project Change: puts back the files the last project change wrote. */
+  public void undoProjectChange() {
+    project.undo();
   }
 
   /** Cancels the request in flight, if there is one. */
@@ -103,7 +115,7 @@ public final class AiController {
     chooseModel(() -> {});
   }
 
-  private void chooseModel(Runnable afterChoice) {
+  void chooseModel(Runnable afterChoice) {
     if (busy()) return;
     AiConfig config = AiConfig.from(bench.settings());
     AiProvider provider = providerFor(config);
@@ -253,7 +265,7 @@ public final class AiController {
     report(ex);
   }
 
-  private void report(AiException ex) {
+  void report(AiException ex) {
     bench.status(
         ex.kind() == AiException.Kind.CANCELLED
             ? "AI request cancelled."
@@ -296,25 +308,29 @@ public final class AiController {
 
   // ---- bookkeeping ----
 
-  private boolean busy() {
+  ExecutorService worker() {
+    return worker;
+  }
+
+  boolean busy() {
     if (running == null) return false;
     bench.status("An AI request is already running. Cancel it first (AI > Cancel AI Request).");
     return true;
   }
 
-  private AiCancel begin(String status) {
+  AiCancel begin(String status) {
     AiCancel cancel = new AiCancel();
     running = cancel;
     bench.status(status);
     return cancel;
   }
 
-  private void end(AiCancel cancel) {
+  void end(AiCancel cancel) {
     if (running == cancel) running = null;
     statusLabel.setText("");
   }
 
-  private AiProvider providerFor(AiConfig config) {
+  AiProvider providerFor(AiConfig config) {
     try {
       return AiProviders.create(config);
     } catch (AiException ex) {
