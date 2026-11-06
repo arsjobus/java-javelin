@@ -194,7 +194,8 @@ public final class OllamaProvider implements AiProvider {
                     List.of(
                         Json.obj("role", "system", "content", request.system()),
                         Json.obj("role", "user", "content", request.prompt())),
-                "think", thinkLevel,
+                "think",
+                    thinkLevel == null || thinkLevel.equalsIgnoreCase("none") ? false : thinkLevel,
                 "options", Json.obj("temperature", 0.2, "num_ctx", contextTokens(request))));
     HttpRequest http =
         HttpRequest.newBuilder(base.resolve("/api/chat"))
