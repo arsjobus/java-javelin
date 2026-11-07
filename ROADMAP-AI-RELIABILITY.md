@@ -59,6 +59,8 @@ Tests: `EvalCorpusTest` (every fixture fails before and passes after its referen
 
 Exit: baseline published and reproducible within the stated variance.
 
+**Status.** The corpus, the runner, the failure taxonomy and their tests are built (see [docs/eval/README.md](docs/eval/README.md)). The baseline is not: it needs a run against Qwen 3.5 9B (`mvn -Peval test -Deval.model=qwen3.5:9b`), and the Markdown it writes is committed as `docs/eval/baseline-<date>.md`. Two small departures from the text above: the taxonomy also has `TIMEOUT`, and add-tests tasks are judged by whether the generated tests pass on the real code and fail on a planted bug, since they have no test to fail before.
+
 ## Phase 1: Tighter edit contract
 
 **Goal:** the model's reply is parsed with no ambiguity, or rejected with a reason.

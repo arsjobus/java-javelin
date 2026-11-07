@@ -184,6 +184,12 @@ public final class OllamaProvider implements AiProvider {
   @Override
   public AiReply complete(AiRequest request, Consumer<String> onText, AiCancel cancel)
       throws AiException {
+    return completeStreaming(request, onText::accept, cancel);
+  }
+
+  @Override
+  public AiReply completeStreaming(
+      AiRequest request, AiProvider.StreamListener listener, AiCancel cancel) throws AiException {
     cancel.throwIfCancelled();
     String body =
         Json.write(
@@ -196,7 +202,7 @@ public final class OllamaProvider implements AiProvider {
                         Json.obj("role", "user", "content", request.prompt())),
                 "think",
                     thinkLevel == null || thinkLevel.equalsIgnoreCase("none") ? false : thinkLevel,
-                "options", Json.obj("temperature", 0.2, "num_ctx", contextTokens(request))));
+                "options", options(request)));
     HttpRequest http =
         HttpRequest.newBuilder(base.resolve("/api/chat"))
             .header("Content-Type", "application/json")
@@ -216,6 +222,7 @@ public final class OllamaProvider implements AiProvider {
       StringBuilder text = new StringBuilder();
       boolean done = false;
       boolean truncated = false;
+      AiUsage usage = AiUsage.UNKNOWN;
       try (BufferedReader reader =
           new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
         String line;
@@ -237,6 +244,11 @@ public final class OllamaProvider implements AiProvider {
           if (error != null)
             throw new AiException(
                 AiException.Kind.BAD_RESPONSE, "Ollama reported an error: " + error);
+          String thought = Json.string(Json.get(json, "message"), "thinking");
+          if (thought != null && !thought.isEmpty()) {
+            listener.onThinking(thought);
+            cancel.throwIfCancelled();
+          }
           String piece = Json.string(Json.get(json, "message"), "content");
           if (piece != null && !piece.isEmpty()) {
             if (text.length() + piece.length() > MAX_REPLY_CHARS)
@@ -246,12 +258,16 @@ public final class OllamaProvider implements AiProvider {
                       + MAX_REPLY_CHARS
                       + " characters; reading was stopped.");
             text.append(piece);
-            onText.accept(piece);
+            listener.onText(piece);
             cancel.throwIfCancelled();
           }
           if (Json.bool(json, "done")) {
             done = true;
             truncated = "length".equals(Json.string(json, "done_reason"));
+            int promptTokens = Json.integer(json, "prompt_eval_count", -1);
+            int answerTokens = Json.integer(json, "eval_count", -1);
+            if (promptTokens >= 0 && answerTokens >= 0)
+              usage = new AiUsage(promptTokens, answerTokens);
           }
         }
       } catch (IOException ex) {
@@ -264,8 +280,17 @@ public final class OllamaProvider implements AiProvider {
             : new AiException(
                 AiException.Kind.BAD_RESPONSE, "Ollama stopped before the answer was finished.");
       }
-      return new AiReply(text.toString(), truncated);
+      return new AiReply(text.toString(), truncated, usage);
     }
+  }
+
+  /** The {@code options} of the chat call: how to sample, and the window. */
+  private static java.util.Map<String, Object> options(AiRequest request) {
+    java.util.Map<String, Object> options =
+        Json.obj(
+            "temperature", request.sampling().temperature(), "num_ctx", contextTokens(request));
+    if (request.sampling().seed() != null) options.put("seed", request.sampling().seed());
+    return options;
   }
 
   /**
@@ -388,7 +413,8 @@ public final class OllamaProvider implements AiProvider {
             AiException.Kind.TIMEOUT,
             "Ollama stopped answering for "
                 + timeout.toSeconds()
-                + " seconds. The model may still be loading; try again, or raise ai.timeoutSeconds in your user settings.");
+                + " seconds. The model may still be loading; try again, or raise ai.timeoutSeconds"
+                + " in your user settings.");
       return null;
     }
 

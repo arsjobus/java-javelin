@@ -228,8 +228,20 @@ public final class AiController {
         () -> {
           try {
             AiResult result =
-                service.run(
-                    plan, piece -> Platform.runLater(() -> bottom.ai().append(piece)), cancel);
+                service.runStreaming(
+                    plan,
+                    new AiProvider.StreamListener() {
+                      @Override
+                      public void onText(String piece) {
+                        Platform.runLater(() -> bottom.ai().append(piece));
+                      }
+
+                      @Override
+                      public void onThinking(String piece) {
+                        Platform.runLater(() -> bottom.ai().appendThinking(piece));
+                      }
+                    },
+                    cancel);
             Platform.runLater(() -> finished(cancel, plan, editor, result));
           } catch (AiException ex) {
             Platform.runLater(() -> failed(cancel, ex));

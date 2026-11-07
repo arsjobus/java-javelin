@@ -66,11 +66,15 @@ public final class EditBlocks {
     if (search != null)
       throw new AiException(
           AiException.Kind.BAD_RESPONSE,
-          "The reply stops inside an edit block (it was probably cut off), so nothing is proposed. Its text is in the AI panel.");
+          FailureReason.TRUNCATED,
+          "The reply stops inside an edit block (it was probably cut off), so nothing is proposed."
+              + " Its text is in the AI panel.");
     if (edits.isEmpty())
       throw new AiException(
           AiException.Kind.BAD_RESPONSE,
-          "The reply has no complete edit block, so there is no change to propose. Its text is in the AI panel.");
+          FailureReason.NO_EDIT_BLOCK,
+          "The reply has no complete edit block, so there is no change to propose. Its text is in"
+              + " the AI panel.");
     return new Parsed(edits, String.join("\n", outside).strip());
   }
 
@@ -87,14 +91,17 @@ public final class EditBlocks {
       if (edit.search().isBlank())
         throw new AiException(
             AiException.Kind.BAD_RESPONSE,
+            FailureReason.UNPARSEABLE,
             "Edit "
                 + number
-                + " has an empty SEARCH part, so it does not say which lines it changes. Nothing was applied.");
+                + " has an empty SEARCH part, so it does not say which lines it changes. Nothing"
+                + " was applied.");
       List<LineMatch.Found> found = LineMatch.candidates(lines, search, 0);
       String first = search.stream().filter(l -> !l.isBlank()).findFirst().orElse("").strip();
       if (found.isEmpty())
         throw new AiException(
             AiException.Kind.BAD_RESPONSE,
+            FailureReason.ANCHOR_NOT_FOUND,
             "Edit "
                 + number
                 + " searches for lines that are not in the code (it starts with `"
@@ -103,6 +110,7 @@ public final class EditBlocks {
       if (found.size() > 1)
         throw new AiException(
             AiException.Kind.BAD_RESPONSE,
+            FailureReason.ANCHOR_NOT_FOUND,
             "Edit "
                 + number
                 + " matches "

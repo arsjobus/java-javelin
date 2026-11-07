@@ -6,6 +6,7 @@ import com.javelin.ai.AiException;
 import com.javelin.ai.AiProvider;
 import com.javelin.ai.AiReply;
 import com.javelin.ai.AiRequest;
+import com.javelin.ai.FailureReason;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -129,26 +130,41 @@ public final class ProjectAiService {
   public ProjectAiResult run(
       ProjectPlan plan, ProjectWorkspace workspace, Consumer<String> onText, AiCancel cancel)
       throws AiException {
+    return runStreaming(plan, workspace, onText::accept, cancel);
+  }
+
+  /** Sends a plan and reports answer and thinking output separately as they arrive. */
+  public ProjectAiResult runStreaming(
+      ProjectPlan plan,
+      ProjectWorkspace workspace,
+      AiProvider.StreamListener listener,
+      AiCancel cancel)
+      throws AiException {
     cancel.throwIfCancelled();
-    AiReply reply = provider.complete(plan.request(), onText, cancel);
+    AiReply reply = provider.completeStreaming(plan.request(), listener, cancel);
     cancel.throwIfCancelled();
     String text = reply.text();
     ProjectSnapshot snapshot = plan.context().snapshot();
     if (text.isBlank())
-      throw new AiException(AiException.Kind.BAD_RESPONSE, "The model sent an empty answer.");
+      throw new AiException(
+          AiException.Kind.BAD_RESPONSE,
+          FailureReason.NO_EDIT_BLOCK,
+          "The model sent an empty answer.");
     if (!MultiFileReply.looksLike(text))
       return new ProjectAiResult(
           text,
           null,
           reply.truncated() ? "The answer was cut off by the model; it may be incomplete." : null,
-          snapshot);
+          snapshot,
+          reply.truncated() ? FailureReason.TRUNCATED : FailureReason.NO_EDIT_BLOCK);
     if (reply.truncated())
       return new ProjectAiResult(
           text,
           null,
           "The reply was cut off by the model, so nothing is proposed. Its text is in the AI"
               + " panel.",
-          snapshot);
+          snapshot,
+          FailureReason.TRUNCATED);
     ProjectProposal proposal =
         MultiFileReply.parse(text, workspace.reader(), snapshot, workspace.options());
     String note = proposal.problems().isEmpty() ? null : String.join("\n", proposal.problems());
@@ -160,7 +176,8 @@ public final class ProjectAiService {
               ? "The reply names files but holds no change that differs from what the files"
                   + " contain."
               : "No change could be used:\n" + note,
-          snapshot);
+          snapshot,
+          proposal.failures().isEmpty() ? FailureReason.NO_EDIT_BLOCK : proposal.failures().get(0));
     return new ProjectAiResult(text, proposal, note, snapshot);
   }
 }

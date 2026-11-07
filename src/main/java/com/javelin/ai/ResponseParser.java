@@ -34,18 +34,23 @@ public final class ResponseParser {
     if (open < 0)
       throw new AiException(
           AiException.Kind.BAD_RESPONSE,
-          "The reply has no code block, so there is no change to propose. Its text is in the AI panel.");
+          FailureReason.NO_EDIT_BLOCK,
+          "The reply has no code block, so there is no change to propose. Its text is in the AI"
+              + " panel.");
     int close = -1;
     for (int i = open + 1; i < lines.size() && close < 0; i++)
       if (Fence.closes(lines.get(i), fenceChar, fenceLength)) close = i;
     if (close < 0)
       throw new AiException(
           AiException.Kind.BAD_RESPONSE,
-          "The reply stops inside its code block (it was probably cut off), so nothing is proposed. Its text is in the AI panel.");
+          FailureReason.TRUNCATED,
+          "The reply stops inside its code block (it was probably cut off), so nothing is proposed."
+              + " Its text is in the AI panel.");
     String code = String.join("\n", lines.subList(open + 1, close));
     if (code.isBlank())
       throw new AiException(
           AiException.Kind.BAD_RESPONSE,
+          FailureReason.NO_EDIT_BLOCK,
           "The code block in the reply is empty, so there is no change to propose.");
     int extra = 0;
     for (int i = close + 1; i < lines.size(); i++) {

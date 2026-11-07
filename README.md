@@ -113,4 +113,10 @@ Run the automated test suite with:
 mvn test
 ```
 
+To measure how reliably a local model edits code through the AI menu (needs Ollama running; see [docs/eval/README.md](docs/eval/README.md)):
+
+```bash
+mvn -Peval test -Deval.model=qwen3.5:9b-mlx
+```
+
 The JavaFX UI requires a graphical desktop session to launch and use.

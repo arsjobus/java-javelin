@@ -69,12 +69,21 @@ public final class AiService {
    * returned result is the whole answer.
    */
   public AiResult run(AiPlan plan, Consumer<String> onText, AiCancel cancel) throws AiException {
+    return runStreaming(plan, onText::accept, cancel);
+  }
+
+  /** Sends a plan and reports answer and thinking output separately as they arrive. */
+  public AiResult runStreaming(AiPlan plan, AiProvider.StreamListener listener, AiCancel cancel)
+      throws AiException {
     cancel.throwIfCancelled();
-    AiReply reply = provider.complete(plan.request(), onText, cancel);
+    AiReply reply = provider.completeStreaming(plan.request(), listener, cancel);
     cancel.throwIfCancelled();
     String text = reply.text();
     if (text.isBlank())
-      throw new AiException(AiException.Kind.BAD_RESPONSE, "The model sent an empty answer.");
+      throw new AiException(
+          AiException.Kind.BAD_RESPONSE,
+          FailureReason.NO_EDIT_BLOCK,
+          "The model sent an empty answer.");
     if (!plan.action().proposes())
       return new AiResult(
           text,
@@ -84,7 +93,10 @@ public final class AiService {
       return new AiResult(
           text,
           null,
-          "The reply was cut off by the model, so nothing is proposed. Its text is in the AI panel.");
+          "The reply was cut off by the model, so nothing is proposed. Its text is in the AI"
+              + " panel.",
+          List.of(),
+          FailureReason.TRUNCATED);
     try {
       if (plan.action() == AiAction.GENERATE_TESTS) {
         ResponseParser.Parsed parsed = ResponseParser.parse(text);
@@ -100,7 +112,7 @@ public final class AiService {
               plan.context().languageId(), plan.context().text(), proposal.replacement()));
       return new AiResult(text, proposal, extraBlocksNote(change.extraBlocks()), findings);
     } catch (AiException ex) {
-      return new AiResult(text, null, ex.getMessage());
+      return new AiResult(text, null, ex.getMessage(), List.of(), ex.reason());
     }
   }
 

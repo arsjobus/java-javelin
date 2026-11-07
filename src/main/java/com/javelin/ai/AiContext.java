@@ -61,6 +61,7 @@ public record AiContext(
     if (truncated && action == AiAction.PROPOSE_CHANGE)
       throw new AiException(
           AiException.Kind.REFUSED,
+          FailureReason.OVERSIZED,
           "The selection is "
               + total
               + " characters, over the limit of "
