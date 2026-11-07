@@ -26,6 +26,14 @@ public final class AiPanel extends BorderPane {
   private final Button copy = new Button("Copy");
   private final Button clear = new Button("Clear");
   private Runnable onCancel = () -> {};
+  private boolean thinkingSeen;
+  private StreamPart streamPart = StreamPart.NONE;
+
+  private enum StreamPart {
+    NONE,
+    THINKING,
+    ANSWER
+  }
 
   public AiPanel() {
     text.setEditable(false);
@@ -44,6 +52,8 @@ public final class AiPanel extends BorderPane {
         e -> {
           text.clear();
           header.setText(IDLE);
+          thinkingSeen = false;
+          streamPart = StreamPart.NONE;
         });
     Region spacer = new Region();
     HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -64,9 +74,31 @@ public final class AiPanel extends BorderPane {
     text.clear();
     header.setText(title + "  |  " + indicator);
     cancel.setDisable(false);
+    thinkingSeen = false;
+    streamPart = StreamPart.NONE;
   }
 
   public void append(String piece) {
+    if (piece.isEmpty()) return;
+    if (streamPart != StreamPart.ANSWER) {
+      if (thinkingSeen) {
+        if (!text.getText().isEmpty()) text.appendText("\n\n");
+        text.appendText("Answer:\n");
+      }
+      streamPart = StreamPart.ANSWER;
+    }
+    text.appendText(piece);
+  }
+
+  /** Appends model thinking, kept visibly separate from the answer and any proposed edit. */
+  public void appendThinking(String piece) {
+    if (piece.isEmpty()) return;
+    if (streamPart != StreamPart.THINKING) {
+      if (!text.getText().isEmpty()) text.appendText("\n\n");
+      text.appendText("Thinking:\n");
+      streamPart = StreamPart.THINKING;
+    }
+    thinkingSeen = true;
     text.appendText(piece);
   }
 

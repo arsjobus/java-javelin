@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 /** A provider that answers from a script, for testing everything above the HTTP client. */
 final class FakeAiProvider implements AiProvider {
   String answer = "";
+  String thinking = "";
   boolean truncated;
   AiException failure;
   List<String> models = List.of("fake-model");
@@ -43,6 +44,16 @@ final class FakeAiProvider implements AiProvider {
     requests.add(request);
     if (failure != null) throw failure;
     onText.accept(answer);
+    return new AiReply(answer, truncated);
+  }
+
+  @Override
+  public AiReply completeStreaming(
+      AiRequest request, AiProvider.StreamListener listener, AiCancel cancel) throws AiException {
+    requests.add(request);
+    if (failure != null) throw failure;
+    if (!thinking.isEmpty()) listener.onThinking(thinking);
+    listener.onText(answer);
     return new AiReply(answer, truncated);
   }
 }

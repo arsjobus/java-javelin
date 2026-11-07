@@ -130,8 +130,18 @@ public final class ProjectAiService {
   public ProjectAiResult run(
       ProjectPlan plan, ProjectWorkspace workspace, Consumer<String> onText, AiCancel cancel)
       throws AiException {
+    return runStreaming(plan, workspace, onText::accept, cancel);
+  }
+
+  /** Sends a plan and reports answer and thinking output separately as they arrive. */
+  public ProjectAiResult runStreaming(
+      ProjectPlan plan,
+      ProjectWorkspace workspace,
+      AiProvider.StreamListener listener,
+      AiCancel cancel)
+      throws AiException {
     cancel.throwIfCancelled();
-    AiReply reply = provider.complete(plan.request(), onText, cancel);
+    AiReply reply = provider.completeStreaming(plan.request(), listener, cancel);
     cancel.throwIfCancelled();
     String text = reply.text();
     ProjectSnapshot snapshot = plan.context().snapshot();

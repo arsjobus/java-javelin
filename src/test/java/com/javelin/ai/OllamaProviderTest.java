@@ -36,6 +36,40 @@ class OllamaProviderTest {
   }
 
   @Test
+  void thinkingIsStreamedSeparatelyFromTheAnswer() throws Exception {
+    try (FakeOllama server = new FakeOllama()) {
+      server.lines =
+          new String[] {
+            FakeOllama.thinkingChunk("Checking the request. "),
+            FakeOllama.thinkingChunk("Now answering."),
+            FakeOllama.chunk("OK"),
+            FakeOllama.done("stop")
+          };
+      List<String> thinking = new ArrayList<>();
+      List<String> answer = new ArrayList<>();
+      AiReply reply =
+          provider(server, 10)
+              .completeStreaming(
+                  REQUEST,
+                  new AiProvider.StreamListener() {
+                    @Override
+                    public void onText(String piece) {
+                      answer.add(piece);
+                    }
+
+                    @Override
+                    public void onThinking(String piece) {
+                      thinking.add(piece);
+                    }
+                  },
+                  new AiCancel());
+      assertEquals(List.of("Checking the request. ", "Now answering."), thinking);
+      assertEquals(List.of("OK"), answer);
+      assertEquals("OK", reply.text());
+    }
+  }
+
+  @Test
   void theRequestIsAChatCallWithBothMessagesAndASizedContext() throws Exception {
     try (FakeOllama server = new FakeOllama()) {
       server.lines = FakeOllama.reply("ok");

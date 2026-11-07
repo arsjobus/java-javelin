@@ -69,8 +69,14 @@ public final class AiService {
    * returned result is the whole answer.
    */
   public AiResult run(AiPlan plan, Consumer<String> onText, AiCancel cancel) throws AiException {
+    return runStreaming(plan, onText::accept, cancel);
+  }
+
+  /** Sends a plan and reports answer and thinking output separately as they arrive. */
+  public AiResult runStreaming(AiPlan plan, AiProvider.StreamListener listener, AiCancel cancel)
+      throws AiException {
     cancel.throwIfCancelled();
-    AiReply reply = provider.complete(plan.request(), onText, cancel);
+    AiReply reply = provider.completeStreaming(plan.request(), listener, cancel);
     cancel.throwIfCancelled();
     String text = reply.text();
     if (text.isBlank())

@@ -10,6 +10,16 @@ import java.util.function.Consumer;
  * only ever used after the user invoked an AI action and approved what is sent.
  */
 public interface AiProvider {
+  /** Receives model output as it arrives, keeping the final answer separate from its thinking. */
+  @FunctionalInterface
+  interface StreamListener {
+    /** A piece of the model's answer. */
+    void onText(String piece);
+
+    /** A piece of the model's thinking, when the provider exposes it. */
+    default void onThinking(String piece) {}
+  }
+
   /** Short stable id, as written in the {@code ai.provider} setting. */
   String id();
 
@@ -39,4 +49,13 @@ public interface AiProvider {
    * {@code cancel} is triggered.
    */
   AiReply complete(AiRequest request, Consumer<String> onText, AiCancel cancel) throws AiException;
+
+  /**
+   * Sends the request and reports both answer and thinking output as it arrives. Providers that do
+   * not expose thinking retain the ordinary text-only behavior.
+   */
+  default AiReply completeStreaming(AiRequest request, StreamListener listener, AiCancel cancel)
+      throws AiException {
+    return complete(request, listener::onText, cancel);
+  }
 }

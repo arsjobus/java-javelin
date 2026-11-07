@@ -106,6 +106,33 @@ class AiServiceTest {
   }
 
   @Test
+  void thinkingIsStreamedSeparatelyAndDoesNotBecomeTheAnswer() throws Exception {
+    provider.thinking = "Checking the code.";
+    provider.answer = "It subtracts instead of adding.";
+    AiPlan plan = service.prepare(AiAction.EXPLAIN, source("Foo.java", SEL_START, SEL_END), null);
+    List<String> thinking = new ArrayList<>();
+    List<String> answer = new ArrayList<>();
+    AiResult result =
+        service.runStreaming(
+            plan,
+            new AiProvider.StreamListener() {
+              @Override
+              public void onText(String piece) {
+                answer.add(piece);
+              }
+
+              @Override
+              public void onThinking(String piece) {
+                thinking.add(piece);
+              }
+            },
+            new AiCancel());
+    assertEquals(List.of("Checking the code."), thinking);
+    assertEquals(List.of("It subtracts instead of adding."), answer);
+    assertEquals("It subtracts instead of adding.", result.text());
+  }
+
+  @Test
   void aCutOffExplanationIsFlagged() throws Exception {
     provider.answer = "It subtr";
     provider.truncated = true;

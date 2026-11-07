@@ -140,10 +140,20 @@ final class ProjectAiController {
             () -> {
               try {
                 ProjectAiResult result =
-                    service.run(
+                    service.runStreaming(
                         plan,
                         ws,
-                        piece -> Platform.runLater(() -> bottom.ai().append(piece)),
+                        new AiProvider.StreamListener() {
+                          @Override
+                          public void onText(String piece) {
+                            Platform.runLater(() -> bottom.ai().append(piece));
+                          }
+
+                          @Override
+                          public void onThinking(String piece) {
+                            Platform.runLater(() -> bottom.ai().appendThinking(piece));
+                          }
+                        },
                         cancel);
                 ProjectRefresh.Result fresh =
                     ProjectRefresh.check(result.snapshot(), ws.index(), ws.reader(), ws.options());

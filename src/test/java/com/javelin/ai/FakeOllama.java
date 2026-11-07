@@ -41,6 +41,12 @@ final class FakeOllama implements AutoCloseable {
         + "},\"done\":false}";
   }
 
+  static String thinkingChunk(String text) {
+    return "{\"message\":{\"role\":\"assistant\",\"thinking\":"
+        + com.javelin.language.Json.write(text)
+        + ",\"content\":\"\"},\"done\":false}";
+  }
+
   static String done(String reason) {
     return "{\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true,\"done_reason\":\""
         + reason

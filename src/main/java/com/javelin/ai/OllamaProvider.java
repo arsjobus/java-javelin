@@ -184,6 +184,12 @@ public final class OllamaProvider implements AiProvider {
   @Override
   public AiReply complete(AiRequest request, Consumer<String> onText, AiCancel cancel)
       throws AiException {
+    return completeStreaming(request, onText::accept, cancel);
+  }
+
+  @Override
+  public AiReply completeStreaming(
+      AiRequest request, AiProvider.StreamListener listener, AiCancel cancel) throws AiException {
     cancel.throwIfCancelled();
     String body =
         Json.write(
@@ -238,6 +244,11 @@ public final class OllamaProvider implements AiProvider {
           if (error != null)
             throw new AiException(
                 AiException.Kind.BAD_RESPONSE, "Ollama reported an error: " + error);
+          String thought = Json.string(Json.get(json, "message"), "thinking");
+          if (thought != null && !thought.isEmpty()) {
+            listener.onThinking(thought);
+            cancel.throwIfCancelled();
+          }
           String piece = Json.string(Json.get(json, "message"), "content");
           if (piece != null && !piece.isEmpty()) {
             if (text.length() + piece.length() > MAX_REPLY_CHARS)
@@ -247,7 +258,7 @@ public final class OllamaProvider implements AiProvider {
                       + MAX_REPLY_CHARS
                       + " characters; reading was stopped.");
             text.append(piece);
-            onText.accept(piece);
+            listener.onText(piece);
             cancel.throwIfCancelled();
           }
           if (Json.bool(json, "done")) {
