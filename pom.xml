@@ -19,6 +19,12 @@
         <slf4j.version>2.0.17</slf4j.version>
         <!-- Filled in by the JaCoCo agent when it runs; empty otherwise so surefire's @{argLine} always resolves. -->
         <argLine></argLine>
+        <!--
+            Tests tagged "eval" talk to a real model and take minutes, so `mvn test` leaves them out. `mvn -Peval test
+            -Deval.model=...` runs only them. See docs/eval/README.md.
+        -->
+        <test.groups></test.groups>
+        <test.excludedGroups>eval</test.excludedGroups>
     </properties>
 
     <dependencies>
@@ -71,6 +77,8 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
                 <configuration>
+                    <groups>${test.groups}</groups>
+                    <excludedGroups>${test.excludedGroups}</excludedGroups>
                     <!--
                         JavaFX is only supported as named modules; on the class path it prints "Unsupported JavaFX
                         configuration". So the test JVM gets the JavaFX platform jars on a module path (copied to
@@ -199,4 +207,15 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <!-- The live AI edit measurement (docs/eval/README.md): only the tests tagged "eval", against a real model. -->
+            <id>eval</id>
+            <properties>
+                <test.groups>eval</test.groups>
+                <test.excludedGroups>not-a-tag</test.excludedGroups>
+            </properties>
+        </profile>
+    </profiles>
 </project>

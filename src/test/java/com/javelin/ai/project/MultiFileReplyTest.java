@@ -162,6 +162,7 @@ class MultiFileReplyTest {
     ProjectProposal p = parse("=== NEW FILE: " + EDITOR + " ===\n```java\nclass X {}\n```\n");
     assertTrue(p.isEmpty());
     assertTrue(p.problems().get(0).contains("exists already"), p.problems().toString());
+    assertEquals(java.util.List.of(com.javelin.ai.FailureReason.WRONG_FILE), p.failures());
   }
 
   @Test

@@ -67,6 +67,12 @@ The logic is `com.javelin.ai.project` (JavaFX-free): `ProjectScanner` and `GitIg
 
 Limits to know: token counts are estimates (no tokenizer is bundled); Smart Context uses words, imports and naming conventions, not a language server or a compiler, so it can miss a file that shares none of them with the request (the preview is where you add it); import-following covers Java, Kotlin, Scala, JavaScript, TypeScript and Python; the model cannot delete or rename files through a proposal; nothing is run. Written to disk files appear in open tabs when those tabs have no unsaved edits.
 
+## Measuring reliability (Phase 0 of the reliability roadmap)
+
+How often a model's change compiles and passes its tests is measured, not guessed. `mvn -Peval test -Deval.model=<model>` runs 24 small fixture projects through this same pipeline, three times, with temperature 0 and a fixed seed, and writes the pass rate, the failure reasons and the per-task results. It lives in test scope, runs only when asked, and talks only to the loopback Ollama like everything else. See [docs/eval/README.md](docs/eval/README.md).
+
+Every place that refuses a model's answer says why in one shared vocabulary, `FailureReason` (`NO_EDIT_BLOCK`, `UNPARSEABLE`, `ANCHOR_NOT_FOUND`, `WRONG_FILE`, `OVERSIZED`, `TRUNCATED`, `COMPILE_ERROR`, `TEST_FAILURE`, `REFUSED`, `TIMEOUT`); `AiResult.failure()` and `ProjectAiResult.failure()` carry it. Nothing the user sees changes: the editor's own requests still use temperature 0.2 with no seed, and the reason is not yet shown.
+
 ## Safeguards
 
 | Safeguard | State |

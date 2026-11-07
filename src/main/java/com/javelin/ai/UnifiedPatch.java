@@ -36,7 +36,9 @@ public final class UnifiedPatch {
     if (hunks.isEmpty())
       throw new AiException(
           AiException.Kind.BAD_RESPONSE,
-          "The patch has no hunks (no line that starts with @@), so there is no change to propose.");
+          FailureReason.UNPARSEABLE,
+          "The patch has no hunks (no line that starts with @@), so there is no change to"
+              + " propose.");
     List<String> lines = LineMatch.split(original);
     int cursor = 0, drift = 0, number = 0;
     for (Hunk hunk : hunks) {
@@ -53,11 +55,13 @@ public final class UnifiedPatch {
               hunk.before().stream().filter(l -> !l.isBlank()).findFirst().orElse("").strip();
           throw new AiException(
               AiException.Kind.BAD_RESPONSE,
+              FailureReason.ANCHOR_NOT_FOUND,
               "Hunk "
                   + number
                   + " of the patch does not fit the code (it expects `"
                   + (first.length() > 60 ? first.substring(0, 57) + "..." : first)
-                  + "`), so nothing was applied. The model probably changed or invented the lines it shows.");
+                  + "`), so nothing was applied. The model probably changed or invented the lines"
+                  + " it shows.");
         }
         LineMatch.Found best = found.get(0);
         for (LineMatch.Found f : found)

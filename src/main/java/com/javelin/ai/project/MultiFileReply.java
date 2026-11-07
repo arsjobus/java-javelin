@@ -1,5 +1,6 @@
 package com.javelin.ai.project;
 
+import com.javelin.ai.FailureReason;
 import com.javelin.ai.AiException;
 import com.javelin.ai.ChangeChecker;
 import com.javelin.ai.ChangeReply;
@@ -66,6 +67,7 @@ public final class MultiFileReply {
     }
     List<FileChange> changes = new ArrayList<>();
     List<String> problems = new ArrayList<>();
+    List<FailureReason> failures = new ArrayList<>();
     Set<String> seen = new HashSet<>();
     for (Section section : sections) {
       String path = section.path().replace('\\', '/');
@@ -83,13 +85,17 @@ public final class MultiFileReply {
         changes.add(change(path, section, reader, snapshot, options));
       } catch (AiException ex) {
         problems.add(path + ": " + ex.getMessage());
+        failures.add(ex.reason() == null ? FailureReason.UNPARSEABLE : ex.reason());
       } catch (IOException ex) {
+        // A path that is not in the project, or a file that is not there: the model named a
+        // file that does not exist.
         problems.add(path + ": " + ex.getMessage());
+        failures.add(FailureReason.WRONG_FILE);
       }
     }
     changes.removeIf(
         c -> c.original().equals(c.replacement()) && c.kind() == FileChange.Kind.MODIFY);
-    return new ProjectProposal(snapshot.id(), explanation, changes, problems);
+    return new ProjectProposal(snapshot.id(), explanation, changes, problems, failures);
   }
 
   private static FileChange change(
@@ -104,7 +110,8 @@ public final class MultiFileReply {
     String language = Languages.idFor(new File(path));
     boolean exists = Files.isRegularFile(file);
     if (Files.exists(file) && !exists)
-      throw new AiException(AiException.Kind.REFUSED, "is not a regular file.");
+      throw new AiException(
+          AiException.Kind.REFUSED, FailureReason.WRONG_FILE, "is not a regular file.");
     boolean inContext = snapshot.sentHashes().containsKey(path);
     List<Finding> findings = new ArrayList<>();
     if (!exists) {
@@ -118,6 +125,7 @@ public final class MultiFileReply {
       if (code.length() > MAX_FILE_CHARS)
         throw new AiException(
             AiException.Kind.REFUSED,
+            FailureReason.OVERSIZED,
             "the new file is larger than " + MAX_FILE_CHARS + " characters.");
       findings.addAll(ChangeChecker.check(language, "", code));
       return new FileChange(
@@ -133,6 +141,7 @@ public final class MultiFileReply {
     if (section.declaredNew())
       throw new AiException(
           AiException.Kind.REFUSED,
+          FailureReason.WRONG_FILE,
           "exists already, so it is not replaced by a new file. Ask for a change to it instead.");
     String original = reader.readNow(path, options.maxFileBytes());
     if (!inContext)
@@ -151,7 +160,9 @@ public final class MultiFileReply {
             original, ResponseParser.matchTrailingNewline(original, interpreted.code()));
     if (replacement.length() > MAX_FILE_CHARS)
       throw new AiException(
-          AiException.Kind.REFUSED, "the result is larger than " + MAX_FILE_CHARS + " characters.");
+          AiException.Kind.REFUSED,
+          FailureReason.OVERSIZED,
+          "the result is larger than " + MAX_FILE_CHARS + " characters.");
     findings.addAll(interpreted.notes());
     findings.addAll(ChangeChecker.check(language, original, replacement));
     return new FileChange(
@@ -179,13 +190,16 @@ public final class MultiFileReply {
     String name = path.substring(path.lastIndexOf('/') + 1);
     if (SensitiveFiles.isSensitive(name))
       throw new AiException(
-          AiException.Kind.REFUSED, "is a file for credentials, so the AI may not change it.");
+          AiException.Kind.REFUSED,
+          FailureReason.WRONG_FILE,
+          "is a file for credentials, so the AI may not change it.");
     for (String part : path.split("/")) {
       String lower = part.toLowerCase(Locale.ROOT);
       if (ProjectScanner.GENERATED_DIRECTORIES.contains(lower)
           || ProjectScanner.SENSITIVE_DIRECTORIES.contains(lower))
         throw new AiException(
             AiException.Kind.REFUSED,
+            FailureReason.WRONG_FILE,
             "is inside '"
                 + part
                 + "', which is not part of the project's own source, so the AI may not change it.");

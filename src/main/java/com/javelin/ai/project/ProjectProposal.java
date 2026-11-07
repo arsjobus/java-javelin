@@ -1,5 +1,6 @@
 package com.javelin.ai.project;
 
+import com.javelin.ai.FailureReason;
 import java.util.List;
 
 /**
@@ -10,10 +11,21 @@ import java.util.List;
  * applying is {@link ProposalApplier}, after approval.
  */
 public record ProjectProposal(
-    String snapshotId, String explanation, List<FileChange> changes, List<String> problems) {
+    String snapshotId,
+    String explanation,
+    List<FileChange> changes,
+    List<String> problems,
+    List<FailureReason> failures) {
   public ProjectProposal {
     changes = List.copyOf(changes);
     problems = List.copyOf(problems);
+    failures = List.copyOf(failures);
+  }
+
+  /** A proposal whose problems have no recorded reason. */
+  public ProjectProposal(
+      String snapshotId, String explanation, List<FileChange> changes, List<String> problems) {
+    this(snapshotId, explanation, changes, problems, List.of());
   }
 
   public boolean isEmpty() {

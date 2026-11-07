@@ -258,6 +258,9 @@ class ProjectAiServiceTest {
     ProjectAiResult r = service.run(plan, ws, s -> {}, new AiCancel());
     assertNull(r.proposal());
     assertTrue(r.note().startsWith("No change could be used:"), r.note());
+    assertEquals(
+        com.javelin.ai.FailureReason.NO_EDIT_BLOCK,
+        r.failure()); // edits to a file that is not there: no code to create it from
     provider.answer =
         "=== FILE: "
             + EDITOR
@@ -266,6 +269,7 @@ class ProjectAiServiceTest {
     ProjectAiResult same = service.run(plan, ws, s -> {}, new AiCancel());
     assertNull(same.proposal());
     assertTrue(same.note().contains("holds no change"), same.note());
+    assertEquals(com.javelin.ai.FailureReason.NO_EDIT_BLOCK, same.failure());
   }
 
   @Test
@@ -276,8 +280,15 @@ class ProjectAiServiceTest {
     ProjectAiResult r = service.run(plan, ws, s -> {}, new AiCancel());
     assertNull(r.proposal());
     assertTrue(r.note().contains("cut off"));
+    assertEquals(com.javelin.ai.FailureReason.TRUNCATED, r.failure());
     provider.answer = "A long explanation that was cut";
-    assertTrue(service.run(plan, ws, s -> {}, new AiCancel()).note().contains("cut off"));
+    ProjectAiResult words = service.run(plan, ws, s -> {}, new AiCancel());
+    assertTrue(words.note().contains("cut off"));
+    assertEquals(com.javelin.ai.FailureReason.TRUNCATED, words.failure());
+    provider.truncated = false;
+    assertEquals(
+        com.javelin.ai.FailureReason.NO_EDIT_BLOCK,
+        service.run(plan, ws, s -> {}, new AiCancel()).failure());
   }
 
   @Test

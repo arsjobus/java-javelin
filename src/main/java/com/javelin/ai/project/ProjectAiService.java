@@ -1,5 +1,6 @@
 package com.javelin.ai.project;
 
+import com.javelin.ai.FailureReason;
 import com.javelin.ai.AiCancel;
 import com.javelin.ai.AiConfig;
 import com.javelin.ai.AiException;
@@ -135,20 +136,25 @@ public final class ProjectAiService {
     String text = reply.text();
     ProjectSnapshot snapshot = plan.context().snapshot();
     if (text.isBlank())
-      throw new AiException(AiException.Kind.BAD_RESPONSE, "The model sent an empty answer.");
+      throw new AiException(
+          AiException.Kind.BAD_RESPONSE,
+          FailureReason.NO_EDIT_BLOCK,
+          "The model sent an empty answer.");
     if (!MultiFileReply.looksLike(text))
       return new ProjectAiResult(
           text,
           null,
           reply.truncated() ? "The answer was cut off by the model; it may be incomplete." : null,
-          snapshot);
+          snapshot,
+          reply.truncated() ? FailureReason.TRUNCATED : FailureReason.NO_EDIT_BLOCK);
     if (reply.truncated())
       return new ProjectAiResult(
           text,
           null,
           "The reply was cut off by the model, so nothing is proposed. Its text is in the AI"
               + " panel.",
-          snapshot);
+          snapshot,
+          FailureReason.TRUNCATED);
     ProjectProposal proposal =
         MultiFileReply.parse(text, workspace.reader(), snapshot, workspace.options());
     String note = proposal.problems().isEmpty() ? null : String.join("\n", proposal.problems());
@@ -160,7 +166,8 @@ public final class ProjectAiService {
               ? "The reply names files but holds no change that differs from what the files"
                   + " contain."
               : "No change could be used:\n" + note,
-          snapshot);
+          snapshot,
+          proposal.failures().isEmpty() ? FailureReason.NO_EDIT_BLOCK : proposal.failures().get(0));
     return new ProjectAiResult(text, proposal, note, snapshot);
   }
 }
