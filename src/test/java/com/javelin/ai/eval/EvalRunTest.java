@@ -31,7 +31,7 @@ import org.junit.jupiter.api.Test;
  * loopback-only provider, so this cannot send the corpus anywhere but this computer.
  */
 @Tag("eval")
-class EvalRun {
+class EvalRunTest {
   @Test
   void measureTheModel() throws Exception {
     EvalProfile profile = EvalProfile.resolve(System::getProperty);
