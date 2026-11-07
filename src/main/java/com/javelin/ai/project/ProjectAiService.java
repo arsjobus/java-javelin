@@ -1,12 +1,12 @@
 package com.javelin.ai.project;
 
-import com.javelin.ai.FailureReason;
 import com.javelin.ai.AiCancel;
 import com.javelin.ai.AiConfig;
 import com.javelin.ai.AiException;
 import com.javelin.ai.AiProvider;
 import com.javelin.ai.AiReply;
 import com.javelin.ai.AiRequest;
+import com.javelin.ai.FailureReason;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;

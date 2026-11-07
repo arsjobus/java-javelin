@@ -1,9 +1,9 @@
 package com.javelin.ai.project;
 
-import com.javelin.ai.FailureReason;
 import com.javelin.ai.AiException;
 import com.javelin.ai.ChangeChecker;
 import com.javelin.ai.ChangeReply;
+import com.javelin.ai.FailureReason;
 import com.javelin.ai.Finding;
 import com.javelin.ai.ResponseParser;
 import com.javelin.ai.SensitiveFiles;

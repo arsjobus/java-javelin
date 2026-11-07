@@ -1,7 +1,7 @@
 package com.javelin.ai.project;
 
-import com.javelin.ai.FailureReason;
 import com.javelin.ai.AiException;
+import com.javelin.ai.FailureReason;
 import com.javelin.ai.SensitiveFiles;
 import java.io.IOException;
 import java.util.ArrayList;
