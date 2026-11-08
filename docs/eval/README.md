@@ -60,7 +60,7 @@ Every failed task has exactly one, from the shared `com.javelin.ai.FailureReason
 
 ## Reading a result
 
-Each task records: `applied` (a change came out and was written), `compiled`, `passed`, `attempts` (always 1 until retries exist), `millis`, `promptTokens` and `completionTokens` (the provider's own count, `null` when it did not say), `changedLines`, `flagged` (the editor's own review checks found an error in the proposal, which lets a later phase ask whether they predict failure), the `failure` reason and a short `detail`.
+Each task records: `applied` (a change came out and was written), `compiled`, `passed`, `attempts` (1 unless `-Deval.retries` asks for the Phase 2 loop), `millis`, `promptTokens` and `completionTokens` (the provider's own count, `null` when it did not say), `changedLines`, `flagged` (the editor's own review checks found an error in the proposal, which lets a later phase ask whether they predict failure), the `failure` reason and a short `detail`.
 
 The baseline reports the rate of each run, their mean, lowest, highest and standard deviation, the rate per kind of task, the failure counts per reason, the tasks whose outcome changed between runs (where luck decides) and the tasks that never passed.
 
@@ -87,3 +87,9 @@ mvn -Peval test -Deval.model=<model> -Deval.structured=true       # JSON edits
 ```
 
 The report counts *contract failures*: results that failed with `UNPARSEABLE` or `ANCHOR_NOT_FOUND`, not because of the code the model wrote. The 2026-11-07 baseline has none, in 72 results, so the threshold is no worse than that (0 of 72) in any run that is adopted; the pass rate must not fall either. That baseline used whole blocks for almost every task, so the edit-block path was barely exercised; the first comparison above is the one that tests it.
+
+## Phase 2: the verification loop
+
+`mvn -Peval test -Deval.model=<model> -Deval.retries=2` runs the same corpus with the editor's verification loop on: each proposal for a selection or a project request is compiled in memory by the editor's own `JavacVerifier` and, when that fails, the model is asked again with the compiler's messages, up to two more times. Add-tests tasks are not repeated (there is nothing to compile against). The judging is unchanged and does not use the verifier, so the pass rate is comparable with a single-attempt baseline of the same model and profile. The report adds the figure Phase 2 is measured by, *reached review with a compiling result* (results in which a change came out and the project with it applied compiles), and `attempts` shows how many requests each task took. Run it once without `-Deval.retries` and once with, on the same model and profile, and commit both Markdown files.
+
+No numbers for this are recorded here: they need a run against the model.

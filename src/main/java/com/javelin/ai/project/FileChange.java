@@ -47,6 +47,14 @@ public record FileChange(
     this(path, kind, original, replacement, rawSection, format, inContext, findings, List.of());
   }
 
+  /** The same change with one more finding. */
+  public FileChange withFinding(Finding finding) {
+    List<Finding> all = new java.util.ArrayList<>(findings);
+    all.add(finding);
+    return new FileChange(
+        path, kind, original, replacement, rawSection, format, inContext, all, anchors);
+  }
+
   public LineDiff.Result diff() {
     return LineDiff.unified(original, replacement, 3);
   }

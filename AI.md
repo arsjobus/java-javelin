@@ -46,7 +46,19 @@ A model's reply is not trusted to fit the file. For Propose Change: the selectio
 sent; the reply is read as JSON edits, edit blocks, a unified diff or a whole code block, and applied by content, never by line number
 (all or nothing; an edit that matches nowhere or in several places, or names a file that was not sent, is refused with a reason, and edits that were not exact copies of the code are flagged in the review); a reply that lost its indentation gets the selection's back; and before the review opens the result is
 checked for placeholders, leaked markers, bracket balance, Java syntax, dropped methods and a large shrink. Errors do not block
-anything: the review shows them and its button reads "Apply anyway". Nothing is retried or applied without a click. See
+anything: the review shows them and its button reads "Apply anyway". Nothing is applied without a click.
+
+A proposed Java change is also **compiled before you see it** (Propose Change on a file inside the open project, and
+Project Request). The change is compiled in memory together with the project's other sources, so a change that breaks a
+caller is caught; nothing is written to the project, and annotation processors are off, so compiling runs none of your
+code. If it does not compile, the same request goes back to the same model once more with the compiler's first messages
+(file and line) and the part of the change they point at, up to `ai.verify.retries` times (default 2). The Send dialog
+says this before you send. The review shows one line per attempt and the change from the attempt that compiled, or else
+the last one with its errors, so "Apply anyway" still decides. Errors the project already had are not blamed on the
+change, and when the class path cannot be known (a dependency that is not in the local Maven repository) the review says
+"not checked" instead of guessing. Running the project's tests on the change, in a separate Java process with a time
+limit, is off until `ai.verify.tests=true`, because it runs code a model wrote. See
+[ROADMAP-AI-RELIABILITY.md](ROADMAP-AI-RELIABILITY.md) (Phase 2). See
 [AI-EDITING.md](AI-EDITING.md) for the reasoning and what is not done yet.
 
 ## Status (v0.7)

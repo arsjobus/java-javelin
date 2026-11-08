@@ -136,6 +136,13 @@ final class ProjectAiDialogs {
    * and shows the plan again; Cancel sends nothing.
    */
   static Decision confirm(ProjectPlan plan, Adjustments current) {
+    return confirm(plan, current, plan.preview());
+  }
+
+  /**
+   * The same, with {@code previewText} shown on the right (the preview plus what happens after).
+   */
+  static Decision confirm(ProjectPlan plan, Adjustments current, String previewText) {
     List<FileRow> rows = new ArrayList<>();
     for (ContextEntry e : plan.context().included())
       rows.add(
@@ -162,7 +169,7 @@ final class ProjectAiDialogs {
                 setText(null);
               }
             });
-    TextArea preview = new TextArea(plan.preview());
+    TextArea preview = new TextArea(previewText);
     preview.setEditable(false);
     preview.setWrapText(false);
     preview.setStyle("-fx-font-family: monospace;");

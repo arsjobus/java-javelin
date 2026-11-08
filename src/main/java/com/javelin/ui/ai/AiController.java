@@ -11,6 +11,12 @@ import com.javelin.ai.AiProviders;
 import com.javelin.ai.AiResult;
 import com.javelin.ai.AiService;
 import com.javelin.ai.AiSource;
+import com.javelin.ai.verify.JavacVerifier;
+import com.javelin.ai.verify.ProjectClasspath;
+import com.javelin.ai.verify.Verified;
+import com.javelin.ai.verify.Verifier;
+import com.javelin.ai.verify.VerifyConfig;
+import com.javelin.ai.verify.VerifyTarget;
 import com.javelin.language.Languages;
 import com.javelin.language.TextEdits;
 import com.javelin.settings.Settings;
@@ -19,6 +25,7 @@ import com.javelin.ui.shell.BottomPanel;
 import com.javelin.ui.shell.Workbench;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -152,7 +159,8 @@ public final class AiController {
     if (models.isEmpty()) {
       bench.showError(
           "Choose AI Model",
-          "Ollama is running but has no models installed. Install one with  ollama pull <model>  (see ollama.com/library), then choose it here.");
+          "Ollama is running but has no models installed. Install one with  ollama pull <model> "
+              + " (see ollama.com/library), then choose it here.");
       return;
     }
     var chosen = AiDialogs.chooseModel(models, config.model());
@@ -212,14 +220,35 @@ public final class AiController {
       bench.showError(action.label(), ex.getMessage());
       return;
     }
-    if (!AiDialogs.confirmSend(plan)) {
+    VerifyConfig verify = VerifyConfig.from(bench.settings());
+    VerifyTarget target = verifyTarget(action, verify, file, editor.getText());
+    if (!AiDialogs.confirmSend(plan, verify.appendedTo(plan.preview(), target != null))) {
       bench.status("AI request not sent.");
       return;
     }
-    send(service, plan, editor);
+    send(service, plan, editor, target, verify);
   }
 
-  private void send(AiService service, AiPlan plan, CodeArea editor) {
+  /**
+   * What a proposed change can be compiled as: the open Java file inside the open project. Null (no
+   * check, one request) for anything else: other actions, no project, a file outside it, a file
+   * that is not Java, or the check switched off ({@code ai.verify}).
+   */
+  private VerifyTarget verifyTarget(AiAction action, VerifyConfig verify, File file, String text) {
+    File root = bench.projectDirectory();
+    if (!verify.enabled()
+        || action != AiAction.PROPOSE_CHANGE
+        || root == null
+        || file == null
+        || !file.getName().endsWith(".java")) return null;
+    Path base = root.toPath().toAbsolutePath().normalize();
+    Path path = file.toPath().toAbsolutePath().normalize();
+    if (!path.startsWith(base)) return null;
+    return new VerifyTarget(base.relativize(path).toString().replace('\\', '/'), text);
+  }
+
+  private void send(
+      AiService service, AiPlan plan, CodeArea editor, VerifyTarget target, VerifyConfig verify) {
     AiCancel cancel = begin(plan.action().label() + ": waiting for " + plan.indicator() + "...");
     statusLabel.setText("AI > " + plan.providerName() + " " + plan.location());
     bottom.ai().begin(plan.action().label() + " of " + plan.context().name(), plan.indicator());
@@ -227,8 +256,17 @@ public final class AiController {
     worker.submit(
         () -> {
           try {
-            AiResult result =
-                service.runStreaming(
+            Verifier verifier = null;
+            if (target != null) {
+              Path root = bench.projectDirectory().toPath().toAbsolutePath().normalize();
+              verifier =
+                  new JavacVerifier(
+                      root,
+                      ProjectClasspath.resolve(root, ProjectClasspath.defaultRepository()),
+                      verify);
+            }
+            Verified<AiResult> verified =
+                service.runVerified(
                     plan,
                     new AiProvider.StreamListener() {
                       @Override
@@ -241,8 +279,12 @@ public final class AiController {
                         Platform.runLater(() -> bottom.ai().appendThinking(piece));
                       }
                     },
-                    cancel);
-            Platform.runLater(() -> finished(cancel, plan, editor, result));
+                    cancel,
+                    target,
+                    verifier,
+                    verify.retries());
+            Platform.runLater(
+                () -> finished(cancel, plan, editor, verified.answer(), verified.report()));
           } catch (AiException ex) {
             Platform.runLater(() -> failed(cancel, ex));
           } catch (RuntimeException ex) {
@@ -255,20 +297,27 @@ public final class AiController {
         });
   }
 
-  private void finished(AiCancel cancel, AiPlan plan, CodeArea editor, AiResult result) {
+  private void finished(
+      AiCancel cancel, AiPlan plan, CodeArea editor, AiResult result, String checks) {
     end(cancel);
     AiProposal proposal = result.proposal();
-    bottom.ai().finish(result.note());
+    String note = joinNotes(result.note(), checks);
+    bottom.ai().finish(note);
     if (proposal == null) {
       bench.status(
           plan.action().label() + (result.note() == null ? ": done." : ": " + result.note()));
       return;
     }
-    if (!AiDialogs.review(proposal, result.note(), result.findings())) {
+    if (!AiDialogs.review(proposal, note, result.findings())) {
       bench.status("Proposed change rejected: nothing was changed.");
       return;
     }
     apply(proposal, editor);
+  }
+
+  private static String joinNotes(String note, String checks) {
+    if (checks == null || checks.isBlank()) return note;
+    return note == null || note.isBlank() ? checks : note + "\n\n" + checks;
   }
 
   private void failed(AiCancel cancel, AiException ex) {
@@ -305,7 +354,8 @@ public final class AiController {
     if (!proposal.isStillValid(editor.getText())) {
       bench.showError(
           "Propose Change",
-          "The text changed while the AI was working, so the change was not applied. Select the code again and ask again.");
+          "The text changed while the AI was working, so the change was not applied. Select the"
+              + " code again and ask again.");
       return;
     }
     TextEdits.Change change = TextEdits.minimal(proposal.original(), proposal.replacement());

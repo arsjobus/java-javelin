@@ -17,6 +17,12 @@ public record AiPlan(
     boolean local,
     String testFileName,
     List<String> warnings) {
+  /** The same plan with another request (a repeat that carries the check's problems). */
+  public AiPlan withRequest(AiRequest other) {
+    return new AiPlan(
+        action, context, other, providerName, location, local, testFileName, warnings);
+  }
+
   /** The provider and model for the indicator ("Ollama, llama3, on this computer"). */
   public String indicator() {
     return providerName

@@ -289,4 +289,91 @@ class EvalRunnerTest {
       throw new AssertionError(ex);
     }
   }
+
+  // ---- Phase 2: the verification loop in the eval ----
+
+  private EvalRunner verifying(ScriptedProvider provider, int retries) {
+    return new EvalRunner(provider, EvalProfile.small("scripted-model"), scratch, retries);
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("ids")
+  void withTheLoopOnAModelThatKnowsTheAnswerStillAsksOnce(String id) {
+    ScriptedProvider provider = ScriptedProvider.oracle(tasks);
+    TaskResult r = verifying(provider, 2).run(task(id), 42);
+    assertTrue(r.passed(), id + ": " + r.failure() + " " + r.detail());
+    assertEquals(1, r.attempts(), "a change that compiles is not asked for again");
+    assertFalse(r.flagged());
+  }
+
+  /** The first answer does not compile; every later one is the reference change. */
+  private static ScriptedProvider brokenThenRight() {
+    ScriptedProvider oracle = ScriptedProvider.oracle(tasks);
+    int[] calls = {0};
+    return new ScriptedProvider(
+        request -> {
+          if (calls[0]++ == 0)
+            return new AiReply(
+                "```java\npublic static int sumUpTo(int n) { return n +; }\n```", false);
+          try {
+            return oracle.complete(request, s -> {}, new com.javelin.ai.AiCancel());
+          } catch (AiException ex) {
+            throw new IllegalStateException(ex);
+          }
+        });
+  }
+
+  @Test
+  void aBrokenFirstAnswerIsRepairedAndTheTaskPasses() {
+    ScriptedProvider provider = brokenThenRight();
+    TaskResult r = verifying(provider, 2).run(task("fix-bug-off-by-one"), 42);
+    assertTrue(r.passed(), r.failure() + " " + r.detail());
+    assertEquals(2, r.attempts());
+    assertTrue(provider.requests.get(1).prompt().contains("did not compile"));
+  }
+
+  @Test
+  void withoutRetriesTheSameBrokenAnswerIsAFailureAsInPhaseZero() {
+    TaskResult r = verifying(brokenThenRight(), 0).run(task("fix-bug-off-by-one"), 42);
+    assertFalse(r.passed());
+    assertEquals(1, r.attempts());
+    assertTrue(r.flagged(), "the editor's own check said the proposal is broken");
+    TaskResult phaseZero = runner(brokenThenRight()).run(task("fix-bug-off-by-one"), 42);
+    assertEquals(r.failure(), phaseZero.failure());
+  }
+
+  @Test
+  void theRetriesAreWhatWasAsked() {
+    assertEquals(-1, runner(ScriptedProvider.oracle(tasks)).retries());
+    assertEquals(3, verifying(ScriptedProvider.oracle(tasks), 3).retries());
+  }
+
+  @Test
+  void aProjectRequestIsVerifiedAndRepairedToo() {
+    EvalTask multi =
+        tasks.stream().filter(t -> t.mode() == EvalTask.Mode.PROJECT).findFirst().orElseThrow();
+    ScriptedProvider oracle = ScriptedProvider.oracle(tasks);
+    int[] calls = {0};
+    ScriptedProvider provider =
+        new ScriptedProvider(
+            request -> {
+              if (calls[0]++ == 0) {
+                try {
+                  AiReply good = oracle.complete(request, s -> {}, new com.javelin.ai.AiCancel());
+                  return new AiReply(
+                      good.text().replaceFirst("return ", "return missing + "), false);
+                } catch (AiException ex) {
+                  throw new IllegalStateException(ex);
+                }
+              }
+              try {
+                return oracle.complete(request, s -> {}, new com.javelin.ai.AiCancel());
+              } catch (AiException ex) {
+                throw new IllegalStateException(ex);
+              }
+            });
+    TaskResult r = verifying(provider, 2).run(multi, 42);
+    assertEquals(2, r.attempts(), r.failure() + " " + r.detail());
+    assertTrue(r.passed(), r.failure() + " " + r.detail());
+  }
 }

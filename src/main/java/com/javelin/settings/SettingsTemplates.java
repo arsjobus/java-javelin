@@ -44,6 +44,12 @@ public final class SettingsTemplates {
             #ai.editBlockMinLines=40
             # Ask for edits as JSON instead of text markers, when the provider can hold an answer to a shape (Ollama can). Off until your model is shown to do better with it.
             #ai.structuredEdits=false
+            # Compile a proposed Java change in memory before the review and ask the model again (up to retries times) with the compiler's messages. Nothing is written and no project code runs.
+            #ai.verify=true
+            #ai.verify.retries=2
+            # Also run the project's tests that use the changed classes, in a separate Java process. Off: it runs code a model wrote.
+            #ai.verify.tests=false
+            #ai.verify.testSeconds=30
 
             # Keybindings: key.<action id>=<shortcut>. Modifiers: Ctrl, Shift, Alt, Meta, Shortcut (Cmd on macOS).
             # Use "none" to remove a shortcut. Unlisted actions keep their defaults.

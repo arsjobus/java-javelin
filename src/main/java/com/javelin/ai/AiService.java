@@ -1,5 +1,12 @@
 package com.javelin.ai;
 
+import com.javelin.ai.verify.RepairPrompt;
+import com.javelin.ai.verify.Verification;
+import com.javelin.ai.verify.VerificationLoop;
+import com.javelin.ai.verify.VerificationReport;
+import com.javelin.ai.verify.Verified;
+import com.javelin.ai.verify.Verifier;
+import com.javelin.ai.verify.VerifyTarget;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -121,6 +128,67 @@ public final class AiService {
     } catch (AiException ex) {
       return new AiResult(text, null, ex.getMessage(), List.of(), ex.reason());
     }
+  }
+
+  /**
+   * Like {@link #runStreaming}, then checks a proposed change by compiling it in memory ({@link
+   * Verifier}; nothing is written) and, when the check fails, asks the model again with the
+   * problems, up to {@code retries} more times. The result is the passing attempt, or else the last
+   * one with a change, with a failed check added as an error finding, so the review says "Apply
+   * anyway". Without a change to check (an answer to Explain, new tests, a file outside the
+   * project) it is a single request.
+   */
+  public Verified<AiResult> runVerified(
+      AiPlan plan,
+      AiProvider.StreamListener listener,
+      AiCancel cancel,
+      VerifyTarget target,
+      Verifier verifier,
+      int retries)
+      throws AiException {
+    if (target == null || verifier == null || !plan.action().proposes()) {
+      AiResult only = runStreaming(plan, listener, cancel);
+      return Verified.of(List.of(new VerificationLoop.Attempt<>(1, only, null)));
+    }
+    var step =
+        new VerificationLoop.Step<AiResult>() {
+          @Override
+          public AiResult ask(AiRequest request, int attempt) throws AiException {
+            if (attempt > 1)
+              listener.onText(
+                  "\n\n----- attempt " + attempt + ": asking again with the problems -----\n\n");
+            return runStreaming(plan.withRequest(request), listener, cancel);
+          }
+
+          @Override
+          public void retryFailed(int attempt, AiException why) {
+            listener.onText(
+                "\n\n----- attempt " + attempt + " failed: " + why.getMessage() + " -----\n");
+          }
+
+          @Override
+          public VerificationLoop.Checked check(AiResult result, AiCancel c) {
+            AiProposal proposal = result.proposal();
+            if (proposal == null
+                || proposal.kind() != AiProposal.Kind.REPLACE_RANGE
+                || !proposal.isStillValid(target.fullText())) return null;
+            String text = proposal.applyTo(target.fullText());
+            Verification v = verifier.verify(java.util.Map.of(target.path(), text), c);
+            String hunk =
+                v.outcome() == Verification.Outcome.COMPILE_FAILED
+                    ? RepairPrompt.hunkAround(text, v.problems().get(0).line())
+                    : proposal.diff().text();
+            return new VerificationLoop.Checked(v, hunk);
+          }
+        };
+    Verified<AiResult> verified =
+        Verified.of(VerificationLoop.run(plan.request(), retries, step, cancel));
+    var chosen = verified.chosen();
+    AiResult shown = chosen.result();
+    if (chosen.verification() != null && chosen.verification().failed())
+      shown =
+          shown.withFinding(Finding.error(VerificationReport.findingText(chosen.verification())));
+    return new Verified<>(shown, verified.attempts());
   }
 
   private static String extraBlocksNote(int extra) {

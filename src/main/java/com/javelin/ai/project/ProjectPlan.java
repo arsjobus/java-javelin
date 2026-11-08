@@ -25,6 +25,12 @@ public record ProjectPlan(
     warnings = List.copyOf(warnings);
   }
 
+  /** The same plan with another request (a repeat that carries the check's problems). */
+  public ProjectPlan withRequest(AiRequest other) {
+    return new ProjectPlan(
+        mode, instruction, context, index, other, budget, providerName, location, local, warnings);
+  }
+
   /** The provider and model for the indicator. */
   public String indicator() {
     return providerName

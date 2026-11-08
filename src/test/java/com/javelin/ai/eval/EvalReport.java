@@ -22,10 +22,38 @@ record EvalReport(
     long seed,
     int tasks,
     List<List<TaskResult>> runs,
-    long millis) {
+    long millis,
+    int retries) {
 
   EvalReport {
     runs = runs.stream().map(List::copyOf).toList();
+  }
+
+  /** A single-attempt report: the Phase 0 shape, with no verification loop. */
+  EvalReport(
+      String profile,
+      String model,
+      String date,
+      long seed,
+      int tasks,
+      List<List<TaskResult>> runs,
+      long millis) {
+    this(profile, model, date, seed, tasks, runs, millis, -1);
+  }
+
+  /** True when the runs used the Phase 2 loop: compile the proposal, ask again on failure. */
+  boolean verified() {
+    return retries >= 0;
+  }
+
+  /**
+   * Results in which a change came out of the pipeline and the project with it applied compiles:
+   * the proposals that would reach the review with a compiling result. Phase 2's measure.
+   */
+  int reachedReviewCompiling() {
+    int n = 0;
+    for (List<TaskResult> run : runs) for (TaskResult r : run) if (r.applied() && r.compiled()) n++;
+    return n;
   }
 
   /** The share of tasks that passed, for each run. */
@@ -156,6 +184,11 @@ record EvalReport(
     failures().forEach((k, v) -> reasons.put(k.name(), v));
     summary.put("failures", reasons);
     summary.put("contractFailures", contractFailures());
+    if (verified()) {
+      summary.put("retries", retries);
+      summary.put("reachedReviewCompiling", reachedReviewCompiling());
+      summary.put("results", totalResults());
+    }
     Map<String, Object> categories = new LinkedHashMap<>();
     byCategory().forEach((k, v) -> categories.put(k.name(), v));
     summary.put("byCategory", categories);
@@ -201,8 +234,15 @@ record EvalReport(
     md.append("Measured with `mvn -Peval test -Deval.model=").append(model).append("`. ");
     md.append("Profile `").append(profile).append("`: the editor's own limits and window, ");
     md.append("temperature 0, seed ").append(seed).append(" plus the run number. ");
-    md.append(tasks).append(" tasks, ").append(runs.size()).append(" runs, one attempt per task ");
-    md.append("(no retries exist yet). A task passes when its judging test passes after the ");
+    md.append(tasks).append(" tasks, ").append(runs.size()).append(" runs, ");
+    if (verified())
+      md.append("each proposal compiled in memory and, when that failed, repaired with the ")
+          .append("compiler's messages up to ")
+          .append(retries)
+          .append(retries == 1 ? " more request" : " more requests")
+          .append(" (Phase 2). ");
+    else md.append("one attempt per task (no retries exist yet). ");
+    md.append("A task passes when its judging test passes after the ");
     md.append("change is applied; nothing is judged by a model.\n\n");
     md.append("## Result\n\n");
     md.append("| Run | Passed | Rate |\n| --- | --- | --- |\n");
@@ -221,8 +261,21 @@ record EvalReport(
     md.append("\nMean ").append(percent(mean())).append(", lowest ").append(percent(min()));
     md.append(", highest ").append(percent(max())).append(", standard deviation ");
     md.append(String.format(Locale.ROOT, "%.1f", stddev() * 100)).append(" points. ");
-    md.append("The proposed target for the small profile is 70% within two attempts; this ");
-    md.append("baseline is single-attempt.\n\n");
+    if (verified()) {
+      md.append("The proposed target for the small profile is 70% within two attempts. ");
+      md.append("Compare with the single-attempt baseline of the same model and profile.\n\n");
+      md.append("Reached review with a compiling result: ")
+          .append(reachedReviewCompiling())
+          .append(" of ")
+          .append(totalResults())
+          .append(" results (")
+          .append(
+              percent(totalResults() == 0 ? 0 : reachedReviewCompiling() / (double) totalResults()))
+          .append(").\n\n");
+    } else {
+      md.append("The proposed target for the small profile is 70% within two attempts; this ");
+      md.append("baseline is single-attempt.\n\n");
+    }
     md.append("## By kind of task\n\n| Kind | Mean pass rate |\n| --- | --- |\n");
     byCategory()
         .forEach(

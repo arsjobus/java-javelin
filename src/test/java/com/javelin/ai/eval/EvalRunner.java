@@ -22,6 +22,11 @@ import com.javelin.ai.project.ProjectProposal;
 import com.javelin.ai.project.ProjectWorkspace;
 import com.javelin.ai.project.ProposalApplier;
 import com.javelin.ai.project.ScanOptions;
+import com.javelin.ai.verify.JavacVerifier;
+import com.javelin.ai.verify.ProjectClasspath;
+import com.javelin.ai.verify.Verifier;
+import com.javelin.ai.verify.VerifyConfig;
+import com.javelin.ai.verify.VerifyTarget;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,8 +45,8 @@ import java.util.regex.Pattern;
  * model's words: a task passes when the judging test passes.
  *
  * <p>Every task gets a fresh copy of its fixture, and nothing outside the scratch folder is
- * touched. Phase 0 makes one attempt per task and never retries; {@code attempts} is recorded so
- * the later phases, which do retry, report in the same shape.
+ * touched. Phase 0 makes one attempt per task and never retries unless asked for retries (Phase 2);
+ * {@code attempts} is recorded so the later phases, which do retry, report in the same shape.
  */
 final class EvalRunner {
   /**
@@ -63,11 +68,34 @@ final class EvalRunner {
   private final AiProvider provider;
   private final EvalProfile profile;
   private final Path scratch;
+  private final int retries;
 
+  /** One attempt per task, as in Phase 0. */
   EvalRunner(AiProvider provider, EvalProfile profile, Path scratch) {
+    this(provider, profile, scratch, -1);
+  }
+
+  /**
+   * With {@code retries >= 0} a proposal is compiled in memory by the editor's own verifier and, if
+   * that fails, the model is asked again with the compiler's messages, up to {@code retries} more
+   * times (Phase 2). The judging below is unchanged and does not use the verifier.
+   */
+  EvalRunner(AiProvider provider, EvalProfile profile, Path scratch, int retries) {
     this.provider = provider;
     this.profile = profile;
     this.scratch = scratch;
+    this.retries = retries;
+  }
+
+  int retries() {
+    return retries;
+  }
+
+  private Verifier verifier(Path project) {
+    return new JavacVerifier(
+        project,
+        new ProjectClasspath.Resolved(FixtureBuild.libraries(), true, ""),
+        new VerifyConfig(true, retries, false, 30));
   }
 
   /** One run over all tasks; run number {@code run} uses seed {@code seed + run}. */
@@ -182,7 +210,18 @@ final class EvalRunner {
     AiSource source = new AiSource(name, name, "java", text, range[0], range[1]);
     AiService service = new AiService(metered, config);
     AiPlan plan = service.prepare(AiAction.PROPOSE_CHANGE, source, task.request());
-    AiResult result = service.run(plan, s -> {}, new AiCancel());
+    AiResult result =
+        retries < 0
+            ? service.run(plan, s -> {}, new AiCancel())
+            : service
+                .runVerified(
+                    plan,
+                    s -> {},
+                    new AiCancel(),
+                    new VerifyTarget(task.file(), text),
+                    verifier(project),
+                    retries)
+                .answer();
     AiProposal proposal = result.proposal();
     if (proposal == null) return Applied.none(result.failure(), result.note());
     Files.writeString(file, proposal.applyTo(text));
@@ -222,7 +261,12 @@ final class EvalRunner {
     AiCancel cancel = new AiCancel();
     ProjectPlan plan =
         service.prepare(workspace, profile.contextMode(), task.request(), Adjustments.NONE, cancel);
-    ProjectAiResult result = service.run(plan, workspace, s -> {}, cancel);
+    ProjectAiResult result =
+        retries < 0
+            ? service.run(plan, workspace, s -> {}, cancel)
+            : service
+                .runVerified(plan, workspace, s -> {}, cancel, verifier(project), retries)
+                .answer();
     ProjectProposal proposal = result.proposal();
     if (proposal == null) return Applied.none(result.failure(), result.note());
     List<ProposalApplier.Check> checks =

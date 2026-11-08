@@ -24,6 +24,14 @@ public record AiResult(
     this(text, proposal, note, List.of(), null);
   }
 
+  /** The same result with one more finding, errors first. */
+  public AiResult withFinding(Finding finding) {
+    List<Finding> all = new java.util.ArrayList<>(findings);
+    all.add(finding);
+    all.sort((a, b) -> Boolean.compare(b.isError(), a.isError()));
+    return new AiResult(text, proposal, note, all, failure);
+  }
+
   /** True when a check found the proposal very likely broken. */
   public boolean hasErrors() {
     return findings.stream().anyMatch(Finding::isError);

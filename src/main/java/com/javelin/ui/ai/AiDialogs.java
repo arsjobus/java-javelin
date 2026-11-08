@@ -41,12 +41,20 @@ final class AiDialogs {
 
   /** Shows exactly what would be sent and where; true only if the user chooses Send. */
   static boolean confirmSend(AiPlan plan) {
+    return confirmSend(plan, plan.preview());
+  }
+
+  /**
+   * The same, with {@code preview} as the text shown: the plan's preview plus what the editor will
+   * do after the answer ({@link com.javelin.ai.verify.VerifyConfig#appendedTo}).
+   */
+  static boolean confirmSend(AiPlan plan, String preview) {
     Dialog<ButtonType> dialog =
         textDialog(
             "Send to AI?",
             plan.action().label() + ": " + plan.indicator(),
             "This is everything that will be sent. Nothing is sent until you choose Send.",
-            plan.preview(),
+            preview,
             SEND,
             ButtonType.CANCEL);
     return Dialogs.show(dialog).filter(SEND::equals).isPresent();
@@ -67,7 +75,8 @@ final class AiDialogs {
             : "Apply changes the text in the editor. It stays unsaved and Undo takes it back.";
     if (errors)
       intro =
-          "The checks below found problems, so this change is probably broken. Reject it, or Apply anyway and fix it by hand. "
+          "The checks below found problems, so this change is probably broken. Reject it, or Apply"
+              + " anyway and fix it by hand. "
               + intro;
     StringBuilder body = new StringBuilder();
     if (!proposal.explanation().isBlank()) body.append(proposal.explanation()).append("\n\n");

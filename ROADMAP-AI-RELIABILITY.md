@@ -90,6 +90,8 @@ Tests: `VerificationLoopTest` with a fake provider that returns a broken edit th
 
 Exit: on the corpus, the fraction of proposals that reach review with a compiling result is reported per profile.
 
+Status (8 Nov 2026): built, exit not yet measured. `com.javelin.ai.verify` compiles a proposal in memory (the changed files plus the files that mention them, against the project's source folders and the class path it can find without a build tool or the network), never writes to the project, and runs no project code while compiling. A failed check repeats the request with the first five compiler messages and a window of the failing code, within `ai.verify.retries` (default 2, which stands in for the small profile's budget until Phase 5 brings profiles). Selection changes and project requests both use it; the review shows one line per attempt and a failed check is an error finding, so "Apply anyway" is unchanged. Running tests is built but off (`ai.verify.tests`): it runs code a model wrote. Departures: the `mvn -q compile` fallback is not built, so an unknown class path (a dependency not in the local Maven repository, a Gradle project) reports "not checked" and the proposal goes to review as before; and Maven is not run on a copy of the project. The eval can run the loop (`-Deval.retries=2`, see `docs/eval/README.md`) and reports the fraction that reach review compiling; that run has not been made.
+
 ## Phase 3: Task decomposition
 
 **Goal:** a multi-file change becomes a short list of steps that a small model can finish one at a time.

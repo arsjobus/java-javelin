@@ -16,6 +16,11 @@ import com.javelin.ai.project.ProjectReader;
 import com.javelin.ai.project.ProjectRefresh;
 import com.javelin.ai.project.ProjectWorkspace;
 import com.javelin.ai.project.ProposalApplier;
+import com.javelin.ai.verify.JavacVerifier;
+import com.javelin.ai.verify.ProjectClasspath;
+import com.javelin.ai.verify.Verified;
+import com.javelin.ai.verify.Verifier;
+import com.javelin.ai.verify.VerifyConfig;
 import com.javelin.ui.Dialogs;
 import com.javelin.ui.editor.EditorTabs;
 import com.javelin.ui.shell.BottomPanel;
@@ -118,17 +123,19 @@ final class ProjectAiController {
   }
 
   private void confirm(ProjectAiService service, ProjectPlan plan, Adjustments adjustments) {
-    ProjectAiDialogs.Decision decision = ProjectAiDialogs.confirm(plan, adjustments);
+    VerifyConfig verify = VerifyConfig.from(bench.settings());
+    ProjectAiDialogs.Decision decision =
+        ProjectAiDialogs.confirm(plan, adjustments, verify.appendedTo(plan.preview(), true));
     switch (decision.choice()) {
       case CANCEL -> bench.status("Project request not sent.");
       case UPDATE -> prepare(service, plan.mode(), plan.instruction(), decision.adjustments());
-      case SEND -> send(service, plan);
+      case SEND -> send(service, plan, verify);
     }
   }
 
   // ---- sending ----
 
-  private void send(ProjectAiService service, ProjectPlan plan) {
+  private void send(ProjectAiService service, ProjectPlan plan, VerifyConfig verify) {
     ProjectWorkspace ws = workspace;
     AiCancel cancel = parent.begin("Project Request: waiting for " + plan.indicator() + "...");
     parent.statusLabel().setText("AI > " + plan.providerName() + " " + plan.location());
@@ -139,8 +146,16 @@ final class ProjectAiController {
         .submit(
             () -> {
               try {
-                ProjectAiResult result =
-                    service.runStreaming(
+                Verifier verifier =
+                    verify.enabled()
+                        ? new JavacVerifier(
+                            ws.root(),
+                            ProjectClasspath.resolve(
+                                ws.root(), ProjectClasspath.defaultRepository()),
+                            verify)
+                        : null;
+                Verified<ProjectAiResult> verified =
+                    service.runVerified(
                         plan,
                         ws,
                         new AiProvider.StreamListener() {
@@ -154,10 +169,14 @@ final class ProjectAiController {
                             Platform.runLater(() -> bottom.ai().appendThinking(piece));
                           }
                         },
-                        cancel);
+                        cancel,
+                        verifier,
+                        verify.retries());
+                ProjectAiResult result = verified.answer();
                 ProjectRefresh.Result fresh =
                     ProjectRefresh.check(result.snapshot(), ws.index(), ws.reader(), ws.options());
-                Platform.runLater(() -> finished(cancel, service, ws, result, fresh));
+                String verification = verified.report();
+                Platform.runLater(() -> finished(cancel, service, ws, result, fresh, verification));
               } catch (AiException ex) {
                 Platform.runLater(() -> failed(cancel, ex.getMessage(), ex));
               } catch (IOException | RuntimeException ex) {
@@ -178,9 +197,16 @@ final class ProjectAiController {
       ProjectAiService service,
       ProjectWorkspace ws,
       ProjectAiResult result,
-      ProjectRefresh.Result fresh) {
+      ProjectRefresh.Result fresh,
+      String verification) {
     parent.end(cancel);
-    bottom.ai().finish(result.note());
+    String note =
+        verification.isBlank()
+            ? result.note()
+            : result.note() == null || result.note().isBlank()
+                ? verification
+                : result.note() + "\n\n" + verification;
+    bottom.ai().finish(note);
     ProjectProposal proposal = result.proposal();
     if (proposal == null) {
       bench.status(
@@ -195,8 +221,7 @@ final class ProjectAiController {
               + ". The checks below use their current text.";
     List<ProposalApplier.Check> checks =
         ProposalApplier.check(ws.reader(), proposal, unsavedPaths(ws.root()), ws.options());
-    Optional<Set<String>> approved =
-        ProjectAiDialogs.review(proposal, checks, result.note(), warning);
+    Optional<Set<String>> approved = ProjectAiDialogs.review(proposal, checks, note, warning);
     if (approved.isEmpty()) {
       bench.status("Proposed changes rejected: nothing was changed.");
       return;

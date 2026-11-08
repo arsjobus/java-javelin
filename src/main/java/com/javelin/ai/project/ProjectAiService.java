@@ -7,8 +7,16 @@ import com.javelin.ai.AiProvider;
 import com.javelin.ai.AiReply;
 import com.javelin.ai.AiRequest;
 import com.javelin.ai.FailureReason;
+import com.javelin.ai.Finding;
+import com.javelin.ai.verify.RepairPrompt;
+import com.javelin.ai.verify.Verification;
+import com.javelin.ai.verify.VerificationLoop;
+import com.javelin.ai.verify.VerificationReport;
+import com.javelin.ai.verify.Verified;
+import com.javelin.ai.verify.Verifier;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
@@ -185,5 +193,80 @@ public final class ProjectAiService {
           snapshot,
           proposal.failures().isEmpty() ? FailureReason.NO_EDIT_BLOCK : proposal.failures().get(0));
     return new ProjectAiResult(text, proposal, note, snapshot);
+  }
+
+  /**
+   * Like {@link #runStreaming}, then compiles the proposed files in memory together ({@link
+   * Verifier}; nothing is written) and, when that fails, asks the model again with the problems, up
+   * to {@code retries} more times. The result is the passing attempt, or else the last one with a
+   * change, with a failed check added as an error finding on the file it names, so the review does
+   * not tick it by default. Without a proposal it is a single request.
+   */
+  public Verified<ProjectAiResult> runVerified(
+      ProjectPlan plan,
+      ProjectWorkspace workspace,
+      AiProvider.StreamListener listener,
+      AiCancel cancel,
+      Verifier verifier,
+      int retries)
+      throws AiException {
+    if (verifier == null) {
+      ProjectAiResult only = runStreaming(plan, workspace, listener, cancel);
+      return Verified.of(List.of(new VerificationLoop.Attempt<>(1, only, null)));
+    }
+    var step =
+        new VerificationLoop.Step<ProjectAiResult>() {
+          @Override
+          public ProjectAiResult ask(AiRequest request, int attempt) throws AiException {
+            if (attempt > 1)
+              listener.onText(
+                  "\n\n----- attempt " + attempt + ": asking again with the problems -----\n\n");
+            return runStreaming(plan.withRequest(request), workspace, listener, cancel);
+          }
+
+          @Override
+          public void retryFailed(int attempt, AiException why) {
+            listener.onText(
+                "\n\n----- attempt " + attempt + " failed: " + why.getMessage() + " -----\n");
+          }
+
+          @Override
+          public VerificationLoop.Checked check(ProjectAiResult result, AiCancel c) {
+            ProjectProposal proposal = result.proposal();
+            if (proposal == null) return null;
+            Map<String, String> files = new LinkedHashMap<>();
+            for (FileChange change : proposal.changes())
+              files.put(change.path(), change.replacement());
+            Verification v = verifier.verify(files, c);
+            String hunk;
+            if (v.outcome() == Verification.Outcome.COMPILE_FAILED) {
+              var first = v.problems().get(0);
+              String text = files.get(first.path());
+              hunk =
+                  text == null
+                      ? ""
+                      : first.path() + "\n" + RepairPrompt.hunkAround(text, first.line());
+            } else {
+              hunk = proposal.changes().isEmpty() ? "" : proposal.changes().get(0).diff().text();
+            }
+            return new VerificationLoop.Checked(v, hunk);
+          }
+        };
+    Verified<ProjectAiResult> verified =
+        Verified.of(VerificationLoop.run(plan.request(), retries, step, cancel));
+    var chosen = verified.chosen();
+    ProjectAiResult shown = chosen.result();
+    Verification v = chosen.verification();
+    if (v != null && v.failed() && shown.proposal() != null) {
+      String path = v.problems().isEmpty() ? "" : v.problems().get(0).path();
+      shown =
+          new ProjectAiResult(
+              shown.text(),
+              shown.proposal().withFinding(path, Finding.error(VerificationReport.findingText(v))),
+              shown.note(),
+              shown.snapshot(),
+              shown.failure());
+    }
+    return new Verified<>(shown, verified.attempts());
   }
 }

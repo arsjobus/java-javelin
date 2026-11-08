@@ -28,6 +28,22 @@ public record ProjectProposal(
     this(snapshotId, explanation, changes, problems, List.of());
   }
 
+  /**
+   * The same proposal with {@code finding} added to the change for {@code path}, or to the first
+   * change when no change has that path.
+   */
+  public ProjectProposal withFinding(String path, com.javelin.ai.Finding finding) {
+    boolean named = changes.stream().anyMatch(c -> c.path().equals(path));
+    List<FileChange> out = new java.util.ArrayList<>();
+    boolean done = false;
+    for (FileChange c : changes) {
+      boolean hit = named ? c.path().equals(path) : !done;
+      out.add(hit ? c.withFinding(finding) : c);
+      done |= hit;
+    }
+    return new ProjectProposal(snapshotId, explanation, out, problems, failures);
+  }
+
   public boolean isEmpty() {
     return changes.isEmpty();
   }

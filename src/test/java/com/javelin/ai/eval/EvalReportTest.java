@@ -1,6 +1,8 @@
 package com.javelin.ai.eval;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.javelin.ai.FailureReason;
@@ -183,5 +185,49 @@ class EvalReportTest {
             .contains("Contract failures (`UNPARSEABLE` plus `ANCHOR_NOT_FOUND`): 2 of 5"));
     assertEquals(
         2, Json.integer(Json.get(Json.parse(report.toJson()), "summary"), "contractFailures", -1));
+  }
+
+  @Test
+  void aVerifiedReportSaysSoAndCountsProposalsThatCompiled() {
+    var fix = EvalTask.Category.FIX_BUG;
+    TaskResult compiled = r("a", fix, null, 100);
+    TaskResult notCompiled =
+        new TaskResult(
+            "b", fix, true, false, false, 3, 100, 10, 5, 2, true, FailureReason.COMPILE_ERROR, "x");
+    TaskResult notApplied =
+        new TaskResult(
+            "c", fix, false, false, false, 1, 100, 10, 5, 0, false, FailureReason.UNPARSEABLE, "x");
+    EvalReport verified =
+        new EvalReport(
+            "small",
+            "m",
+            "2026-11-08",
+            42,
+            3,
+            List.of(List.of(compiled, notCompiled, notApplied)),
+            1000,
+            2);
+    assertTrue(verified.verified());
+    assertEquals(1, verified.reachedReviewCompiling());
+    String md = verified.toMarkdown();
+    assertTrue(md.contains("up to 2 more requests"), md);
+    assertTrue(md.contains("Reached review with a compiling result: 1 of 3 results (33%)."), md);
+    assertFalse(md.contains("single-attempt."), md);
+    Object json = Json.get(Json.parse(verified.toJson()), "summary");
+    assertEquals(1, Json.integer(json, "reachedReviewCompiling", -1));
+    assertEquals(2, Json.integer(json, "retries", -1));
+    var one =
+        new EvalReport("small", "m", "d", 1, 1, List.of(List.of(compiled)), 1, 1).toMarkdown();
+    assertTrue(one.contains("up to 1 more request "), one);
+    var empty = new EvalReport("small", "m", "d", 1, 0, List.of(List.of()), 1, 2).toMarkdown();
+    assertTrue(empty.contains("0 of 0 results (0%)"), empty);
+  }
+
+  @Test
+  void aSingleAttemptReportIsUnchangedByPhaseTwo() {
+    EvalReport plain = report();
+    assertFalse(plain.verified());
+    assertFalse(plain.toMarkdown().contains("Reached review"));
+    assertNull(Json.get(Json.get(Json.parse(plain.toJson()), "summary"), "retries"));
   }
 }

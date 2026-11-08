@@ -52,7 +52,8 @@ class EvalRunTest {
     }
 
     Path scratch = Files.createTempDirectory("javelin-eval-");
-    EvalRunner runner = new EvalRunner(provider, profile, scratch);
+    int retries = Integer.parseInt(System.getProperty("eval.retries", "-1"));
+    EvalRunner runner = new EvalRunner(provider, profile, scratch, retries);
     long started = System.nanoTime();
     List<List<TaskResult>> all = new ArrayList<>();
     for (int run = 0; run < runs; run++)
@@ -66,7 +67,8 @@ class EvalRunTest {
             seed,
             tasks.size(),
             all,
-            (System.nanoTime() - started) / 1_000_000);
+            (System.nanoTime() - started) / 1_000_000,
+            retries);
     Path out = Path.of("target", "eval");
     Files.createDirectories(out);
     Files.writeString(out.resolve("results-" + date + ".json"), report.toJson());
