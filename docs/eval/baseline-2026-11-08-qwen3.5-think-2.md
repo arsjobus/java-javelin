@@ -1,6 +1,6 @@
 # AI edit baseline: qwen3.5:9b-mlx, 2026-11-08
 
-Measured with `mvn -Peval test -Deval.model=qwen3.5:9b-mlx`. Profile `small`: the editor's own limits and window, temperature 0, seed 42 plus the run number. 24 tasks, 3 runs, one attempt per task (no retries exist yet). A task passes when its judging test passes after the change is applied; nothing is judged by a model.
+Measured with `mvn -Peval test -Deval.model=qwen3.5:9b-mlx -Deval.editBlockMinLines=0`. Profile `small`: the editor's own limits and window, temperature 0, seed 42 plus the run number. 24 tasks, 3 runs, one attempt per task (no retries exist yet). A task passes when its judging test passes after the change is applied; nothing is judged by a model.
 
 ## Result
 
