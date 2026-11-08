@@ -1,6 +1,7 @@
 package com.javelin.ai.eval;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -57,5 +58,20 @@ class EvalProfileTest {
             IllegalArgumentException.class,
             () -> EvalProfile.resolve(Map.of("eval.model", "m", "eval.profile", "frontier")::get));
     assertTrue(e.getMessage().contains("only 'small'"));
+  }
+
+  @Test
+  void editFormatsCanBeComparedWithoutChangingTheEditorsDefaults() {
+    EvalProfile p = EvalProfile.resolve(Map.of("eval.model", "m")::get);
+    assertFalse(p.structuredEdits());
+    assertEquals(com.javelin.ai.AiConfig.DEFAULT_EDIT_BLOCK_MIN_LINES, p.editBlockMinLines());
+    EvalProfile tuned =
+        EvalProfile.resolve(
+            Map.of("eval.model", "m", "eval.editBlockMinLines", "0", "eval.structured", "true")
+                ::get);
+    assertEquals(0, tuned.editBlockMinLines());
+    assertTrue(tuned.structuredEdits());
+    assertEquals(0, tuned.aiConfig().editBlockMinLines());
+    assertTrue(tuned.aiConfig().structuredEdits());
   }
 }

@@ -36,6 +36,16 @@ public interface AiProvider {
   List<String> models(AiCancel cancel) throws AiException;
 
   /**
+   * True when the provider can be told the shape an answer must have ({@link
+   * AiRequest#responseSchema}) and keeps to it. The default is false; a provider that says true
+   * lets edits be asked for as JSON ({@link JsonEdits}). The pipeline reads this, never the
+   * provider's name.
+   */
+  default boolean supportsSchemaOutput() {
+    return false;
+  }
+
+  /**
    * The most tokens of context the model supports, when the provider can say. It is information for
    * the context budget; it carries no code. The default is "unknown".
    */

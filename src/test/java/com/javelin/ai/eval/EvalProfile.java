@@ -12,6 +12,11 @@ import java.util.function.Function;
  * with temperature 0 and a seed so a run can be repeated. A frontier profile is not part of Phase 0
  * (the roadmap says no frontier baseline until there is access to measure one), so asking for any
  * other name is an error, not a silent fallback.
+ *
+ * <p>Two overrides compare edit formats on the same model: {@code -Deval.editBlockMinLines=0} asks
+ * for edit blocks for every selection (the default is whole blocks under {@link
+ * AiConfig#DEFAULT_EDIT_BLOCK_MIN_LINES} lines), and {@code -Deval.structured=true} asks for JSON
+ * edits. Nothing changes the editor's defaults until a run shows the change helps.
  */
 record EvalProfile(
     String name,
@@ -23,7 +28,8 @@ record EvalProfile(
     int editBlockMinLines,
     int contextTokens,
     int reserveTokens,
-    ContextMode contextMode) {
+    ContextMode contextMode,
+    boolean structuredEdits) {
 
   static final String SMALL = "small";
 
@@ -39,7 +45,8 @@ record EvalProfile(
         AiConfig.DEFAULT_EDIT_BLOCK_MIN_LINES,
         ContextBudget.DEFAULT_RUNTIME_TOKENS,
         ContextBudget.DEFAULT_RESERVE_TOKENS,
-        ContextMode.SMART);
+        ContextMode.SMART,
+        AiConfig.DEFAULT_STRUCTURED_EDITS);
   }
 
   /**
@@ -72,10 +79,13 @@ record EvalProfile(
                     property.apply("eval.timeoutSeconds"),
                     String.valueOf(base.timeout().toSeconds())))),
         base.maxContextChars(),
-        base.editBlockMinLines(),
+        Integer.parseInt(
+            or(property.apply("eval.editBlockMinLines"), String.valueOf(base.editBlockMinLines()))),
         base.contextTokens(),
         base.reserveTokens(),
-        base.contextMode());
+        base.contextMode(),
+        Boolean.parseBoolean(
+            or(property.apply("eval.structured"), String.valueOf(base.structuredEdits()))));
   }
 
   private static String or(String value, String fallback) {
@@ -84,6 +94,13 @@ record EvalProfile(
 
   AiConfig aiConfig() {
     return new AiConfig(
-        "ollama", endpoint, model, maxContextChars, timeout, editBlockMinLines, thinkLevel);
+        "ollama",
+        endpoint,
+        model,
+        maxContextChars,
+        timeout,
+        editBlockMinLines,
+        thinkLevel,
+        structuredEdits);
   }
 }

@@ -42,7 +42,12 @@ public final class AiService {
     AiContext context = AiContext.of(action, source, config.maxContextChars());
     AiRequest request =
         PromptBuilder.build(
-            action, context, instruction, config.model(), config.editBlockMinLines());
+            action,
+            context,
+            instruction,
+            config.model(),
+            config.editBlockMinLines(),
+            config.structuredEdits() && provider.supportsSchemaOutput());
     List<String> warnings = new ArrayList<>();
     for (String what : SensitiveFiles.warnings(context.text()))
       warnings.add(
@@ -104,8 +109,10 @@ public final class AiService {
             AiProposal.newDocument(plan.testFileName(), parsed.code(), parsed.explanation());
         return new AiResult(text, proposal, extraBlocksNote(parsed.extraBlocks()));
       }
-      ChangeReply.Interpreted change = ChangeReply.interpret(text, plan.context().text());
-      AiProposal proposal = AiProposal.replace(plan.context(), change.code(), change.explanation());
+      ChangeReply.Interpreted change =
+          ChangeReply.interpret(text, plan.context().text(), plan.context().name());
+      AiProposal proposal =
+          AiProposal.replace(plan.context(), change.code(), change.explanation(), change.anchors());
       List<Finding> findings = new ArrayList<>(change.notes());
       findings.addAll(
           ChangeChecker.check(

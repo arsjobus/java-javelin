@@ -21,6 +21,8 @@ Only the tests tagged `eval` run (`mvn test` never runs them, and never calls a 
 | `-Deval.endpoint=...` | `http://127.0.0.1:11434` | must be a loopback address, as everywhere in Javelin |
 | `-Deval.think=...` | the product default | `none`, `low`, `medium` or `high` |
 | `-Deval.timeoutSeconds=...` | the product default | how long to wait for one answer |
+| `-Deval.editBlockMinLines=0` | the product default (40) | `0` asks for edit blocks for every selection, to compare with whole blocks |
+| `-Deval.structured=true` | `false` | asks for JSON edits (Ollama's `format`), to compare with text |
 
 It writes two files to `target/eval/`: `results-<date>.json` (every task of every run) and `baseline-<date>.md` (the readable summary). To publish a baseline, copy the Markdown to `docs/eval/baseline-<date>.md` and commit it. If Ollama is not running or the model is not installed the run stops with that message instead of recording a row of failures.
 
@@ -73,3 +75,15 @@ The baseline reports the rate of each run, their mean, lowest, highest and stand
 ## Baselines
 
 None is committed yet: the numbers come from running the command above against a real model on a real machine.
+
+## Phase 1: comparing edit formats
+
+Phase 1 of `ROADMAP-AI-RELIABILITY.md` changes how edits are read, not what the editor asks by default. To decide whether to change a default, run the corpus once per setting with the same model and seed and compare the reports:
+
+```
+mvn -Peval test -Deval.model=<model>                              # today's defaults
+mvn -Peval test -Deval.model=<model> -Deval.editBlockMinLines=0   # edit blocks everywhere
+mvn -Peval test -Deval.model=<model> -Deval.structured=true       # JSON edits
+```
+
+The report counts *contract failures*: results that failed with `UNPARSEABLE` or `ANCHOR_NOT_FOUND`, not because of the code the model wrote. The 2026-11-07 baseline has none, in 72 results, so the threshold is no worse than that (0 of 72) in any run that is adopted; the pass rate must not fall either. That baseline used whole blocks for almost every task, so the edit-block path was barely exercised; the first comparison above is the one that tests it.

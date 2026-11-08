@@ -4,15 +4,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Turns a model's reply to "change this code" into the text the code should become. A reply may
- * hold edit blocks (SEARCH / REPLACE), a unified diff in a code block, or the whole replacement in
- * one code block; the three are recognised in that order, whatever the prompt asked for, because
- * small models do not always do what they are told. Nothing here touches a file or a window.
+ * Turns a model's reply to "change this code" into the text the code should become. A reply may be
+ * JSON edits ({@link JsonEdits}), hold edit blocks (SEARCH / REPLACE), a unified diff in a code
+ * block, or the whole replacement in one code block; the four are recognised in that order,
+ * whatever the prompt asked for, because small models do not always do what they are told. Nothing
+ * here touches a file or a window.
  */
 public final class ChangeReply {
   private ChangeReply() {}
 
   public enum Format {
+    JSON_EDITS,
     EDIT_BLOCKS,
     DIFF,
     WHOLE_BLOCK
@@ -20,10 +22,26 @@ public final class ChangeReply {
 
   /**
    * {@code code} is the new text of the part that was sent, {@code notes} what was repaired on the
-   * way.
+   * way, {@code anchors} how each edit of an edit reply was found (empty for a diff or a whole
+   * block). Every edit that was found by anything but its exact text also has a note.
    */
   public record Interpreted(
-      String code, String explanation, int extraBlocks, Format format, List<Finding> notes) {}
+      String code,
+      String explanation,
+      int extraBlocks,
+      Format format,
+      List<Finding> notes,
+      List<EditBlocks.Anchor> anchors) {
+    public Interpreted {
+      notes = List.copyOf(notes);
+      anchors = List.copyOf(anchors);
+    }
+
+    public Interpreted(
+        String code, String explanation, int extraBlocks, Format format, List<Finding> notes) {
+      this(code, explanation, extraBlocks, format, notes, List.of());
+    }
+  }
 
   private static final java.util.regex.Pattern REASONING =
       java.util.regex.Pattern.compile("(?is)<think(?:ing)?>.*?(?:</think(?:ing)?>|\\z)");
@@ -39,15 +57,55 @@ public final class ChangeReply {
   }
 
   public static Interpreted interpret(String rawReply, String original) throws AiException {
+    return interpret(rawReply, original, null);
+  }
+
+  /**
+   * As {@link #interpret(String, String)}; {@code fileName}, when not null, is the file the code
+   * came from, and JSON edits that name another file are refused (nothing is applied to a file the
+   * model was not talking about).
+   */
+  public static Interpreted interpret(String rawReply, String original, String fileName)
+      throws AiException {
     String reply = withoutReasoning(rawReply);
+    if (JsonEdits.looksLike(reply)) {
+      JsonEdits.Parsed parsed = JsonEdits.parse(reply);
+      int number = 0;
+      for (JsonEdits.FileEdit e : parsed.edits()) {
+        number++;
+        if (fileName != null && !JsonEdits.sameFile(e.file(), fileName))
+          throw new AiException(
+              AiException.Kind.BAD_RESPONSE,
+              FailureReason.WRONG_FILE,
+              "Edit "
+                  + number
+                  + " is for "
+                  + e.file()
+                  + ", but the code that was sent is from "
+                  + fileName
+                  + ". Nothing was applied.");
+      }
+      EditBlocks.Applied applied =
+          EditBlocks.applyWithAnchors(
+              original, parsed.edits().stream().map(JsonEdits.FileEdit::edit).toList());
+      return new Interpreted(
+          applied.text(),
+          parsed.explanation(),
+          0,
+          Format.JSON_EDITS,
+          looseAnchorNotes(applied.anchors()),
+          applied.anchors());
+    }
     if (EditBlocks.looksLike(reply)) {
       EditBlocks.Parsed parsed = EditBlocks.parse(reply);
+      EditBlocks.Applied applied = EditBlocks.applyWithAnchors(original, parsed.edits());
       return new Interpreted(
-          EditBlocks.apply(original, parsed.edits()),
+          applied.text(),
           parsed.explanation(),
           0,
           Format.EDIT_BLOCKS,
-          List.of());
+          looseAnchorNotes(applied.anchors()),
+          applied.anchors());
     }
     ResponseParser.Parsed block = ResponseParser.parse(reply);
     if (UnifiedPatch.looksLike(block.code()))
@@ -61,6 +119,32 @@ public final class ChangeReply {
     String code = restoreIndentation(original, block.code(), notes);
     return new Interpreted(
         code, block.explanation(), block.extraBlocks(), Format.WHOLE_BLOCK, notes);
+  }
+
+  /** True when the text is a reply of JSON edits (see {@link JsonEdits#looksLike}). */
+  public static boolean isJsonEdits(String reply) {
+    return JsonEdits.looksLike(withoutReasoning(reply));
+  }
+
+  /** A warning for each edit that was found by anything but its exact text. */
+  static List<Finding> looseAnchorNotes(List<EditBlocks.Anchor> anchors) {
+    List<Finding> notes = new ArrayList<>();
+    for (EditBlocks.Anchor a : anchors) {
+      if (!a.rung().isLoose()) continue;
+      notes.add(
+          Finding.warning(
+              a.rung() == AnchorRung.SIGNATURE
+                  ? "Edit "
+                      + a.edit()
+                      + " did not match the code as written, so it was placed by the signature of"
+                      + " its method and the whole method was replaced. Read the change closely."
+                  : "Edit "
+                      + a.edit()
+                      + " was found "
+                      + a.rung().label()
+                      + ": the model's copy of the code was not exact."));
+    }
+    return notes;
   }
 
   /**
@@ -78,7 +162,8 @@ public final class ChangeReply {
     List<String> fixed = LineMatch.shiftIndent(reply, want, "");
     notes.add(
         Finding.warning(
-            "The reply started with no indentation, so the indentation of the selected code was added to every line."));
+            "The reply started with no indentation, so the indentation of the selected code was"
+                + " added to every line."));
     return String.join("\n", fixed);
   }
 }

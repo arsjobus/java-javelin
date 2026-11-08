@@ -142,7 +142,9 @@ class SelectionEvaluationTest {
                 Set.of(
                     "src/main/java/com/javelin/ai/EditBlocks.java",
                     "src/main/java/com/javelin/ai/LineMatch.java")));
-    Report report = SelectionEvaluation.run(ws, cases, new ContextBudget(0, 32_768, 4_096));
+    // The editor's own source grows with every feature and a file goes in whole or not at all, so
+    // this window is raised from time to time; it is the model window the cases are measured for.
+    Report report = SelectionEvaluation.run(ws, cases, new ContextBudget(0, 36_864, 4_096));
     System.out.println(
         "scan: "
             + scanMillis

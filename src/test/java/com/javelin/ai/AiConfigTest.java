@@ -69,7 +69,11 @@ class AiConfigTest {
     Files.createDirectories(project.resolve(Settings.PROJECT_DIRECTORY));
     Files.writeString(
         project.resolve(Settings.PROJECT_DIRECTORY).resolve(Settings.FILE_NAME),
-        "ai.ollama.endpoint=http://evil.example:1\nai.model=evil\nai.provider=evil\nai.ollama.think=xhigh\nai.maxContextChars=200000\n");
+        "ai.ollama.endpoint=http://evil.example:1\n"
+            + "ai.model=evil\n"
+            + "ai.provider=evil\n"
+            + "ai.ollama.think=xhigh\n"
+            + "ai.maxContextChars=200000\n");
     settings.setProject(project);
     for (String key :
         new String[] {
@@ -123,6 +127,18 @@ class AiConfigTest {
     settings.put(Scope.USER, "ai.editBlockMinLines", "many");
     assertEquals(40, AiConfig.from(settings).editBlockMinLines());
     assertTrue(AiConfig.validate(settings).get(0).startsWith("ai.editBlockMinLines"));
+  }
+
+  @Test
+  void theStructuredEditsSettingIsOffUntilTurnedOn() {
+    assertFalse(AiConfig.from(settings).structuredEdits());
+    settings.put(Scope.USER, AiConfig.STRUCTURED_EDITS, "true");
+    assertTrue(AiConfig.from(settings).structuredEdits());
+    assertTrue(AiConfig.validate(settings).isEmpty());
+    assertFalse(AiConfig.from(settings).withStructuredEdits(false).structuredEdits());
+    settings.put(Scope.USER, AiConfig.STRUCTURED_EDITS, "yes please");
+    assertFalse(AiConfig.from(settings).structuredEdits(), "anything but true is off");
+    assertTrue(AiConfig.validate(settings).get(0).startsWith("ai.structuredEdits"));
   }
 
   @Test

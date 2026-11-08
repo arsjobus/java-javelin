@@ -43,8 +43,8 @@ The AI may explain, analyze, draft, refactor, or propose. Applying a change rema
 ## Dependable changes
 
 A model's reply is not trusted to fit the file. For Propose Change: the selection is widened to whole lines before it is
-sent; the reply is read as edit blocks, a unified diff or a whole code block, and applied by content, never by line number
-(all or nothing); a reply that lost its indentation gets the selection's back; and before the review opens the result is
+sent; the reply is read as JSON edits, edit blocks, a unified diff or a whole code block, and applied by content, never by line number
+(all or nothing; an edit that matches nowhere or in several places, or names a file that was not sent, is refused with a reason, and edits that were not exact copies of the code are flagged in the review); a reply that lost its indentation gets the selection's back; and before the review opens the result is
 checked for placeholders, leaked markers, bracket balance, Java syntax, dropped methods and a large shrink. Errors do not block
 anything: the review shows them and its button reads "Apply anyway". Nothing is retried or applied without a click. See
 [AI-EDITING.md](AI-EDITING.md) for the reasoning and what is not done yet.

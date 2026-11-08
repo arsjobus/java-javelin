@@ -258,7 +258,8 @@ class MultiFileReplyTest {
   }
 
   @Test
-  void aFileTheModelWasNotShownGetsAWarning() throws AiException, IOException {
+  void aFileTheModelWasNotShownIsRefusedAndNothingIsProposedForIt()
+      throws AiException, IOException {
     ProjectSnapshot partial =
         ContextBuilder.build(
                 ws.index(),
@@ -280,9 +281,13 @@ class MultiFileReplyTest {
             ws.reader(),
             partial,
             ws.options());
-    FileChange c = p.changes().get(0);
-    assertFalse(c.inContext());
-    assertTrue(c.findings().stream().anyMatch(f -> f.message().contains("not shown this file")));
+    assertTrue(p.changes().isEmpty(), "a change to a file the model never saw is not proposed");
+    assertTrue(p.isEmpty());
+    assertTrue(p.problems().get(0).contains("not shown to the model"), p.problems().toString());
+    assertEquals(
+        List.of(com.javelin.ai.FailureReason.WRONG_FILE),
+        p.failures(),
+        "counted as an edit to a file outside the context");
   }
 
   @Test

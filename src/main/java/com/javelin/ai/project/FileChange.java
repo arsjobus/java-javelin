@@ -1,6 +1,7 @@
 package com.javelin.ai.project;
 
 import com.javelin.ai.ChangeReply;
+import com.javelin.ai.EditBlocks;
 import com.javelin.ai.Finding;
 import com.javelin.ai.LineDiff;
 import java.util.List;
@@ -10,7 +11,8 @@ import java.util.List;
  * ("" for a new file) and {@code replacement} what the file becomes. {@code rawSection} is the
  * model's text for this file, kept so the change can be re-applied by content if the file has
  * changed since ({@code format} says how it was written; a whole-file replacement cannot be moved
- * onto different text). {@code inContext} says whether the model was shown this file.
+ * onto different text). {@code inContext} says whether the model was shown this file. {@code
+ * anchors} says how each edit of an edit reply was found in the file.
  */
 public record FileChange(
     String path,
@@ -20,7 +22,8 @@ public record FileChange(
     String rawSection,
     ChangeReply.Format format,
     boolean inContext,
-    List<Finding> findings) {
+    List<Finding> findings,
+    List<EditBlocks.Anchor> anchors) {
   public enum Kind {
     MODIFY,
     CREATE
@@ -28,6 +31,20 @@ public record FileChange(
 
   public FileChange {
     findings = List.copyOf(findings);
+    anchors = List.copyOf(anchors);
+  }
+
+  /** A change with no record of how its edits were found (a new file, a diff, a whole file). */
+  public FileChange(
+      String path,
+      Kind kind,
+      String original,
+      String replacement,
+      String rawSection,
+      ChangeReply.Format format,
+      boolean inContext,
+      List<Finding> findings) {
+    this(path, kind, original, replacement, rawSection, format, inContext, findings, List.of());
   }
 
   public LineDiff.Result diff() {

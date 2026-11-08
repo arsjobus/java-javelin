@@ -39,6 +39,15 @@ public final class ProjectPromptBuilder {
       Rules: change only files that were shown to you; each SEARCH part must match the file character for character and be long enough to match in one place only; write only what changes; no placeholders such as "..." or "rest of the code"; no line numbers; do not delete or rename files; do not run or suggest running commands as part of the change. If the request is a question or no change is needed, answer in words and write no FILE heading.\
       """;
 
+  static final String HOW_TO_ANSWER_JSON =
+      """
+      Answer the request using the project above, as JSON only, in exactly this form:
+      {"explanation": "a short explanation", "edits": [{"file": "path/as/shown/in/the/structure", "anchor": "the signature line of the method the change is in", "old": "lines copied exactly from the file, with their indentation", "new": "what those lines become"}]}
+      Use one edit for each separate change; several edits may be for the same file.
+      To create a file that does not exist yet, write an edit with that path, an empty "old" and the complete content of the file as "new".
+      Rules: change only files that were shown to you; each "old" must match the file character for character and be long enough to match in one place only; "anchor" is one line copied exactly from the file that appears there only once (the signature of the method that holds the change), or "" when the change is not inside a method; write only what changes; no placeholders such as "..." or "rest of the code"; no line numbers; do not delete or rename files; do not run or suggest running commands as part of the change. If the request is a question or no change is needed, give an empty "edits" list and answer in "explanation".\
+      """;
+
   /** The tokens the system message and everything around the project text will cost. */
   public static int fixedTokens(String instruction) {
     return ContextBudget.estimateTokens(SYSTEM)
@@ -65,17 +74,40 @@ public final class ProjectPromptBuilder {
   public static AiRequest build(
       String model, ProjectContext context, String instruction, ContextBudget budget)
       throws AiException {
+    return build(model, context, instruction, budget, false);
+  }
+
+  /**
+   * As above; with {@code structured} the answer is asked for as JSON edits and the request carries
+   * the shape it must have ({@link com.javelin.ai.JsonEdits#SCHEMA}).
+   */
+  public static AiRequest build(
+      String model,
+      ProjectContext context,
+      String instruction,
+      ContextBudget budget,
+      boolean structured)
+      throws AiException {
     checkInstruction(instruction);
-    return new AiRequest(
-        model, SYSTEM, wrap(context.text(), instruction.strip()), budget.effectiveWindow());
+    AiRequest request =
+        new AiRequest(
+            model,
+            SYSTEM,
+            wrap(context.text(), instruction.strip(), structured),
+            budget.effectiveWindow());
+    return structured ? request.withResponseSchema(com.javelin.ai.JsonEdits.SCHEMA) : request;
   }
 
   private static String wrap(String projectText, String instruction) {
+    return wrap(projectText, instruction, false);
+  }
+
+  private static String wrap(String projectText, String instruction, boolean structured) {
     return "Here is the project.\n\n"
         + projectText
         + "\nEND OF PROJECT\n\nREQUEST:\n"
         + instruction
         + "\n\nHOW TO ANSWER:\n"
-        + HOW_TO_ANSWER;
+        + (structured ? HOW_TO_ANSWER_JSON : HOW_TO_ANSWER);
   }
 }

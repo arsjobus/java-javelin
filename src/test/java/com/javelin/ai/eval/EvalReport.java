@@ -83,6 +83,24 @@ record EvalReport(
     return counts;
   }
 
+  /**
+   * Results that failed because of the contract between model and editor, not because of the code
+   * the model wrote: a reply that could not be read, or edits that could not be placed. Phase 1's
+   * measure.
+   */
+  int contractFailures() {
+    Map<FailureReason, Integer> f = failures();
+    return f.getOrDefault(FailureReason.UNPARSEABLE, 0)
+        + f.getOrDefault(FailureReason.ANCHOR_NOT_FOUND, 0);
+  }
+
+  /** How many task results there were, over all runs. */
+  int totalResults() {
+    int n = 0;
+    for (List<TaskResult> run : runs) n += run.size();
+    return n;
+  }
+
   /** Tasks that passed in some runs and failed in others: where luck decides. */
   List<String> unstable() {
     return outcomes(true);
@@ -137,6 +155,7 @@ record EvalReport(
     Map<String, Object> reasons = new LinkedHashMap<>();
     failures().forEach((k, v) -> reasons.put(k.name(), v));
     summary.put("failures", reasons);
+    summary.put("contractFailures", contractFailures());
     Map<String, Object> categories = new LinkedHashMap<>();
     byCategory().forEach((k, v) -> categories.put(k.name(), v));
     summary.put("byCategory", categories);
@@ -223,6 +242,11 @@ record EvalReport(
                       .append(k.description())
                       .append(" |\n"));
     }
+    md.append("\nContract failures (`UNPARSEABLE` plus `ANCHOR_NOT_FOUND`): ")
+        .append(contractFailures())
+        .append(" of ")
+        .append(totalResults())
+        .append(" results.\n");
     md.append("\n## Where luck decides\n\n");
     md.append(
         unstable().isEmpty()

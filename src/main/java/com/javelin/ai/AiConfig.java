@@ -17,7 +17,8 @@ public record AiConfig(
     int maxContextChars,
     Duration timeout,
     int editBlockMinLines,
-    String thinkLevel) {
+    String thinkLevel,
+    boolean structuredEdits) {
   public static final String PROVIDER = "ai.provider";
   public static final String ENDPOINT = "ai.ollama.endpoint";
   public static final String MODEL = "ai.model";
@@ -31,6 +32,15 @@ public record AiConfig(
    */
   public static final String EDIT_BLOCK_MIN_LINES = "ai.editBlockMinLines";
 
+  /**
+   * When true and the provider can be held to an answer shape ({@link
+   * AiProvider#supportsSchemaOutput}), Propose Change and project requests ask for the edits as
+   * JSON ({@link JsonEdits}). Off by default until an eval run shows it helps the model in use.
+   */
+  public static final String STRUCTURED_EDITS = "ai.structuredEdits";
+
+  public static final boolean DEFAULT_STRUCTURED_EDITS = false;
+
   public static final String DEFAULT_PROVIDER = "ollama";
   public static final String DEFAULT_THINK_LEVEL = "medium";
   public static final List<String> THINK_LEVELS = List.of("low", "medium", "high", "xhigh", "none");
@@ -43,6 +53,26 @@ public record AiConfig(
   public static final int DEFAULT_TIMEOUT_SECONDS = 120,
       MIN_TIMEOUT_SECONDS = 5,
       MAX_TIMEOUT_SECONDS = 1800;
+
+  /** A configuration with edits asked for as text (the default). */
+  public AiConfig(
+      String provider,
+      String endpoint,
+      String model,
+      int maxContextChars,
+      Duration timeout,
+      int editBlockMinLines,
+      String thinkLevel) {
+    this(
+        provider,
+        endpoint,
+        model,
+        maxContextChars,
+        timeout,
+        editBlockMinLines,
+        thinkLevel,
+        DEFAULT_STRUCTURED_EDITS);
+  }
 
   public static AiConfig from(Settings settings) {
     return new AiConfig(
@@ -62,7 +92,8 @@ public record AiConfig(
             settings.getInt(EDIT_BLOCK_MIN_LINES, DEFAULT_EDIT_BLOCK_MIN_LINES),
             MIN_EDIT_BLOCK_MIN_LINES,
             MAX_EDIT_BLOCK_MIN_LINES),
-        thinkLevel(settings.get(THINK_LEVEL, DEFAULT_THINK_LEVEL)));
+        thinkLevel(settings.get(THINK_LEVEL, DEFAULT_THINK_LEVEL)),
+        settings.getBoolean(STRUCTURED_EDITS, DEFAULT_STRUCTURED_EDITS));
   }
 
   /**
@@ -93,6 +124,11 @@ public record AiConfig(
         MIN_EDIT_BLOCK_MIN_LINES,
         MAX_EDIT_BLOCK_MIN_LINES,
         problems);
+    String structured = settings.get(STRUCTURED_EDITS, null);
+    if (structured != null
+        && !structured.strip().equalsIgnoreCase("true")
+        && !structured.strip().equalsIgnoreCase("false"))
+      problems.add(STRUCTURED_EDITS + ": '" + structured + "' is not true or false; it is off.");
     String thinkLevel = settings.get(THINK_LEVEL, null);
     if (thinkLevel != null
         && !THINK_LEVELS.contains(thinkLevel.strip().toLowerCase(java.util.Locale.ROOT)))
@@ -118,7 +154,14 @@ public record AiConfig(
         maxContextChars,
         timeout,
         editBlockMinLines,
-        thinkLevel);
+        thinkLevel,
+        structuredEdits);
+  }
+
+  /** The same configuration with edits asked for as JSON, or as text. */
+  public AiConfig withStructuredEdits(boolean on) {
+    return new AiConfig(
+        provider, endpoint, model, maxContextChars, timeout, editBlockMinLines, thinkLevel, on);
   }
 
   private static String thinkLevel(String value) {

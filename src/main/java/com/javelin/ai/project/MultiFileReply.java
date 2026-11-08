@@ -5,6 +5,7 @@ import com.javelin.ai.ChangeChecker;
 import com.javelin.ai.ChangeReply;
 import com.javelin.ai.FailureReason;
 import com.javelin.ai.Finding;
+import com.javelin.ai.JsonEdits;
 import com.javelin.ai.ResponseParser;
 import com.javelin.ai.SensitiveFiles;
 import com.javelin.language.Languages;
@@ -24,10 +25,11 @@ import java.util.regex.Pattern;
  * Reads a model's reply to a project request as coordinated changes to several files. A file is a
  * heading ({@code === FILE: path ===} for an existing file, {@code === NEW FILE: path ===} for a
  * new one) followed by edit blocks, a diff or one code block; a reply made of a git-style diff over
- * several files is understood too. Each file is checked on its own: the path must stay inside the
- * project and name something the editor may change, the text is applied by content (never by line
- * number) and the result is checked like a single-file change. A part that cannot be used is
- * reported with its file in {@code problems}, and nothing is ever applied here.
+ * several files is understood too, and so is a reply of JSON edits ({@link JsonEdits}), whose edits
+ * name their file. Each file is checked on its own: the path must stay inside the project and name
+ * something the editor may change, the text is applied by content (never by line number) and the
+ * result is checked like a single-file change. A part that cannot be used is reported with its file
+ * in {@code problems}, and nothing is ever applied here.
  */
 public final class MultiFileReply {
   private MultiFileReply() {}
@@ -52,22 +54,37 @@ public final class MultiFileReply {
    */
   public static boolean looksLike(String reply) {
     String text = ChangeReply.withoutReasoning(reply);
-    return !headings(text).isEmpty() || !diffSections(text).isEmpty();
+    return JsonEdits.looksLike(text) || !headings(text).isEmpty() || !diffSections(text).isEmpty();
   }
 
   public static ProjectProposal parse(
       String reply, ProjectReader reader, ProjectSnapshot snapshot, ScanOptions options) {
     String text = ChangeReply.withoutReasoning(reply);
-    List<Section> sections = headings(text);
+    List<Section> sections;
     String explanation = "";
-    if (!sections.isEmpty()) explanation = textBeforeFirstHeading(text);
-    else {
-      sections = diffSections(text);
-      if (!sections.isEmpty()) explanation = textBeforeFirstDiff(text);
-    }
     List<FileChange> changes = new ArrayList<>();
     List<String> problems = new ArrayList<>();
     List<FailureReason> failures = new ArrayList<>();
+    if (JsonEdits.looksLike(text)) {
+      try {
+        JsonEdits.Parsed json = JsonEdits.parse(text);
+        explanation = json.explanation();
+        sections = new ArrayList<>();
+        for (String file : JsonEdits.files(json))
+          sections.add(new Section(file, false, JsonEdits.section(json, file)));
+      } catch (AiException ex) {
+        problems.add(ex.getMessage());
+        failures.add(ex.reason() == null ? FailureReason.UNPARSEABLE : ex.reason());
+        return new ProjectProposal(snapshot.id(), "", changes, problems, failures);
+      }
+    } else {
+      sections = headings(text);
+      if (!sections.isEmpty()) explanation = textBeforeFirstHeading(text);
+      else {
+        sections = diffSections(text);
+        if (!sections.isEmpty()) explanation = textBeforeFirstDiff(text);
+      }
+    }
     Set<String> seen = new HashSet<>();
     for (Section section : sections) {
       String path = section.path().replace('\\', '/');
@@ -114,6 +131,26 @@ public final class MultiFileReply {
           AiException.Kind.REFUSED, FailureReason.WRONG_FILE, "is not a regular file.");
     boolean inContext = snapshot.sentHashes().containsKey(path);
     List<Finding> findings = new ArrayList<>();
+    if (!exists && ChangeReply.isJsonEdits(section.body())) {
+      // JSON edits create a file with one edit that has an empty "old" and the content as "new"
+      String content = newFileFromJson(section.body());
+      if (content.length() > MAX_FILE_CHARS)
+        throw new AiException(
+            AiException.Kind.REFUSED,
+            FailureReason.OVERSIZED,
+            "the new file is larger than " + MAX_FILE_CHARS + " characters.");
+      String code = content.endsWith("\n") ? content : content + "\n";
+      findings.addAll(ChangeChecker.check(language, "", code));
+      return new FileChange(
+          path,
+          FileChange.Kind.CREATE,
+          "",
+          code,
+          section.body(),
+          ChangeReply.Format.WHOLE_BLOCK,
+          false,
+          findings);
+    }
     if (!exists) {
       if (!section.declaredNew())
         findings.add(
@@ -143,18 +180,19 @@ public final class MultiFileReply {
           AiException.Kind.REFUSED,
           FailureReason.WRONG_FILE,
           "exists already, so it is not replaced by a new file. Ask for a change to it instead.");
-    String original = reader.readNow(path, options.maxFileBytes());
     if (!inContext)
-      findings.add(
-          Finding.warning(
-              "The model was not shown this file, so its change is not based on what the file"
-                  + " contains."));
-    else if (!ProjectReader.hash(original).equals(snapshot.sentHashes().get(path)))
+      throw new AiException(
+          AiException.Kind.REFUSED,
+          FailureReason.WRONG_FILE,
+          "was not shown to the model, so a change to it is not based on what the file contains"
+              + " and is not proposed.");
+    String original = reader.readNow(path, options.maxFileBytes());
+    if (!ProjectReader.hash(original).equals(snapshot.sentHashes().get(path)))
       findings.add(
           Finding.warning(
               "The file changed after the project was sent; the change was matched against its"
                   + " current text."));
-    ChangeReply.Interpreted interpreted = ChangeReply.interpret(section.body(), original);
+    ChangeReply.Interpreted interpreted = ChangeReply.interpret(section.body(), original, path);
     String replacement =
         ResponseParser.matchLineEndings(
             original, ResponseParser.matchTrailingNewline(original, interpreted.code()));
@@ -173,7 +211,29 @@ public final class MultiFileReply {
         section.body(),
         interpreted.format(),
         inContext,
-        findings);
+        findings,
+        interpreted.anchors());
+  }
+
+  /**
+   * The content of a new file from JSON edits: exactly one edit, with an empty "old", whose "new"
+   * is the whole file. Anything else for a file that does not exist is not a new file.
+   */
+  private static String newFileFromJson(String body) throws AiException {
+    JsonEdits.Parsed parsed = JsonEdits.parse(body);
+    if (parsed.edits().size() != 1 || !parsed.edits().get(0).edit().search().isBlank())
+      throw new AiException(
+          AiException.Kind.REFUSED,
+          FailureReason.WRONG_FILE,
+          "does not exist, and the reply changes it instead of creating it (a new file is one edit"
+              + " with an empty \"old\").");
+    String content = parsed.edits().get(0).edit().replace();
+    if (content.isBlank())
+      throw new AiException(
+          AiException.Kind.REFUSED,
+          FailureReason.NO_EDIT_BLOCK,
+          "would be created with no content, so it is not proposed.");
+    return content;
   }
 
   private static ResponseParser.Parsed parseNewFile(String body) throws AiException {

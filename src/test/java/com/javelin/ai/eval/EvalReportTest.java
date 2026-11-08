@@ -156,4 +156,32 @@ class EvalReportTest {
     assertTrue(md.contains("330 tokens reported"));
     assertTrue(md.contains("single-attempt"));
   }
+
+  @Test
+  void contractFailuresCountOnlyRepliesThatCouldNotBeReadOrPlaced() {
+    var fix = EvalTask.Category.FIX_BUG;
+    EvalReport report =
+        new EvalReport(
+            "small",
+            "m",
+            "2026-11-08",
+            1,
+            1,
+            List.of(
+                List.of(
+                    r("a", fix, FailureReason.UNPARSEABLE, 1),
+                    r("b", fix, FailureReason.ANCHOR_NOT_FOUND, 1),
+                    r("c", fix, FailureReason.TEST_FAILURE, 1),
+                    r("d", fix, FailureReason.NO_EDIT_BLOCK, 1),
+                    r("e", fix, null, 1))),
+            1);
+    assertEquals(2, report.contractFailures());
+    assertEquals(5, report.totalResults());
+    assertTrue(
+        report
+            .toMarkdown()
+            .contains("Contract failures (`UNPARSEABLE` plus `ANCHOR_NOT_FOUND`): 2 of 5"));
+    assertEquals(
+        2, Json.integer(Json.get(Json.parse(report.toJson()), "summary"), "contractFailures", -1));
+  }
 }

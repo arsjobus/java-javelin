@@ -96,7 +96,13 @@ public final class ProjectAiService {
                   + " part of the project it is about, or use Full Project."
               : "No project file fits the budget. Raise ai.contextTokens or exclude files with"
                   + " ai.project.exclude.");
-    AiRequest request = ProjectPromptBuilder.build(config.model(), context, instruction, budget);
+    AiRequest request =
+        ProjectPromptBuilder.build(
+            config.model(),
+            context,
+            instruction,
+            budget,
+            config.structuredEdits() && provider.supportsSchemaOutput());
     List<String> warnings = new ArrayList<>();
     if (!provider.isLocal())
       warnings.add(

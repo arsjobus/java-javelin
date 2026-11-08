@@ -75,6 +75,8 @@ Tests: parser tests over malformed, truncated and fenced replies; anchor-ladder 
 
 Exit: `UNPARSEABLE` and `ANCHOR_NOT_FOUND` together fall below a threshold set from the Phase 0 baseline.
 
+Status (8 Nov 2026): built, defaults unchanged, exit not yet measured. The anchor ladder (exact, trailing spaces, indentation, runs of spaces, then a whole method by its signature) records its rung on the proposal and flags loose matches in the review. JSON edits (`ai.structuredEdits`, off) and the refusal of files outside the context are in. Search-replace blocks are not yet the default for small selections: that waits for an eval comparison (`docs/eval/README.md`, Phase 1). The baseline has 0 contract failures in 72 results, so the threshold is no worse than 0 of 72 with no drop in pass rate.
+
 ## Phase 2: Verification loop
 
 **Goal:** most broken proposals are caught and repaired before a human sees them.

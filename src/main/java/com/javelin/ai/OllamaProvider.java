@@ -181,6 +181,12 @@ public final class OllamaProvider implements AiProvider {
     }
   }
 
+  /** Ollama takes a JSON Schema in the {@code format} field of a chat call. */
+  @Override
+  public boolean supportsSchemaOutput() {
+    return true;
+  }
+
   @Override
   public AiReply complete(AiRequest request, Consumer<String> onText, AiCancel cancel)
       throws AiException {
@@ -191,18 +197,19 @@ public final class OllamaProvider implements AiProvider {
   public AiReply completeStreaming(
       AiRequest request, AiProvider.StreamListener listener, AiCancel cancel) throws AiException {
     cancel.throwIfCancelled();
-    String body =
-        Json.write(
-            Json.obj(
-                "model", request.model(),
-                "stream", true,
-                "messages",
-                    List.of(
-                        Json.obj("role", "system", "content", request.system()),
-                        Json.obj("role", "user", "content", request.prompt())),
-                "think",
-                    thinkLevel == null || thinkLevel.equalsIgnoreCase("none") ? false : thinkLevel,
-                "options", options(request)));
+    java.util.Map<String, Object> payload =
+        Json.obj(
+            "model", request.model(),
+            "stream", true,
+            "messages",
+                List.of(
+                    Json.obj("role", "system", "content", request.system()),
+                    Json.obj("role", "user", "content", request.prompt())),
+            "think", thinkLevel == null || thinkLevel.equalsIgnoreCase("none") ? false : thinkLevel,
+            "options", options(request));
+    if (request.responseSchema() != null)
+      payload.put("format", Json.parse(request.responseSchema()));
+    String body = Json.write(payload);
     HttpRequest http =
         HttpRequest.newBuilder(base.resolve("/api/chat"))
             .header("Content-Type", "application/json")

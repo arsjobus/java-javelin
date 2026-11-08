@@ -9,6 +9,7 @@ final class FakeAiProvider implements AiProvider {
   String answer = "";
   String thinking = "";
   boolean truncated;
+  boolean schemaOutput;
   AiException failure;
   List<String> models = List.of("fake-model");
   final List<AiRequest> requests = new ArrayList<>();
@@ -31,6 +32,11 @@ final class FakeAiProvider implements AiProvider {
   @Override
   public boolean isLocal() {
     return true;
+  }
+
+  @Override
+  public boolean supportsSchemaOutput() {
+    return schemaOutput;
   }
 
   @Override

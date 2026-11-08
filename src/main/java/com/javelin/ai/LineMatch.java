@@ -14,18 +14,38 @@ final class LineMatch {
 
   /**
    * Where the run was found ({@code index}) and how loosely ({@code tier}: 0 exact, 1 trailing
-   * spaces ignored, 2 indentation ignored).
+   * spaces ignored, 2 indentation ignored, 3 every run of spaces and tabs counts as one).
    */
-  record Found(int index, int tier) {}
+  record Found(int index, int tier) {
+    AnchorRung rung() {
+      return AnchorRung.ofTier(tier);
+    }
+  }
+
+  /** The loosest tier a plain diff may use; edit blocks may go one further. */
+  static final int DIFF_MAX_TIER = 2;
+
+  /** The loosest tier of all. */
+  static final int MAX_TIER = 3;
 
   /**
    * Every place at or after {@code from} where {@code needle} matches, at the strictest tier that
    * matches anywhere. Empty when it matches at none.
    */
   static List<Found> candidates(List<String> hay, List<String> needle, int from) {
-    for (int tier = 0; tier <= 2; tier++) {
+    return candidates(hay, needle, from, hay.size(), DIFF_MAX_TIER);
+  }
+
+  /**
+   * Like {@link #candidates(List, List, int)} but only for runs that lie inside {@code [from, to)},
+   * and with the loosest tier to try given.
+   */
+  static List<Found> candidates(
+      List<String> hay, List<String> needle, int from, int to, int maxTier) {
+    int end = Math.min(to, hay.size());
+    for (int tier = 0; tier <= maxTier; tier++) {
       List<Found> found = new ArrayList<>();
-      for (int i = Math.max(0, from); i + needle.size() <= hay.size(); i++)
+      for (int i = Math.max(0, from); i + needle.size() <= end; i++)
         if (matches(hay, needle, i, tier)) found.add(new Found(i, tier));
       if (!found.isEmpty()) return found;
     }
@@ -42,8 +62,14 @@ final class LineMatch {
     return switch (tier) {
       case 0 -> a.equals(b);
       case 1 -> a.stripTrailing().equals(b.stripTrailing());
-      default -> a.strip().equals(b.strip());
+      case 2 -> a.strip().equals(b.strip());
+      default -> squeeze(a).equals(squeeze(b));
     };
+  }
+
+  /** The line with every run of spaces and tabs turned into one space, and no outer spaces. */
+  static String squeeze(String line) {
+    return line.strip().replaceAll("[ \\t]+", " ");
   }
 
   /** The leading spaces and tabs of a line. */

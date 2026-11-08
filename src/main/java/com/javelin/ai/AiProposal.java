@@ -1,5 +1,7 @@
 package com.javelin.ai;
 
+import java.util.List;
+
 /**
  * A change the AI suggested, held until the user applies or rejects it. It records the text it was
  * made for, so that it is never applied to text that has since changed. Applying is the user's
@@ -13,7 +15,12 @@ public record AiProposal(
     String original,
     String replacement,
     String suggestedName,
-    String explanation) {
+    String explanation,
+    List<EditBlocks.Anchor> anchors) {
+  public AiProposal {
+    anchors = List.copyOf(anchors);
+  }
+
   public enum Kind {
     /** Replace {@code [start, end)} of the document the request came from. */
     REPLACE_RANGE,
@@ -25,6 +32,15 @@ public record AiProposal(
 
   /** A replacement for the text that was sent. */
   public static AiProposal replace(AiContext context, String code, String explanation) {
+    return replace(context, code, explanation, List.of());
+  }
+
+  /**
+   * A replacement for the text that was sent; {@code anchors} says how each of the model's edits
+   * was found in it.
+   */
+  public static AiProposal replace(
+      AiContext context, String code, String explanation, List<EditBlocks.Anchor> anchors) {
     return new AiProposal(
         Kind.REPLACE_RANGE,
         context.name(),
@@ -34,7 +50,8 @@ public record AiProposal(
         ResponseParser.matchLineEndings(
             context.text(), ResponseParser.matchTrailingNewline(context.text(), code)),
         null,
-        explanation);
+        explanation,
+        anchors);
   }
 
   /** A new document with the suggested file name. */
@@ -47,7 +64,8 @@ public record AiProposal(
         "",
         code.endsWith("\n") ? code : code + "\n",
         suggestedName,
-        explanation);
+        explanation,
+        List.of());
   }
 
   /** False when the document no longer holds the text the proposal was made for. */

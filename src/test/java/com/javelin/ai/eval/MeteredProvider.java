@@ -63,6 +63,11 @@ final class MeteredProvider implements AiProvider {
   }
 
   @Override
+  public boolean supportsSchemaOutput() {
+    return inner.supportsSchemaOutput();
+  }
+
+  @Override
   public List<String> models(AiCancel cancel) throws AiException {
     return inner.models(cancel);
   }
