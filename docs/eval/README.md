@@ -23,6 +23,7 @@ Only the tests tagged `eval` run (`mvn test` never runs them, and never calls a 
 | `-Deval.timeoutSeconds=...` | the product default | how long to wait for one answer |
 | `-Deval.editBlockMinLines=0` | the product default (40) | `0` asks for edit blocks for every selection, to compare with whole blocks |
 | `-Deval.structured=true` | `false` | asks for JSON edits (Ollama's `format`), to compare with text |
+| `-Deval.plan=3` | off | runs project tasks (rename, change a signature) through the Phase 3 planner and step executor with at most that many steps; combine with `-Deval.retries` |
 
 It writes two files to `target/eval/`: `results-<date>.json` (every task of every run) and `baseline-<date>.md` (the readable summary). To publish a baseline, copy the Markdown to `docs/eval/baseline-<date>.md` and commit it. If Ollama is not running or the model is not installed the run stops with that message instead of recording a row of failures.
 
@@ -93,3 +94,9 @@ The report counts *contract failures*: results that failed with `UNPARSEABLE` or
 `mvn -Peval test -Deval.model=<model> -Deval.retries=2` runs the same corpus with the editor's verification loop on: each proposal for a selection or a project request is compiled in memory by the editor's own `JavacVerifier` and, when that fails, the model is asked again with the compiler's messages, up to two more times. Add-tests tasks are not repeated (there is nothing to compile against). The judging is unchanged and does not use the verifier, so the pass rate is comparable with a single-attempt baseline of the same model and profile. The report adds the figure Phase 2 is measured by, *reached review with a compiling result* (results in which a change came out and the project with it applied compiles), and `attempts` shows how many requests each task took. Run it once without `-Deval.retries` and once with, on the same model and profile, and commit both Markdown files.
 
 No numbers for this are recorded here: they need a run against the model.
+
+## Phase 3: planned project requests
+
+`mvn -Peval test -Deval.model=<model> -Deval.retries=2 -Deval.plan=3` runs the multi-file tasks (rename across files, change a signature and its callers) through the planner and the step executor: the model first writes a plan of at most 3 steps, each one file and one method, and then each step is its own request, checked in memory before the next. Selection and add-tests tasks are not affected. A task passes only when every step of its plan completed and the judging test then passes; a plan that is refused or stops half way is a failure under the reason of the step that stopped it. The report says the runs were planned. The comparison Phase 3 is measured by is the pass rate of the `RENAME_ACROSS_FILES` and `CHANGE_SIGNATURE` rows against a run of the same model and profile with `-Deval.retries=2` and no plan, which is the Phase 2 result. Committed single-attempt baselines without a plan, for reference: `baseline-2026-11-08-qwen3.5-9b-think-3.md` (100% and 75%), `baseline-2026-11-08-qwen3.5-9b-nothink-2.md` (100% and 50%) and `baseline-2026-11-08-qwen2.5-coder-7b-nothink-2.md` (0% and 50%).
+
+No numbers for the planned run are recorded here: they need a run against the model.

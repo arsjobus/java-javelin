@@ -48,6 +48,16 @@ public final class ProjectPromptBuilder {
       Rules: change only files that were shown to you; each "old" must match the file character for character and be long enough to match in one place only; "anchor" is one line copied exactly from the file that appears there only once (the signature of the method that holds the change), or "" when the change is not inside a method; write only what changes; no placeholders such as "..." or "rest of the code"; no line numbers; do not delete or rename files; do not run or suggest running commands as part of the change. If the request is a question or no change is needed, give an empty "edits" list and answer in "explanation".\
       """;
 
+  /** The system message of project requests, for the steps of a plan that use the same rules. */
+  public static String system() {
+    return SYSTEM;
+  }
+
+  /** How the answer is asked for (edit blocks, or JSON edits when {@code structured}). */
+  public static String howToAnswer(boolean structured) {
+    return structured ? HOW_TO_ANSWER_JSON : HOW_TO_ANSWER;
+  }
+
   /** The tokens the system message and everything around the project text will cost. */
   public static int fixedTokens(String instruction) {
     return ContextBudget.estimateTokens(SYSTEM)

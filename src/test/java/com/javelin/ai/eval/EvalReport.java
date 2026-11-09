@@ -23,10 +23,24 @@ record EvalReport(
     int tasks,
     List<List<TaskResult>> runs,
     long millis,
-    int retries) {
+    int retries,
+    int planSteps) {
 
   EvalReport {
     runs = runs.stream().map(List::copyOf).toList();
+  }
+
+  /** A report of runs with the verification loop and one request per project task. */
+  EvalReport(
+      String profile,
+      String model,
+      String date,
+      long seed,
+      int tasks,
+      List<List<TaskResult>> runs,
+      long millis,
+      int retries) {
+    this(profile, model, date, seed, tasks, runs, millis, retries, 0);
   }
 
   /** A single-attempt report: the Phase 0 shape, with no verification loop. */
@@ -38,7 +52,12 @@ record EvalReport(
       int tasks,
       List<List<TaskResult>> runs,
       long millis) {
-    this(profile, model, date, seed, tasks, runs, millis, -1);
+    this(profile, model, date, seed, tasks, runs, millis, -1, 0);
+  }
+
+  /** True when project tasks went through the Phase 3 planner and step executor. */
+  boolean planned() {
+    return planSteps > 0;
   }
 
   /** True when the runs used the Phase 2 loop: compile the proposal, ask again on failure. */
@@ -184,6 +203,7 @@ record EvalReport(
     failures().forEach((k, v) -> reasons.put(k.name(), v));
     summary.put("failures", reasons);
     summary.put("contractFailures", contractFailures());
+    if (planned()) summary.put("planSteps", planSteps);
     if (verified()) {
       summary.put("retries", retries);
       summary.put("reachedReviewCompiling", reachedReviewCompiling());
@@ -242,6 +262,11 @@ record EvalReport(
           .append(retries == 1 ? " more request" : " more requests")
           .append(" (Phase 2). ");
     else md.append("one attempt per task (no retries exist yet). ");
+    if (planned())
+      md.append("Project tasks were planned first (at most ")
+          .append(planSteps)
+          .append(" steps, one file and method each, every step checked before the next, ")
+          .append("Phase 3); compare them with the same model's baseline without a plan. ");
     md.append("A task passes when its judging test passes after the ");
     md.append("change is applied; nothing is judged by a model.\n\n");
     md.append("## Result\n\n");

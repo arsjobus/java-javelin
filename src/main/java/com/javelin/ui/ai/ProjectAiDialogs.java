@@ -1,6 +1,9 @@
 package com.javelin.ui.ai;
 
 import com.javelin.ai.Finding;
+import com.javelin.ai.plan.PlanReview;
+import com.javelin.ai.plan.Planner;
+import com.javelin.ai.plan.TaskPlan;
 import com.javelin.ai.project.Adjustments;
 import com.javelin.ai.project.ContextBudget;
 import com.javelin.ai.project.ContextEntry;
@@ -16,6 +19,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.scene.control.Button;
@@ -68,6 +72,15 @@ final class ProjectAiDialogs {
   // ---- the request ----
 
   static Optional<Request> ask() {
+    return ask(false, 0);
+  }
+
+  /**
+   * As {@link #ask()}. With {@code planning} the request is split into steps (ai.plan): how much of
+   * the project is sent is then decided per step, so the two modes are not offered and the request
+   * is made in Smart mode.
+   */
+  static Optional<Request> ask(boolean planning, int maxSteps) {
     Dialog<ButtonType> dialog = new Dialog<>();
     dialog.setTitle("Project Request");
     dialog.setHeaderText("Ask about, or change, the whole project");
@@ -90,10 +103,19 @@ final class ProjectAiDialogs {
             + " characters)");
     Label note =
         new Label(
-            "Next you will see exactly which files would be sent, and where. Nothing is sent until"
-                + " you choose Send.");
+            planning
+                ? "Planning is on (ai.plan): the request is split into at most "
+                    + maxSteps
+                    + " steps, each about one method. Next you will see exactly what the plan"
+                    + " request sends, then the plan itself. Nothing is sent until you choose"
+                    + " Send."
+                : "Next you will see exactly which files would be sent, and where. Nothing is sent"
+                    + " until you choose Send.");
     note.setWrapText(true);
-    VBox box = new VBox(8, new Label("What do you want?"), text, smart, full, note);
+    VBox box =
+        planning
+            ? new VBox(8, new Label("What do you want?"), text, note)
+            : new VBox(8, new Label("What do you want?"), text, smart, full, note);
     // Add margins to each element for consistent spacing like other dialogs
     VBox.setMargin(box.getChildren().get(0), new Insets(12, 16, 8, 16));
     VBox.setMargin(text, new Insets(8, 16, 8, 16));
@@ -209,6 +231,116 @@ final class ProjectAiDialogs {
     if (result.get() == UPDATE) return new Decision(Choice.UPDATE, next);
     // Send: a changed box means the preview the user saw is no longer what would be sent
     return new Decision(changed ? Choice.UPDATE : Choice.SEND, next);
+  }
+
+  // ---- the plan (ai.plan) ----
+
+  /**
+   * Step 1 of a planned request: shows exactly what the planning request sends (file names and
+   * signatures, no code) and where. Send is a deliberate click.
+   */
+  static boolean confirmPlanRequest(Planner.PlanRequest request) {
+    TextArea preview = new TextArea(request.preview());
+    preview.setEditable(false);
+    preview.setWrapText(false);
+    preview.setStyle("-fx-font-family: monospace;");
+    preview.setPrefSize(1000, 520);
+    VBox.setVgrow(preview, Priority.ALWAYS);
+    Label intro =
+        new Label(
+            request.local()
+                ? "This is everything the planning request sends, to "
+                    + request.location()
+                    + " on this computer: file names and signatures, no code. The plan comes back"
+                    + " to you before any step runs."
+                : "WARNING: this sends file names and signatures to "
+                    + request.location()
+                    + ", which is not this computer.");
+    intro.setWrapText(true);
+    intro.setMaxWidth(980);
+    Dialog<ButtonType> dialog = new Dialog<>();
+    dialog.setTitle("Plan the request?");
+    dialog.setHeaderText("Step 1 of 2, the plan: " + request.indicator());
+    dialog.getDialogPane().setContent(new VBox(8, intro, preview));
+    dialog.getDialogPane().getButtonTypes().setAll(SEND, ButtonType.CANCEL);
+    deliberate(dialog, SEND, ButtonType.CANCEL);
+    dialog.setResizable(true);
+    return Dialogs.show(dialog).filter(SEND::equals).isPresent();
+  }
+
+  /**
+   * Step 2 of a planned request: the plan, one step per line, which the user may edit, reorder or
+   * delete, and beside it what each step would send. {@code reviewer} reads and checks the text
+   * (see {@link PlanReview}); Send is possible only for text that was checked, and editing the text
+   * makes it need checking again, so what is approved is what runs. Returns the checked plan, or
+   * empty when the user cancelled.
+   */
+  static Optional<TaskPlan> editPlan(
+      String indicator,
+      String note,
+      String initialText,
+      int maxSteps,
+      Function<String, PlanReview.Reviewed> reviewer) {
+    TextArea steps = new TextArea(initialText);
+    steps.setWrapText(false);
+    steps.setStyle("-fx-font-family: monospace;");
+    steps.setPrefColumnCount(60);
+    TextArea shown = new TextArea();
+    shown.setEditable(false);
+    shown.setWrapText(false);
+    shown.setStyle("-fx-font-family: monospace;");
+    Label status = new Label();
+    status.setWrapText(true);
+    Button check = new Button("Check Plan");
+    Label help =
+        new Label(
+            "One step per line:  file | method | what to do.  The method is a name, 'new name'"
+                + " for a method the step adds, or 'new' for a file it creates. Edit, reorder or"
+                + " delete lines, then choose Check Plan. At most "
+                + maxSteps
+                + " steps."
+                + (note == null || note.isBlank() ? "" : "\n\n" + note));
+    help.setWrapText(true);
+    VBox left = new VBox(8, help, steps, new HBox(8, check, status));
+    VBox.setVgrow(steps, Priority.ALWAYS);
+    SplitPane split = new SplitPane(left, shown);
+    split.setOrientation(Orientation.HORIZONTAL);
+    split.setDividerPositions(0.45);
+    split.setPrefSize(1100, 560);
+    VBox.setVgrow(split, Priority.ALWAYS);
+    Dialog<ButtonType> dialog = new Dialog<>();
+    dialog.setTitle("Send the plan?");
+    dialog.setHeaderText("Step 2 of 2, the steps: " + indicator);
+    dialog.getDialogPane().setContent(split);
+    dialog.getDialogPane().getButtonTypes().setAll(SEND, ButtonType.CANCEL);
+    deliberate(dialog, SEND, ButtonType.CANCEL);
+    dialog.setResizable(true);
+    Button send = (Button) dialog.getDialogPane().lookupButton(SEND);
+    TaskPlan[] checked = {null};
+    Runnable run =
+        () -> {
+          PlanReview.Reviewed r = reviewer.apply(steps.getText());
+          shown.setText(r.shown());
+          checked[0] = r.ok() ? r.plan() : null;
+          send.setDisable(!r.ok());
+          status.setText(
+              r.ok()
+                  ? "The plan checks. Each step sends what is listed on the right."
+                  : "The plan cannot be sent yet.");
+        };
+    check.setOnAction(e -> run.run());
+    run.run();
+    steps
+        .textProperty()
+        .addListener(
+            (obs, was, now) -> {
+              checked[0] = null;
+              send.setDisable(true);
+              status.setText("Edited: choose Check Plan to see what would be sent.");
+            });
+    Optional<ButtonType> result = Dialogs.show(dialog);
+    if (result.filter(SEND::equals).isEmpty() || checked[0] == null) return Optional.empty();
+    return Optional.of(checked[0]);
   }
 
   // ---- what is applied ----

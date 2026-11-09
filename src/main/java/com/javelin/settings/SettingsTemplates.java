@@ -50,6 +50,9 @@ public final class SettingsTemplates {
             # Also run the project's tests that use the changed classes, in a separate Java process. Off: it runs code a model wrote.
             #ai.verify.tests=false
             #ai.verify.testSeconds=30
+            # Split a Project Request into steps (a plan you can edit, then one request per step). Off: it adds a request before the work.
+            #ai.plan=false
+            #ai.plan.maxSteps=3
 
             # Keybindings: key.<action id>=<shortcut>. Modifiers: Ctrl, Shift, Alt, Meta, Shortcut (Cmd on macOS).
             # Use "none" to remove a shortcut. Unlisted actions keep their defaults.

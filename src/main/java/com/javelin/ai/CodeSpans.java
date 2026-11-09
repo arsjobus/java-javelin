@@ -87,6 +87,11 @@ final class CodeSpans {
     return Optional.empty();
   }
 
+  /** True when the line starts a class, interface, enum or record (not a method). */
+  static boolean isTypeDeclaration(String line) {
+    return TYPE_DECLARATION.matcher(LineMatch.squeeze(line)).matches();
+  }
+
   /** True for a line that holds only an annotation ({@code @Override}, {@code @Test(x = 1)}). */
   static boolean isAnnotationOnly(String line) {
     return ANNOTATION_ONLY.matcher(line.strip()).matches();

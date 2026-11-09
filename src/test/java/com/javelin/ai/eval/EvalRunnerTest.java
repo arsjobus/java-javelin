@@ -376,4 +376,98 @@ class EvalRunnerTest {
     assertEquals(2, r.attempts(), r.failure() + " " + r.detail());
     assertTrue(r.passed(), r.failure() + " " + r.detail());
   }
+
+  // ---- planned project requests (Phase 3) ----
+
+  private static final java.util.regex.Pattern THIS_STEP =
+      java.util.regex.Pattern.compile("\\[THIS STEP\\] (\\S+) \\| (\\w+) \\|");
+
+  /**
+   * Plans the task as one step per method the fix changed (the plan a good model would write) and
+   * answers each step with that method as the fix has it.
+   */
+  private static ScriptedProvider planningOracle(EvalTask t, String plan) throws IOException {
+    var before = Trees.read(t.before());
+    var fix = Trees.read(t.fix());
+    return new ScriptedProvider(
+        request -> {
+          if (request.prompt().contains("HOW TO ANSWER:\nSplit the request"))
+            return new AiReply(plan, false, new AiUsage(200, 20));
+          var m = THIS_STEP.matcher(request.prompt());
+          if (!m.find()) throw new IllegalStateException("not a step: " + request.prompt());
+          String path = m.group(1), method = m.group(2);
+          String was = com.javelin.ai.MethodFinder.find(before.get(path), method).get(0).text();
+          String now = com.javelin.ai.MethodFinder.find(fix.get(path), method).get(0).text();
+          return new AiReply(
+              "=== FILE: "
+                  + path
+                  + " ===\n<<<<<<< SEARCH\n"
+                  + was
+                  + "\n=======\n"
+                  + now
+                  + "\n>>>>>>> REPLACE\n",
+              false,
+              new AiUsage(300, 40));
+        });
+  }
+
+  private static final String MAIL_PLAN =
+      "src/main/java/mail/Mailer.java | send | add a subject parameter\n"
+          + "src/main/java/mail/Notifications.java | welcome | pass the subject\n"
+          + "src/main/java/mail/Notifications.java | goodbye | pass the subject\n";
+
+  @Test
+  void aPlannedProjectRequestIsRunStepByStepAndJudgedLikeAnyOther() throws IOException {
+    EvalTask mail = task("sig-add-parameter");
+    ScriptedProvider provider = planningOracle(mail, MAIL_PLAN);
+    EvalRunner planned =
+        new EvalRunner(provider, EvalProfile.small("scripted-model"), scratch, 1, 3);
+    assertEquals(3, planned.planSteps());
+    TaskResult r = planned.run(mail, 42);
+    assertTrue(r.passed(), r.failure() + " " + r.detail());
+    assertEquals(4, provider.requests.size(), "one request for the plan and one for each step");
+  }
+
+  @Test
+  void aPlanLongerThanTheLimitFailsTheTaskInsteadOfBeingShortened() throws IOException {
+    EvalTask mail = task("sig-add-parameter");
+    ScriptedProvider provider = planningOracle(mail, MAIL_PLAN);
+    EvalRunner planned =
+        new EvalRunner(provider, EvalProfile.small("scripted-model"), scratch, 1, 2);
+    TaskResult r = planned.run(mail, 42);
+    assertFalse(r.passed());
+    assertEquals(FailureReason.OVERSIZED, r.failure(), r.detail());
+    assertEquals(2, provider.requests.size(), "the plan and its one repeat; no step ran");
+  }
+
+  @Test
+  void aPlanThatStopsHalfWayIsAFailureWhateverItHadDone() throws IOException {
+    EvalTask mail = task("sig-add-parameter");
+    ScriptedProvider good = planningOracle(mail, MAIL_PLAN);
+    int[] calls = {0};
+    ScriptedProvider provider =
+        new ScriptedProvider(
+            request -> {
+              try {
+                if (++calls[0] == 3) return new AiReply("I would leave it alone.", false);
+                return good.complete(request, s -> {}, new com.javelin.ai.AiCancel());
+              } catch (AiException ex) {
+                throw new IllegalStateException(ex);
+              }
+            });
+    TaskResult r =
+        new EvalRunner(provider, EvalProfile.small("scripted-model"), scratch, 1, 3).run(mail, 42);
+    assertFalse(r.passed());
+    assertEquals(FailureReason.NO_EDIT_BLOCK, r.failure(), r.detail());
+    assertTrue(r.detail().contains("Step 3"), r.detail());
+  }
+
+  @Test
+  void selectionTasksIgnoreThePlanSetting() {
+    EvalRunner planned =
+        new EvalRunner(ScriptedProvider.oracle(tasks), EvalProfile.small("m"), scratch, -1, 3);
+    EvalTask single =
+        tasks.stream().filter(t -> t.mode() == EvalTask.Mode.SELECTION).findFirst().orElseThrow();
+    assertTrue(planned.run(single, 42).passed());
+  }
 }

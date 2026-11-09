@@ -12,6 +12,11 @@ import com.javelin.ai.AiService;
 import com.javelin.ai.AiSource;
 import com.javelin.ai.FailureReason;
 import com.javelin.ai.Sampling;
+import com.javelin.ai.plan.PlanConfig;
+import com.javelin.ai.plan.PlanRun;
+import com.javelin.ai.plan.Planner;
+import com.javelin.ai.plan.StepExecutor;
+import com.javelin.ai.plan.StepResult;
 import com.javelin.ai.project.Adjustments;
 import com.javelin.ai.project.FileChange;
 import com.javelin.ai.project.ProjectAiConfig;
@@ -69,6 +74,7 @@ final class EvalRunner {
   private final EvalProfile profile;
   private final Path scratch;
   private final int retries;
+  private final int planSteps;
 
   /** One attempt per task, as in Phase 0. */
   EvalRunner(AiProvider provider, EvalProfile profile, Path scratch) {
@@ -81,14 +87,29 @@ final class EvalRunner {
    * times (Phase 2). The judging below is unchanged and does not use the verifier.
    */
   EvalRunner(AiProvider provider, EvalProfile profile, Path scratch, int retries) {
+    this(provider, profile, scratch, retries, 0);
+  }
+
+  /**
+   * With {@code planSteps > 0} a project request goes through the Phase 3 planner and step executor
+   * (a plan of at most that many steps, one file and method each, each step checked before the
+   * next) instead of one request for everything. A task passes only when every step of the plan
+   * completed; a run that stopped early is a failure, whatever it had done so far.
+   */
+  EvalRunner(AiProvider provider, EvalProfile profile, Path scratch, int retries, int planSteps) {
     this.provider = provider;
     this.profile = profile;
     this.scratch = scratch;
     this.retries = retries;
+    this.planSteps = planSteps;
   }
 
   int retries() {
     return retries;
+  }
+
+  int planSteps() {
+    return planSteps;
   }
 
   private Verifier verifier(Path project) {
@@ -259,14 +280,10 @@ final class EvalRunner {
             config,
             new ProjectAiConfig(profile.contextTokens(), profile.reserveTokens(), scan));
     AiCancel cancel = new AiCancel();
-    ProjectPlan plan =
-        service.prepare(workspace, profile.contextMode(), task.request(), Adjustments.NONE, cancel);
     ProjectAiResult result =
-        retries < 0
-            ? service.run(plan, workspace, s -> {}, cancel)
-            : service
-                .runVerified(plan, workspace, s -> {}, cancel, verifier(project), retries)
-                .answer();
+        planSteps > 0
+            ? askPlanned(task, metered, config, workspace, project, cancel)
+            : askOnce(service, workspace, project, task, cancel);
     ProjectProposal proposal = result.proposal();
     if (proposal == null) return Applied.none(result.failure(), result.note());
     List<ProposalApplier.Check> checks =
@@ -285,6 +302,63 @@ final class EvalRunner {
       flagged |= change.hasErrors();
     }
     return new Applied(true, null, "", lines, flagged, List.of());
+  }
+
+  private ProjectAiResult askOnce(
+      ProjectAiService service,
+      ProjectWorkspace workspace,
+      Path project,
+      EvalTask task,
+      AiCancel cancel)
+      throws AiException, IOException {
+    ProjectPlan plan =
+        service.prepare(workspace, profile.contextMode(), task.request(), Adjustments.NONE, cancel);
+    return retries < 0
+        ? service.run(plan, workspace, s -> {}, cancel)
+        : service
+            .runVerified(plan, workspace, s -> {}, cancel, verifier(project), retries)
+            .answer();
+  }
+
+  /** Plan, then run the steps; only a plan that ran to its end counts as an answer. */
+  private ProjectAiResult askPlanned(
+      EvalTask task,
+      AiProvider metered,
+      AiConfig config,
+      ProjectWorkspace workspace,
+      Path project,
+      AiCancel cancel)
+      throws AiException {
+    PlanConfig planConfig = new PlanConfig(true, planSteps);
+    Planner planner = new Planner(metered, config, planConfig);
+    Planner.Planned planned =
+        planner.plan(
+            planner.prepare(workspace, task.request(), cancel), workspace, s -> {}, cancel);
+    if (!planned.runnable())
+      return new ProjectAiResult(planned.text(), null, planned.note(), null, planned.failure());
+    PlanRun run =
+        new StepExecutor(metered, config, planConfig)
+            .run(
+                planned.plan(),
+                workspace,
+                new StepExecutor.Listener() {
+                  @Override
+                  public void onText(String piece) {}
+                },
+                cancel,
+                retries < 0 ? null : verifier(project),
+                Math.max(0, retries));
+    ProjectAiResult result = run.asResult();
+    if (run.complete()) return result;
+    StepResult stopped = run.failed();
+    return new ProjectAiResult(
+        result.text(),
+        null,
+        run.report(),
+        result.snapshot(),
+        stopped == null || stopped.failure() == null
+            ? FailureReason.NO_EDIT_BLOCK
+            : stopped.failure());
   }
 
   // ---- judging ----

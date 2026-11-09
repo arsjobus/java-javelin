@@ -25,7 +25,8 @@ import org.junit.jupiter.api.Test;
  *
  * Options (all optional except the model): {@code -Deval.runs=3}, {@code -Deval.seed=42}, {@code
  * -Deval.tasks=<regex on task ids>}, {@code -Deval.endpoint=http://127.0.0.1:11434}, {@code
- * -Deval.think=none|low|medium|high}, {@code -Deval.timeoutSeconds=120}. It writes {@code
+ * -Deval.think=none|low|medium|high}, {@code -Deval.timeoutSeconds=120}, {@code -Deval.plan=3}
+ * (project tasks planned in at most that many steps). It writes {@code
  * target/eval/results-<date>.json} and {@code target/eval/baseline-<date>.md}; commit the Markdown
  * as {@code docs/eval/baseline-<date>.md}. The model is reached only through the editor's
  * loopback-only provider, so this cannot send the corpus anywhere but this computer.
@@ -53,7 +54,8 @@ class EvalRunTest {
 
     Path scratch = Files.createTempDirectory("javelin-eval-");
     int retries = Integer.parseInt(System.getProperty("eval.retries", "-1"));
-    EvalRunner runner = new EvalRunner(provider, profile, scratch, retries);
+    int planSteps = Integer.parseInt(System.getProperty("eval.plan", "0"));
+    EvalRunner runner = new EvalRunner(provider, profile, scratch, retries, planSteps);
     long started = System.nanoTime();
     List<List<TaskResult>> all = new ArrayList<>();
     for (int run = 0; run < runs; run++)
@@ -68,7 +70,8 @@ class EvalRunTest {
             tasks.size(),
             all,
             (System.nanoTime() - started) / 1_000_000,
-            retries);
+            retries,
+            planSteps);
     Path out = Path.of("target", "eval");
     Files.createDirectories(out);
     Files.writeString(out.resolve("results-" + date + ".json"), report.toJson());

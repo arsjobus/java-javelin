@@ -230,4 +230,17 @@ class EvalReportTest {
     assertFalse(plain.toMarkdown().contains("Reached review"));
     assertNull(Json.get(Json.get(Json.parse(plain.toJson()), "summary"), "retries"));
   }
+
+  @Test
+  void aPlannedRunSaysSoInTheMarkdownAndTheJson() {
+    EvalReport planned = new EvalReport("small", "m", "d", 1, 1, List.of(List.of()), 1, 2, 3);
+    assertTrue(planned.planned());
+    assertTrue(
+        planned.toMarkdown().contains("planned first (at most 3 steps"), planned.toMarkdown());
+    assertTrue(planned.toJson().contains("\"planSteps\":3"), planned.toJson());
+    EvalReport plain = new EvalReport("small", "m", "d", 1, 1, List.of(List.of()), 1, 2);
+    assertFalse(plain.planned());
+    assertFalse(plain.toMarkdown().contains("planned first"));
+    assertFalse(plain.toJson().contains("planSteps"));
+  }
 }

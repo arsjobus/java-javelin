@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -59,6 +60,21 @@ public final class MultiFileReply {
 
   public static ProjectProposal parse(
       String reply, ProjectReader reader, ProjectSnapshot snapshot, ScanOptions options) {
+    return parse(reply, reader, snapshot, options, Map.of());
+  }
+
+  /**
+   * As above, for a reply that continues earlier work that is not on disk: {@code overlay} maps a
+   * path to the text the file has at this point (a file an earlier step of a plan changed or
+   * created). Such a file is changed from that text, not from the file on disk, and a file that
+   * exists only there counts as existing.
+   */
+  public static ProjectProposal parse(
+      String reply,
+      ProjectReader reader,
+      ProjectSnapshot snapshot,
+      ScanOptions options,
+      Map<String, String> overlay) {
     String text = ChangeReply.withoutReasoning(reply);
     List<Section> sections;
     String explanation = "";
@@ -99,7 +115,7 @@ public final class MultiFileReply {
         continue;
       }
       try {
-        changes.add(change(path, section, reader, snapshot, options));
+        changes.add(change(path, section, reader, snapshot, options, overlay));
       } catch (AiException ex) {
         problems.add(path + ": " + ex.getMessage());
         failures.add(ex.reason() == null ? FailureReason.UNPARSEABLE : ex.reason());
@@ -120,13 +136,15 @@ public final class MultiFileReply {
       Section section,
       ProjectReader reader,
       ProjectSnapshot snapshot,
-      ScanOptions options)
+      ScanOptions options,
+      Map<String, String> overlay)
       throws AiException, IOException {
     refuseIfNotChangeable(path);
     Path file = reader.resolve(path);
     String language = Languages.idFor(new File(path));
-    boolean exists = Files.isRegularFile(file);
-    if (Files.exists(file) && !exists)
+    String earlier = overlay.get(path);
+    boolean exists = earlier != null || Files.isRegularFile(file);
+    if (earlier == null && Files.exists(file) && !exists)
       throw new AiException(
           AiException.Kind.REFUSED, FailureReason.WRONG_FILE, "is not a regular file.");
     boolean inContext = snapshot.sentHashes().containsKey(path);
@@ -186,7 +204,7 @@ public final class MultiFileReply {
           FailureReason.WRONG_FILE,
           "was not shown to the model, so a change to it is not based on what the file contains"
               + " and is not proposed.");
-    String original = reader.readNow(path, options.maxFileBytes());
+    String original = earlier != null ? earlier : reader.readNow(path, options.maxFileBytes());
     if (!ProjectReader.hash(original).equals(snapshot.sentHashes().get(path)))
       findings.add(
           Finding.warning(
@@ -246,7 +264,7 @@ public final class MultiFileReply {
    * Paths the model may not change: credentials, version-control and tool folders, build output,
    * and the editor's own project settings (they can hold commands that would run later).
    */
-  static void refuseIfNotChangeable(String path) throws AiException {
+  public static void refuseIfNotChangeable(String path) throws AiException {
     String name = path.substring(path.lastIndexOf('/') + 1);
     if (SensitiveFiles.isSensitive(name))
       throw new AiException(

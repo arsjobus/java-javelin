@@ -4,6 +4,13 @@ import com.javelin.ai.AiCancel;
 import com.javelin.ai.AiConfig;
 import com.javelin.ai.AiException;
 import com.javelin.ai.AiProvider;
+import com.javelin.ai.plan.PlanConfig;
+import com.javelin.ai.plan.PlanReview;
+import com.javelin.ai.plan.PlanRun;
+import com.javelin.ai.plan.Planner;
+import com.javelin.ai.plan.StepExecutor;
+import com.javelin.ai.plan.StepResult;
+import com.javelin.ai.plan.TaskPlan;
 import com.javelin.ai.project.Adjustments;
 import com.javelin.ai.project.AppliedChanges;
 import com.javelin.ai.project.ContextMode;
@@ -16,6 +23,7 @@ import com.javelin.ai.project.ProjectReader;
 import com.javelin.ai.project.ProjectRefresh;
 import com.javelin.ai.project.ProjectWorkspace;
 import com.javelin.ai.project.ProposalApplier;
+import com.javelin.ai.project.ScanOptions;
 import com.javelin.ai.verify.JavacVerifier;
 import com.javelin.ai.verify.ProjectClasspath;
 import com.javelin.ai.verify.Verified;
@@ -73,8 +81,14 @@ final class ProjectAiController {
       parent.chooseModel(this::request);
       return;
     }
-    Optional<ProjectAiDialogs.Request> asked = ProjectAiDialogs.ask();
+    PlanConfig planConfig = PlanConfig.from(bench.settings());
+    Optional<ProjectAiDialogs.Request> asked =
+        ProjectAiDialogs.ask(planConfig.enabled(), planConfig.maxSteps());
     if (asked.isEmpty()) return;
+    if (planConfig.enabled()) {
+      plan(provider, config, planConfig, asked.get().instruction());
+      return;
+    }
     ProjectAiService service =
         new ProjectAiService(provider, config, ProjectAiConfig.from(bench.settings()));
     prepare(service, asked.get().mode(), asked.get().instruction(), Adjustments.NONE);
@@ -90,7 +104,7 @@ final class ProjectAiController {
         .submit(
             () -> {
               try {
-                ProjectWorkspace ws = workspaceFor(root.toPath(), service);
+                ProjectWorkspace ws = workspaceFor(root.toPath(), service.projectConfig().scan());
                 ProjectPlan plan = service.prepare(ws, mode, instruction, adjustments, cancel);
                 Platform.runLater(
                     () -> {
@@ -98,27 +112,27 @@ final class ProjectAiController {
                       confirm(service, plan, adjustments);
                     });
               } catch (AiException ex) {
-                Platform.runLater(
-                    () -> {
-                      parent.end(cancel);
-                      if (ex.kind() == AiException.Kind.CANCELLED) parent.report(ex);
-                      else bench.showError("Project Request", ex.getMessage());
-                    });
+                Platform.runLater(() -> prepareFailed(cancel, ex));
               } catch (IOException | RuntimeException ex) {
-                Platform.runLater(
-                    () -> {
-                      parent.end(cancel);
-                      bench.showError(
-                          "Project Request", "The project could not be read: " + ex.getMessage());
-                    });
+                Platform.runLater(() -> readFailed(cancel, ex));
               }
             });
   }
 
-  private ProjectWorkspace workspaceFor(Path root, ProjectAiService service) throws IOException {
-    if (workspace != null && workspace.root().equals(root.toRealPath()))
-      workspace.refresh(service.projectConfig().scan());
-    else workspace = new ProjectWorkspace(root, service.projectConfig().scan());
+  private void prepareFailed(AiCancel cancel, AiException ex) {
+    parent.end(cancel);
+    if (ex.kind() == AiException.Kind.CANCELLED) parent.report(ex);
+    else bench.showError("Project Request", ex.getMessage());
+  }
+
+  private void readFailed(AiCancel cancel, Exception ex) {
+    parent.end(cancel);
+    bench.showError("Project Request", "The project could not be read: " + ex.getMessage());
+  }
+
+  private ProjectWorkspace workspaceFor(Path root, ScanOptions scan) throws IOException {
+    if (workspace != null && workspace.root().equals(root.toRealPath())) workspace.refresh(scan);
+    else workspace = new ProjectWorkspace(root, scan);
     return workspace;
   }
 
@@ -131,6 +145,196 @@ final class ProjectAiController {
       case UPDATE -> prepare(service, plan.mode(), plan.instruction(), decision.adjustments());
       case SEND -> send(service, plan, verify);
     }
+  }
+
+  // ---- a planned request (ai.plan) ----
+
+  /**
+   * Plan, then run: the planning request (names and signatures only) is shown and sent, the plan
+   * that comes back is shown for editing, and each step then sends only its own method. Every
+   * request is approved before it is sent; the result is reviewed like any project change.
+   */
+  private void plan(
+      AiProvider provider, AiConfig config, PlanConfig planConfig, String instruction) {
+    Planner planner = new Planner(provider, config, planConfig);
+    File root = bench.projectDirectory();
+    ScanOptions scan = ProjectAiConfig.from(bench.settings()).scan();
+    AiCancel cancel = parent.begin("Project Request: looking at the project...");
+    parent
+        .worker()
+        .submit(
+            () -> {
+              try {
+                ProjectWorkspace ws = workspaceFor(root.toPath(), scan);
+                Planner.PlanRequest prepared = planner.prepare(ws, instruction, cancel);
+                Platform.runLater(
+                    () -> {
+                      parent.end(cancel);
+                      confirmPlanRequest(provider, config, planConfig, planner, ws, prepared);
+                    });
+              } catch (AiException ex) {
+                Platform.runLater(() -> prepareFailed(cancel, ex));
+              } catch (IOException | RuntimeException ex) {
+                Platform.runLater(() -> readFailed(cancel, ex));
+              }
+            });
+  }
+
+  private void confirmPlanRequest(
+      AiProvider provider,
+      AiConfig config,
+      PlanConfig planConfig,
+      Planner planner,
+      ProjectWorkspace ws,
+      Planner.PlanRequest prepared) {
+    if (!ProjectAiDialogs.confirmPlanRequest(prepared)) {
+      bench.status("Project request not sent.");
+      return;
+    }
+    AiCancel cancel =
+        parent.begin("Project Request: planning with " + prepared.indicator() + "...");
+    parent.statusLabel().setText("AI > " + provider.displayName() + " " + provider.location());
+    bottom.ai().begin("Project request, the plan: " + prepared.instruction(), prepared.indicator());
+    bottom.show(bottom.aiTab());
+    parent
+        .worker()
+        .submit(
+            () -> {
+              try {
+                Planner.Planned planned = planner.plan(prepared, ws, streamToPanel(), cancel);
+                Platform.runLater(
+                    () ->
+                        planned(
+                            cancel,
+                            new StepExecutor(provider, config, planConfig),
+                            planConfig,
+                            ws,
+                            prepared,
+                            planned));
+              } catch (AiException ex) {
+                Platform.runLater(() -> failed(cancel, ex.getMessage(), ex));
+              } catch (RuntimeException ex) {
+                Platform.runLater(() -> failed(cancel, "Unexpected error: " + ex, null));
+              }
+            });
+  }
+
+  private void planned(
+      AiCancel cancel,
+      StepExecutor executor,
+      PlanConfig planConfig,
+      ProjectWorkspace ws,
+      Planner.PlanRequest prepared,
+      Planner.Planned planned) {
+    parent.end(cancel);
+    bottom
+        .ai()
+        .finish(
+            planned.plan() == null
+                ? "No plan: " + planned.note()
+                : "The plan has " + planned.plan().steps().size() + " step(s).");
+    Optional<TaskPlan> chosen =
+        ProjectAiDialogs.editPlan(
+            prepared.indicator(),
+            planned.note(),
+            planned.plan() == null ? "" : planned.plan().text(),
+            planConfig.maxSteps(),
+            text -> PlanReview.review(prepared.instruction(), text, ws, executor));
+    if (chosen.isEmpty()) {
+      bench.status("The plan was not sent: nothing was changed.");
+      return;
+    }
+    runPlan(executor, chosen.get(), ws, prepared);
+  }
+
+  private void runPlan(
+      StepExecutor executor, TaskPlan plan, ProjectWorkspace ws, Planner.PlanRequest prepared) {
+    VerifyConfig verify = VerifyConfig.from(bench.settings());
+    AiCancel cancel = parent.begin("Project Request: running the plan...");
+    bottom
+        .ai()
+        .begin(
+            "Project request, " + plan.steps().size() + " step(s): " + plan.instruction(),
+            prepared.indicator());
+    bottom.show(bottom.aiTab());
+    parent
+        .worker()
+        .submit(
+            () -> {
+              try {
+                Verifier verifier =
+                    verify.enabled()
+                        ? new JavacVerifier(
+                            ws.root(),
+                            ProjectClasspath.resolve(
+                                ws.root(), ProjectClasspath.defaultRepository()),
+                            verify)
+                        : null;
+                PlanRun run =
+                    executor.run(
+                        plan,
+                        ws,
+                        new StepExecutor.Listener() {
+                          @Override
+                          public void onText(String piece) {
+                            Platform.runLater(() -> bottom.ai().append(piece));
+                          }
+
+                          @Override
+                          public void onThinking(String piece) {
+                            Platform.runLater(() -> bottom.ai().appendThinking(piece));
+                          }
+
+                          @Override
+                          public void stepStarted(
+                              int number, int total, com.javelin.ai.plan.PlanStep step) {
+                            Platform.runLater(
+                                () ->
+                                    bottom
+                                        .ai()
+                                        .append(
+                                            "\n\n===== Step "
+                                                + number
+                                                + " of "
+                                                + total
+                                                + ": "
+                                                + step.label()
+                                                + " =====\n"));
+                          }
+
+                          @Override
+                          public void stepFinished(StepResult result) {
+                            Platform.runLater(
+                                () -> bottom.ai().append("\n----- " + result.line() + " -----\n"));
+                          }
+                        },
+                        cancel,
+                        verifier,
+                        verify.retries());
+                ProjectAiResult result = run.asResult();
+                ProjectRefresh.Result fresh =
+                    ProjectRefresh.check(result.snapshot(), ws.index(), ws.reader(), ws.options());
+                Platform.runLater(() -> finished(cancel, ws, result, fresh, ""));
+              } catch (AiException ex) {
+                Platform.runLater(() -> failed(cancel, ex.getMessage(), ex));
+              } catch (IOException | RuntimeException ex) {
+                Platform.runLater(() -> failed(cancel, "Unexpected error: " + ex, null));
+              }
+            });
+  }
+
+  private AiProvider.StreamListener streamToPanel() {
+    return new AiProvider.StreamListener() {
+      @Override
+      public void onText(String piece) {
+        Platform.runLater(() -> bottom.ai().append(piece));
+      }
+
+      @Override
+      public void onThinking(String piece) {
+        Platform.runLater(() -> bottom.ai().appendThinking(piece));
+      }
+    };
   }
 
   // ---- sending ----
@@ -176,7 +380,7 @@ final class ProjectAiController {
                 ProjectRefresh.Result fresh =
                     ProjectRefresh.check(result.snapshot(), ws.index(), ws.reader(), ws.options());
                 String verification = verified.report();
-                Platform.runLater(() -> finished(cancel, service, ws, result, fresh, verification));
+                Platform.runLater(() -> finished(cancel, ws, result, fresh, verification));
               } catch (AiException ex) {
                 Platform.runLater(() -> failed(cancel, ex.getMessage(), ex));
               } catch (IOException | RuntimeException ex) {
@@ -194,7 +398,6 @@ final class ProjectAiController {
 
   private void finished(
       AiCancel cancel,
-      ProjectAiService service,
       ProjectWorkspace ws,
       ProjectAiResult result,
       ProjectRefresh.Result fresh,
