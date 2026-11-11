@@ -188,6 +188,11 @@ public final class OllamaProvider implements AiProvider {
   }
 
   @Override
+  public boolean reportsTokenCounts() {
+    return true;
+  }
+
+  @Override
   public AiReply complete(AiRequest request, Consumer<String> onText, AiCancel cancel)
       throws AiException {
     return completeStreaming(request, onText::accept, cancel);

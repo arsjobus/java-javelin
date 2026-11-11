@@ -11,6 +11,8 @@ import com.javelin.ai.plan.Planner;
 import com.javelin.ai.plan.StepExecutor;
 import com.javelin.ai.plan.StepResult;
 import com.javelin.ai.plan.TaskPlan;
+import com.javelin.ai.profile.ModelProfile;
+import com.javelin.ai.profile.ModelProfiles;
 import com.javelin.ai.project.Adjustments;
 import com.javelin.ai.project.AppliedChanges;
 import com.javelin.ai.project.ContextMode;
@@ -60,6 +62,11 @@ final class ProjectAiController {
   private final BottomPanel bottom;
 
   private ProjectWorkspace workspace; // worker thread, then FX thread after it finished
+
+  /** The profile and provider of the request in progress (FX thread only). */
+  private ModelProfile profile = ModelProfile.SMALL;
+
+  private AiProvider provider;
   private AppliedChanges lastApplied; // FX thread only
   private ProjectReader lastReader;
 
@@ -79,14 +86,17 @@ final class ProjectAiController {
   void request() {
     if (parent.busy()) return;
     if (!bench.requireProject("Project Request")) return;
-    AiConfig config = AiConfig.from(bench.settings());
-    AiProvider provider = parent.providerFor(config);
-    if (provider == null) return;
-    if (!config.hasModel()) {
+    AiConfig base = AiConfig.from(bench.settings());
+    AiProvider chosen = parent.providerFor(base);
+    if (chosen == null) return;
+    if (!base.hasModel()) {
       parent.chooseModel(this::request);
       return;
     }
-    PlanConfig planConfig = PlanConfig.from(bench.settings());
+    provider = chosen;
+    profile = ModelProfiles.resolve(bench.settings(), chosen.isLocal());
+    AiConfig config = ModelProfiles.apply(base, bench.settings(), profile);
+    PlanConfig planConfig = PlanConfig.from(bench.settings(), profile.maxSteps());
     Optional<ProjectAiDialogs.Request> asked =
         ProjectAiDialogs.ask(planConfig.enabled(), planConfig.maxSteps());
     if (asked.isEmpty()) return;
@@ -99,7 +109,7 @@ final class ProjectAiController {
             provider,
             config,
             ProjectAiConfig.from(bench.settings()),
-            SymbolConfig.from(bench.settings()),
+            SymbolConfig.from(bench.settings(), profile.symbolBudget()),
             calibration);
     prepare(service, asked.get().mode(), asked.get().instruction(), Adjustments.NONE);
   }
@@ -147,13 +157,16 @@ final class ProjectAiController {
   }
 
   private void confirm(ProjectAiService service, ProjectPlan plan, Adjustments adjustments) {
-    VerifyConfig verify = VerifyConfig.from(bench.settings());
+    VerifyConfig verify = VerifyConfig.from(bench.settings(), profile.retries());
     ProjectAiDialogs.Decision decision =
         ProjectAiDialogs.confirm(plan, adjustments, verify.appendedTo(plan.preview(), true));
     switch (decision.choice()) {
       case CANCEL -> bench.status("Project request not sent.");
       case UPDATE -> prepare(service, plan.mode(), plan.instruction(), decision.adjustments());
-      case SEND -> send(service, plan, verify);
+      case SEND -> {
+        if (parent.externalConsent(provider, plan.preview())) send(service, plan, verify);
+        else bench.status("Project request not sent.");
+      }
     }
   }
 
@@ -197,7 +210,8 @@ final class ProjectAiController {
       Planner planner,
       ProjectWorkspace ws,
       Planner.PlanRequest prepared) {
-    if (!ProjectAiDialogs.confirmPlanRequest(prepared)) {
+    if (!ProjectAiDialogs.confirmPlanRequest(prepared)
+        || !parent.externalConsent(provider, prepared.preview())) {
       bench.status("Project request not sent.");
       return;
     }
@@ -259,7 +273,7 @@ final class ProjectAiController {
 
   private void runPlan(
       StepExecutor executor, TaskPlan plan, ProjectWorkspace ws, Planner.PlanRequest prepared) {
-    VerifyConfig verify = VerifyConfig.from(bench.settings());
+    VerifyConfig verify = VerifyConfig.from(bench.settings(), profile.retries());
     AiCancel cancel = parent.begin("Project Request: running the plan...");
     bottom
         .ai()

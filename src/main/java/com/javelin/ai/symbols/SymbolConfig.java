@@ -19,9 +19,18 @@ public record SymbolConfig(boolean enabled, SymbolBudget budget) {
   }
 
   public static SymbolConfig from(Settings settings) {
-    return new SymbolConfig(
-        settings.getBoolean(ENABLED, false),
-        SymbolBudget.named(settings.get(PROFILE, "small")).orElse(SymbolBudget.SMALL));
+    return from(settings, SymbolBudget.SMALL);
+  }
+
+  /**
+   * The settings, with {@code profileBudget} (the model profile's limits) where {@code
+   * ai.symbols.profile} is not set: an explicit setting wins over the model profile.
+   */
+  public static SymbolConfig from(Settings settings, SymbolBudget profileBudget) {
+    String named = settings.get(PROFILE, null);
+    SymbolBudget budget =
+        named == null ? profileBudget : SymbolBudget.named(named).orElse(SymbolBudget.SMALL);
+    return new SymbolConfig(settings.getBoolean(ENABLED, false), budget);
   }
 
   /** The same configuration with another switch (for tests and the eval). */

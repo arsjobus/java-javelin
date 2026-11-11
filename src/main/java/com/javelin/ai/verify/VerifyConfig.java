@@ -28,9 +28,17 @@ public record VerifyConfig(boolean enabled, int retries, boolean runTests, int t
   }
 
   public static VerifyConfig from(Settings settings) {
+    return from(settings, DEFAULT_RETRIES);
+  }
+
+  /**
+   * The settings, with {@code profileRetries} (the model profile's budget) where {@code
+   * ai.verify.retries} is not set: an explicit setting wins over the profile.
+   */
+  public static VerifyConfig from(Settings settings, int profileRetries) {
     return new VerifyConfig(
         settings.getBoolean(ENABLED, true),
-        settings.getInt(RETRIES, DEFAULT_RETRIES),
+        settings.getInt(RETRIES, profileRetries),
         settings.getBoolean(TESTS, false),
         settings.getInt(TEST_SECONDS, DEFAULT_TEST_SECONDS));
   }

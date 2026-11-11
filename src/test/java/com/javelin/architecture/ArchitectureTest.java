@@ -260,8 +260,20 @@ class ArchitectureTest {
         .dependOnClassesThat()
         .haveFullyQualifiedName(ROOT + ".ai.OllamaProvider")
         .because(
-            "a vendor is chosen in one place (AiProviders) from the user's settings; everything else uses AiProvider")
+            "a vendor is chosen in one place (AiProviders) from the user's settings; everything"
+                + " else uses AiProvider")
         .check(classes);
+    for (String vendor : List.of("ExternalProvider", "JdkExternalTransport"))
+      noClasses()
+          .that()
+          .resideOutsideOfPackage(ROOT + ".ai")
+          .should()
+          .dependOnClassesThat()
+          .haveFullyQualifiedName(ROOT + ".ai." + vendor)
+          .because(
+              "the external vendor is chosen in one place (AiProviders) from the user's settings;"
+                  + " everything else uses AiProvider")
+          .check(classes);
   }
 
   @Test

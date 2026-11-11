@@ -7,8 +7,8 @@ import com.javelin.settings.Settings;
  * default: it is one more request to the model before the work, so a project request behaves as
  * before until the user turns it on. {@code maxSteps} is a hard limit, not advice: a plan longer
  * than it is refused when it is checked and again when it is about to run. The default is the small
- * profile's limit in ROADMAP-AI-RELIABILITY.md; the ceiling is the frontier profile's, which Phase
- * 5 will select by profile instead of by setting.
+ * profile's limit in ROADMAP-AI-RELIABILITY.md; the ceiling is the frontier profile's. The model
+ * profile ({@code ai.profile}) supplies the default when {@code ai.plan.maxSteps} is not set.
  */
 public record PlanConfig(boolean enabled, int maxSteps) {
   public static final String ENABLED = "ai.plan";
@@ -29,8 +29,16 @@ public record PlanConfig(boolean enabled, int maxSteps) {
   }
 
   public static PlanConfig from(Settings settings) {
+    return from(settings, SMALL_STEPS);
+  }
+
+  /**
+   * The settings, with {@code profileSteps} (the model profile's limit) where {@code
+   * ai.plan.maxSteps} is not set: an explicit setting wins over the profile.
+   */
+  public static PlanConfig from(Settings settings, int profileSteps) {
     return new PlanConfig(
-        settings.getBoolean(ENABLED, false), settings.getInt(MAX_STEPS, SMALL_STEPS));
+        settings.getBoolean(ENABLED, false), settings.getInt(MAX_STEPS, profileSteps));
   }
 
   /** The same configuration with another switch (for tests and the eval). */

@@ -24,6 +24,9 @@ import javafx.scene.layout.VBox;
 final class AiDialogs {
   private AiDialogs() {}
 
+  static final ButtonType ALLOW_AND_SEND =
+      new ButtonType(
+          "Allow for this project and Send", javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
   static final ButtonType SEND =
       new ButtonType("Send", javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
   static final ButtonType APPLY =
@@ -42,6 +45,23 @@ final class AiDialogs {
   /** Shows exactly what would be sent and where; true only if the user chooses Send. */
   static boolean confirmSend(AiPlan plan) {
     return confirmSend(plan, plan.preview());
+  }
+
+  /**
+   * The first use of an external provider in the open project: {@code notice} names the provider,
+   * the destination and the project, {@code preview} is the complete message. True only if the
+   * person chooses to allow it; Enter and Escape both mean no.
+   */
+  static boolean confirmExternalUse(String notice, String preview) {
+    Dialog<ButtonType> dialog =
+        textDialog(
+            "Send code to an outside provider?",
+            "An external AI provider",
+            notice,
+            preview,
+            ALLOW_AND_SEND,
+            ButtonType.CANCEL);
+    return Dialogs.show(dialog).filter(ALLOW_AND_SEND::equals).isPresent();
   }
 
   /**

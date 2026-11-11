@@ -46,6 +46,17 @@ Files made for credentials (`.env`, private keys, key stores, cloud credential f
 
 Before you reach the dialog, Javelin asks Ollama once per model for the model's largest context (`/api/show`); that request carries only the model's name. Answers are tied to a snapshot of what was sent. Files the AI proposes to change are written only after you approve them one by one, and only inside the project.
 
+### The external provider (opt-in, v0.9+)
+
+The default is unchanged: AI is off until you choose a command, and it talks to Ollama on this computer. `ai.provider=external` is the only way to send code to an outside service, and nothing selects it for you. It then sends to one fixed host, `api.anthropic.com`, over HTTPS (the address is in the program, not in a setting; there is no proxy and no redirect is followed). Four things stand between a project and that host:
+
+- **An open project and a key.** The permission is per project, so an AI action with no project open is refused. The key is read from the environment variable named by `ai.external.keyEnv` (default `ANTHROPIC_API_KEY`) or from the file named by `ai.external.keyFile`, which must be outside the project. The editor never writes the key anywhere: not to settings, not to a project, not to a log.
+- **Your consent, once per project.** The first time, after you choose Send, a second dialog names the provider, the destination and the project and shows the complete message again. Only "Allow for this project and Send" lets anything go. The grant (provider, host and project folder) is kept in `ai-consent.tsv` beside the user settings file, never in the project. Delete a line, or the file, to take it back: it is read on every request.
+- **The same dialogs as always.** Every request is shown before it is sent, nothing is applied without review, and the file limits above still hold. A repeat request after a failed compile carries the compiler's first messages and the part of the change they point at; it goes to the same provider and is announced in the same dialog.
+- **A refusal inside the provider.** If the window were ever to skip the dialog, the provider still refuses to send for a project without consent. Listing the models sends only the key, no code, and is made only when you choose *AI > Choose Model...*.
+
+What the provider does with what it receives is up to its operator, and its terms and logs apply. Javelin cannot see or change them.
+
 ## Language servers
 
 Javelin IDE itself sends nothing over the network for language features. It talks to a language server over that process's stdin/stdout, and only after the user has chosen to start one. What the server does beyond that (for example downloading indexes) is up to the server the user selected.

@@ -89,6 +89,12 @@ How often a model's change compiles and passes its tests is measured, not guesse
 
 Every place that refuses a model's answer says why in one shared vocabulary, `FailureReason` (`NO_EDIT_BLOCK`, `UNPARSEABLE`, `ANCHOR_NOT_FOUND`, `WRONG_FILE`, `OVERSIZED`, `TRUNCATED`, `COMPILE_ERROR`, `TEST_FAILURE`, `REFUSED`, `TIMEOUT`); `AiResult.failure()` and `ProjectAiResult.failure()` carry it. Nothing the user sees changes: the editor's own requests still use temperature 0.2 with no seed, and the reason is not yet shown.
 
+## Model profiles and the external provider (Phase 5)
+
+A profile (`ai.profile`: `small`, `frontier`, `custom`) is the one place that says how much a kind of model is asked to do: the retry budget after a failed check, the plan step limit, the symbol-level context limits and whether edits are asked for as JSON. Without the setting, a provider on this computer gets `small` and any other `frontier`; an explicit `ai.verify.retries`, `ai.plan.maxSteps`, `ai.symbols.profile` or `ai.structuredEdits` always wins. `small` is exactly what these settings defaulted to before, so nothing changes unless you choose otherwise. The pipeline reads what a provider declares (`isLocal`, `supportsSchemaOutput`, `reportsTokenCounts`, `contextLimit`) and never its name.
+
+`ai.provider=external` adds an outside provider (see PRIVACY.md). It needs an open project, a key from the environment or a key file outside the project, and a consent for each project that names the provider, the host and what is sent. The `frontier` profile and this provider have **not been measured** against any frontier model: their tests use fakes, which show that requests, refusals and consent work, not that the model writes better edits.
+
 ## Safeguards
 
 | Safeguard | State |

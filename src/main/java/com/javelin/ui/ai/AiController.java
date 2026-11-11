@@ -11,6 +11,9 @@ import com.javelin.ai.AiProviders;
 import com.javelin.ai.AiResult;
 import com.javelin.ai.AiService;
 import com.javelin.ai.AiSource;
+import com.javelin.ai.ExternalAccess;
+import com.javelin.ai.profile.ModelProfile;
+import com.javelin.ai.profile.ModelProfiles;
 import com.javelin.ai.verify.JavacVerifier;
 import com.javelin.ai.verify.ProjectClasspath;
 import com.javelin.ai.verify.Verified;
@@ -27,6 +30,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javafx.application.Platform;
@@ -190,13 +194,15 @@ public final class AiController {
       bench.status("Open a file first: AI actions work on the text in the editor.");
       return;
     }
-    AiConfig config = AiConfig.from(bench.settings());
-    AiProvider provider = providerFor(config);
+    AiConfig base = AiConfig.from(bench.settings());
+    AiProvider provider = providerFor(base);
     if (provider == null) return;
-    if (!config.hasModel()) {
+    if (!base.hasModel()) {
       chooseModel(() -> start(action));
       return;
     }
+    ModelProfile profile = ModelProfiles.resolve(bench.settings(), provider.isLocal());
+    AiConfig config = ModelProfiles.apply(base, bench.settings(), profile);
     String instruction = null;
     if (action.needsInstruction()) {
       instruction = AiDialogs.askInstruction().orElse(null);
@@ -220,9 +226,10 @@ public final class AiController {
       bench.showError(action.label(), ex.getMessage());
       return;
     }
-    VerifyConfig verify = VerifyConfig.from(bench.settings());
+    VerifyConfig verify = VerifyConfig.from(bench.settings(), profile.retries());
     VerifyTarget target = verifyTarget(action, verify, file, editor.getText());
-    if (!AiDialogs.confirmSend(plan, verify.appendedTo(plan.preview(), target != null))) {
+    if (!AiDialogs.confirmSend(plan, verify.appendedTo(plan.preview(), target != null))
+        || !externalConsent(provider, plan.preview())) {
       bench.status("AI request not sent.");
       return;
     }
@@ -392,9 +399,26 @@ public final class AiController {
     statusLabel.setText("");
   }
 
+  /**
+   * The first request of an external provider in the open project needs a second, explicit yes that
+   * names the provider, the destination and what is sent; the provider refuses to send without it.
+   * True when no consent is needed (a provider on this computer, or consent already given) or the
+   * person just gave it.
+   */
+  boolean externalConsent(AiProvider provider, String preview) {
+    Optional<String> notice = provider.consentNotice();
+    if (notice.isEmpty()) return true;
+    if (!AiDialogs.confirmExternalUse(notice.get(), preview)) return false;
+    provider.recordConsent();
+    return true;
+  }
+
   AiProvider providerFor(AiConfig config) {
     try {
-      return AiProviders.create(config);
+      File directory = bench.projectDirectory();
+      return AiProviders.create(
+          config,
+          ExternalAccess.from(bench.settings(), directory == null ? null : directory.toPath()));
     } catch (AiException ex) {
       bench.showError("AI", ex.getMessage());
       return null;

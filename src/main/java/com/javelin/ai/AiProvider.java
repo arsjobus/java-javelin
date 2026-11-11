@@ -46,6 +46,27 @@ public interface AiProvider {
   }
 
   /**
+   * True when the provider reports how many tokens a request used ({@link AiReply#usage}), so the
+   * token estimate can be calibrated against it. The default is false.
+   */
+  default boolean reportsTokenCounts() {
+    return false;
+  }
+
+  /**
+   * What the person must be told before the first request of this provider in the open project,
+   * when it needs their consent first; empty when no consent step is needed or it was already
+   * given. A provider that returns text here refuses every request until {@link #recordConsent} was
+   * called. The window shows the text and calls {@code recordConsent} only if the person agrees.
+   */
+  default java.util.Optional<String> consentNotice() {
+    return java.util.Optional.empty();
+  }
+
+  /** Remembers that the person agreed to what {@link #consentNotice} said, for this project. */
+  default void recordConsent() {}
+
+  /**
    * The most tokens of context the model supports, when the provider can say. It is information for
    * the context budget; it carries no code. The default is "unknown".
    */
