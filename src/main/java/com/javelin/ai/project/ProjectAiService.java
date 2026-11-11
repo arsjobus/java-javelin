@@ -8,6 +8,7 @@ import com.javelin.ai.AiReply;
 import com.javelin.ai.AiRequest;
 import com.javelin.ai.FailureReason;
 import com.javelin.ai.Finding;
+import com.javelin.ai.symbols.SymbolConfig;
 import com.javelin.ai.verify.RepairPrompt;
 import com.javelin.ai.verify.Verification;
 import com.javelin.ai.verify.VerificationLoop;
@@ -34,10 +35,26 @@ public final class ProjectAiService {
   private final AiConfig config;
   private final ProjectAiConfig project;
   private final java.util.function.LongSupplier clock;
+  private final SymbolConfig symbols;
+  private final TokenCalibration calibration;
   private final Map<String, OptionalInt> modelLimits = new HashMap<>();
 
   public ProjectAiService(AiProvider provider, AiConfig config, ProjectAiConfig project) {
-    this(provider, config, project, System::currentTimeMillis);
+    this(provider, config, project, SymbolConfig.defaults(), new TokenCalibration());
+  }
+
+  /**
+   * @param symbols whether Smart Context works at symbol level, and with which limits
+   * @param calibration where the model's own token counts are collected; share one object between
+   *     requests so a later request estimates with what an earlier one learned
+   */
+  public ProjectAiService(
+      AiProvider provider,
+      AiConfig config,
+      ProjectAiConfig project,
+      SymbolConfig symbols,
+      TokenCalibration calibration) {
+    this(provider, config, project, symbols, calibration, System::currentTimeMillis);
   }
 
   ProjectAiService(
@@ -45,9 +62,21 @@ public final class ProjectAiService {
       AiConfig config,
       ProjectAiConfig project,
       java.util.function.LongSupplier clock) {
+    this(provider, config, project, SymbolConfig.defaults(), new TokenCalibration(), clock);
+  }
+
+  ProjectAiService(
+      AiProvider provider,
+      AiConfig config,
+      ProjectAiConfig project,
+      SymbolConfig symbols,
+      TokenCalibration calibration,
+      java.util.function.LongSupplier clock) {
     this.provider = provider;
     this.config = config;
     this.project = project;
+    this.symbols = symbols;
+    this.calibration = calibration;
     this.clock = clock;
   }
 
@@ -74,7 +103,7 @@ public final class ProjectAiService {
       throw new AiException(
           AiException.Kind.REFUSED, "No AI model is chosen yet. Use AI > Choose Model...");
     ProjectPromptBuilder.checkInstruction(instruction);
-    ContextBudget budget = project.budget(modelLimit(cancel));
+    ContextBudget budget = calibration.apply(project.budget(modelLimit(cancel)), config.model());
     ProjectIndex index = workspace.index();
     if (index.files().isEmpty())
       throw new AiException(
@@ -95,7 +124,10 @@ public final class ProjectAiService {
             budget,
             ProjectPromptBuilder.fixedTokens(instruction.strip()),
             workspace.options(),
-            clock.getAsLong());
+            clock.getAsLong(),
+            mode == ContextMode.SMART && symbols.enabled()
+                ? new SymbolOptions(instruction.strip(), symbols.budget())
+                : null);
     if (context.included().isEmpty())
       throw new AiException(
           AiException.Kind.REFUSED,
@@ -157,6 +189,7 @@ public final class ProjectAiService {
     cancel.throwIfCancelled();
     AiReply reply = provider.completeStreaming(plan.request(), listener, cancel);
     cancel.throwIfCancelled();
+    calibration.record(plan.request().model(), plan.request().size(), 2, reply.usage());
     String text = reply.text();
     ProjectSnapshot snapshot = plan.context().snapshot();
     if (text.isBlank())

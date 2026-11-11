@@ -5,6 +5,7 @@ import com.javelin.ai.AiException;
 import com.javelin.ai.AiProvider;
 import com.javelin.ai.AiReply;
 import com.javelin.ai.AiRequest;
+import com.javelin.ai.AiUsage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalInt;
@@ -14,6 +15,7 @@ import java.util.function.Consumer;
 final class ScriptedProvider implements AiProvider {
   String answer = "";
   boolean truncated;
+  AiUsage usage = AiUsage.UNKNOWN;
   boolean local = true;
   AiException failure;
   OptionalInt limit = OptionalInt.empty();
@@ -57,6 +59,6 @@ final class ScriptedProvider implements AiProvider {
     requests.add(request);
     if (failure != null) throw failure;
     onText.accept(answer);
-    return new AiReply(answer, truncated);
+    return new AiReply(answer, truncated, usage);
   }
 }

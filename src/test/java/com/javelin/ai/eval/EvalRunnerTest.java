@@ -470,4 +470,34 @@ class EvalRunnerTest {
         tasks.stream().filter(t -> t.mode() == EvalTask.Mode.SELECTION).findFirst().orElseThrow();
     assertTrue(planned.run(single, 42).passed());
   }
+
+  @Test
+  void symbolLevelContextAndAPlanCannotBeCombined() throws IOException {
+    ScriptedProvider provider = ScriptedProvider.oracle(EvalCorpus.load());
+    var symbols =
+        new com.javelin.ai.symbols.SymbolConfig(true, com.javelin.ai.symbols.SymbolBudget.SMALL);
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new EvalRunner(provider, EvalProfile.small("scripted-model"), scratch, 0, 3, symbols));
+    assertFalse(runner(provider).symbols().enabled());
+  }
+
+  @Test
+  void aProjectTaskStillPassesWithSymbolLevelContext() throws IOException {
+    List<EvalTask> tasks = EvalCorpus.load();
+    var symbols =
+        new com.javelin.ai.symbols.SymbolConfig(true, com.javelin.ai.symbols.SymbolBudget.SMALL);
+    EvalRunner runner =
+        new EvalRunner(
+            ScriptedProvider.oracle(tasks),
+            EvalProfile.small("scripted-model"),
+            scratch,
+            0,
+            0,
+            symbols);
+    assertTrue(runner.symbols().enabled());
+    TaskResult r = runner.run(task("rename-incr"), 42);
+    assertTrue(r.passed(), r.failure() + " " + r.detail());
+  }
 }

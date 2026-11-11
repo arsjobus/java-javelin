@@ -6,6 +6,8 @@ import com.javelin.ai.AiCancel;
 import com.javelin.ai.AiException;
 import com.javelin.ai.AiProvider;
 import com.javelin.ai.AiProviders;
+import com.javelin.ai.symbols.SymbolBudget;
+import com.javelin.ai.symbols.SymbolConfig;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
@@ -26,7 +28,8 @@ import org.junit.jupiter.api.Test;
  * Options (all optional except the model): {@code -Deval.runs=3}, {@code -Deval.seed=42}, {@code
  * -Deval.tasks=<regex on task ids>}, {@code -Deval.endpoint=http://127.0.0.1:11434}, {@code
  * -Deval.think=none|low|medium|high}, {@code -Deval.timeoutSeconds=120}, {@code -Deval.plan=3}
- * (project tasks planned in at most that many steps). It writes {@code
+ * (project tasks planned in at most that many steps), {@code -Deval.symbols=small|frontier} (Smart
+ * Context at symbol level, Phase 4; not with {@code -Deval.plan}). It writes {@code
  * target/eval/results-<date>.json} and {@code target/eval/baseline-<date>.md}; commit the Markdown
  * as {@code docs/eval/baseline-<date>.md}. The model is reached only through the editor's
  * loopback-only provider, so this cannot send the corpus anywhere but this computer.
@@ -55,7 +58,20 @@ class EvalRunTest {
     Path scratch = Files.createTempDirectory("javelin-eval-");
     int retries = Integer.parseInt(System.getProperty("eval.retries", "-1"));
     int planSteps = Integer.parseInt(System.getProperty("eval.plan", "0"));
-    EvalRunner runner = new EvalRunner(provider, profile, scratch, retries, planSteps);
+    String symbolProfile = System.getProperty("eval.symbols", "").strip();
+    SymbolConfig symbols =
+        symbolProfile.isEmpty()
+            ? SymbolConfig.defaults()
+            : new SymbolConfig(
+                true,
+                SymbolBudget.named(symbolProfile)
+                    .orElseThrow(
+                        () ->
+                            new IllegalArgumentException(
+                                "-Deval.symbols must be small or frontier, not '"
+                                    + symbolProfile
+                                    + "'")));
+    EvalRunner runner = new EvalRunner(provider, profile, scratch, retries, planSteps, symbols);
     long started = System.nanoTime();
     List<List<TaskResult>> all = new ArrayList<>();
     for (int run = 0; run < runs; run++)
@@ -71,7 +87,8 @@ class EvalRunTest {
             all,
             (System.nanoTime() - started) / 1_000_000,
             retries,
-            planSteps);
+            planSteps,
+            symbols.enabled() ? symbols.budget().name() : null);
     Path out = Path.of("target", "eval");
     Files.createDirectories(out);
     Files.writeString(out.resolve("results-" + date + ".json"), report.toJson());

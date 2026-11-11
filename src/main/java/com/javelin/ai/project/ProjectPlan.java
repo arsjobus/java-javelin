@@ -47,6 +47,35 @@ public record ProjectPlan(
     return out;
   }
 
+  /** What a file sent in part shows of each of its symbols, and why: every symbol is named. */
+  private static void appendSymbols(StringBuilder out, ContextEntry entry) {
+    List<String> plain = new ArrayList<>();
+    List<String> notShown = new ArrayList<>();
+    for (ShownSymbol s : entry.symbols()) {
+      if (s.isFull())
+        out.append("             in full: ")
+            .append(s.name())
+            .append(" - ")
+            .append(s.why())
+            .append('\n');
+      else if (ShownSymbol.NOT_SHOWN.equals(s.how())) notShown.add(s.name());
+      else if (DEFAULT_WHY.contains(s.why())) plain.add(s.name());
+      else
+        out.append("             signature only: ")
+            .append(s.name())
+            .append(" - ")
+            .append(s.why())
+            .append('\n');
+    }
+    if (!plain.isEmpty())
+      out.append("             signature only: ").append(String.join(", ", plain)).append('\n');
+    if (!notShown.isEmpty())
+      out.append("             not shown: ").append(String.join(", ", notShown)).append('\n');
+  }
+
+  private static final java.util.Set<String> DEFAULT_WHY =
+      java.util.Set.of("field", "declaration", "its body is not needed for this request");
+
   public String preview() {
     StringBuilder out = new StringBuilder();
     out.append("Action:    Project Request (").append(mode.label()).append(")\n");
@@ -79,11 +108,17 @@ public record ProjectPlan(
     for (String w : warnings) out.append("\nWARNING: ").append(w).append('\n');
     for (String w : context.warnings()) out.append("\nWARNING: ").append(w).append('\n');
     out.append("\n----- files that are sent -----\n");
-    for (ContextEntry e : context.included())
+    for (ContextEntry e : context.included()) {
       out.append(
           String.format(
-              "%8s tokens  %s  [%s]%n",
-              ContextBudget.format(e.tokens()), e.file().path(), e.reason()));
+              "%8s tokens  %s  [%s]%s%n",
+              ContextBudget.format(e.tokens()),
+              e.file().path(),
+              e.reason(),
+              e.isPartial() ? "  (partial view)" : ""));
+      if (e.isPartial()) appendSymbols(out, e);
+    }
+    for (String note : context.notes()) out.append("\nNote: ").append(note).append('\n');
     List<Omitted> left = context.omitted();
     if (!left.isEmpty()) {
       out.append("\n----- files that are NOT sent -----\n");

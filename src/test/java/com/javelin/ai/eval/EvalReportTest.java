@@ -243,4 +243,17 @@ class EvalReportTest {
     assertFalse(plain.toMarkdown().contains("planned first"));
     assertFalse(plain.toJson().contains("planSteps"));
   }
+
+  @Test
+  void aSymbolLevelReportSaysSoAndAPlainOneDoesNot() {
+    EvalReport symbolic =
+        new EvalReport("small", "m", "d", 1, 0, List.of(List.of()), 1, 0, 0, "small");
+    assertTrue(symbolic.symbolic());
+    assertTrue(symbolic.toMarkdown().contains("symbol level with the `small` profile"));
+    assertTrue(symbolic.toJson().contains("\"symbols\""));
+    EvalReport plain = report();
+    assertFalse(plain.symbolic());
+    assertFalse(plain.toMarkdown().contains("symbol level"));
+    assertFalse(plain.toJson().contains("\"symbols\""));
+  }
 }

@@ -31,8 +31,23 @@ public final class ContextBuilder {
 
   private record Candidate(String path, String reason, boolean fromUser) {}
 
+  /**
+   * A file read for the context. {@code text} is what is sent: the whole file, or a view of it
+   * ({@code shown} is then not empty, {@code originalLines} is the size of the whole file and
+   * {@code hash} still fingerprints the whole file).
+   */
   private record Loaded(
-      Candidate candidate, ProjectFile file, String text, int lines, String hash) {}
+      Candidate candidate,
+      ProjectFile file,
+      String text,
+      int lines,
+      String hash,
+      List<ShownSymbol> shown,
+      int originalLines) {
+    boolean partial() {
+      return !shown.isEmpty();
+    }
+  }
 
   /**
    * @param picks the selector's files in order of importance
@@ -51,6 +66,29 @@ public final class ContextBuilder {
       ScanOptions options,
       long nowMillis)
       throws AiException {
+    return build(
+        index, reader, mode, picks, adjustments, budget, fixedTokens, options, nowMillis, null);
+  }
+
+  /**
+   * As above; with {@code symbols} (Smart Context only) a large Java file is sent as a view of the
+   * methods the request is about and the signatures of the rest, files that call those methods or
+   * declare the types they use are added, and the preview says which symbols were chosen and why
+   * ({@link SymbolPlanner}). With null, or whenever the planner finds nothing to be about, the
+   * context is the file-level one.
+   */
+  public static ProjectContext build(
+      ProjectIndex index,
+      ProjectReader reader,
+      ContextMode mode,
+      List<Pick> picks,
+      Adjustments adjustments,
+      ContextBudget budget,
+      int fixedTokens,
+      ScanOptions options,
+      long nowMillis,
+      SymbolOptions symbols)
+      throws AiException {
     Map<String, ProjectFile> eligible = new LinkedHashMap<>();
     for (ProjectFile f : index.files()) eligible.put(f.path(), f);
 
@@ -64,13 +102,34 @@ public final class ContextBuilder {
           && !adjustments.exclude().contains(pick.path())
           && seen.add(pick.path())) order.add(new Candidate(pick.path(), pick.reason(), false));
 
+    SymbolPlanner.Plan symbolPlan = SymbolPlanner.Plan.NONE;
+    if (symbols != null && mode == ContextMode.SMART)
+      symbolPlan = planSymbols(index, reader, order, adjustments, budget, options, symbols);
+    for (var addition : symbolPlan.additions().entrySet())
+      if (seen.add(addition.getKey()))
+        order.add(
+            new Candidate(addition.getKey(), "symbol context: " + addition.getValue(), false));
+
     List<Omitted> omitted = new ArrayList<>();
     List<Loaded> loaded = new ArrayList<>();
     for (Candidate c : order) {
       ProjectFile file = eligible.get(c.path());
       try {
         String text = reader.read(file, options.maxFileBytes());
-        loaded.add(new Loaded(c, file, text, countLines(text), ProjectReader.hash(text)));
+        SymbolPlanner.View view = symbolPlan.views().get(c.path());
+        if (view == null)
+          loaded.add(
+              new Loaded(c, file, text, countLines(text), ProjectReader.hash(text), List.of(), 0));
+        else
+          loaded.add(
+              new Loaded(
+                  c,
+                  file,
+                  view.text(),
+                  countLines(view.text()),
+                  ProjectReader.hash(text),
+                  view.shown(),
+                  view.originalLines()));
       } catch (IOException ex) {
         omitted.add(
             new Omitted(file, Omitted.Why.UNREADABLE, "could not be read: " + messageOf(ex), 0));
@@ -79,13 +138,17 @@ public final class ContextBuilder {
 
     String marker = marker(loaded);
     Map<String, Integer> blockTokens = new HashMap<>();
-    for (Loaded l : loaded)
-      blockTokens.put(l.file().path(), ContextBudget.estimateTokens(block(marker, l)));
+    for (Loaded l : loaded) blockTokens.put(l.file().path(), budget.estimate(block(marker, l)));
 
     Overview overview =
         overview(index, reader, mode, options, budget, fixedTokens, eligible.size());
 
-    int remaining = overview.available;
+    // the note about partial views is part of the header whenever a view is sent
+    int remaining =
+        Math.max(
+            0,
+            overview.available
+                - (symbolPlan.views().isEmpty() ? 0 : budget.estimate(PARTIAL_NOTE)));
     List<Loaded> fitted = new ArrayList<>();
     for (Loaded l : loaded) {
       int cost = blockTokens.get(l.file().path());
@@ -121,11 +184,20 @@ public final class ContextBuilder {
     }
     omitted.sort(Comparator.comparing(o -> o.file().path()));
 
+    Set<String> partialPaths = new TreeSet<>();
+    for (Loaded l : fitted) if (l.partial()) partialPaths.add(l.file().path());
     StringBuilder text = new StringBuilder();
     text.append(
-        header(index, mode, fitted.size(), eligible.size(), omitted, overview.dependencyLines));
+        header(
+            index,
+            mode,
+            fitted.size(),
+            eligible.size(),
+            omitted,
+            overview.dependencyLines,
+            !partialPaths.isEmpty()));
     text.append("\nPROJECT STRUCTURE\n")
-        .append(tree(index.files(), includedPaths, overview.compact));
+        .append(tree(index.files(), includedPaths, partialPaths, overview.compact));
     text.append("\nFILES\n");
     List<ContextEntry> entries = new ArrayList<>();
     List<String> warnings = new ArrayList<>(budget.warnings());
@@ -138,7 +210,8 @@ public final class ContextBuilder {
               l.candidate().reason(),
               blockTokens.get(l.file().path()),
               l.hash(),
-              l.candidate().fromUser()));
+              l.candidate().fromUser(),
+              l.shown()));
       sentHashes.put(l.file().path(), l.hash());
       for (String what : SensitiveFiles.warnings(l.text()))
         warnings.add(l.file().path() + " looks like it contains " + what + ".");
@@ -149,11 +222,11 @@ public final class ContextBuilder {
               + options.maxFiles()
               + "; the files beyond it were never looked at.");
     String body = text.toString();
-    int textTokens = ContextBudget.estimateTokens(body);
+    int textTokens = budget.estimate(body);
     Map<String, ProjectSnapshot.Stamp> stamps = new TreeMap<>();
     for (ProjectFile f : index.files())
       stamps.put(f.path(), new ProjectSnapshot.Stamp(f.size(), f.modified()));
-    String id = snapshotId(mode, sentHashes);
+    String id = snapshotId(mode, sentHashes, partialPaths);
     return new ProjectContext(
         index.name(),
         mode,
@@ -164,7 +237,40 @@ public final class ContextBuilder {
         textTokens,
         budget.usage(textTokens + fixedTokens),
         warnings,
-        new ProjectSnapshot(id, nowMillis, stamps, sentHashes));
+        new ProjectSnapshot(id, nowMillis, stamps, sentHashes, partialPaths),
+        symbolPlan.notes());
+  }
+
+  // ---- symbol-level context ----
+
+  /**
+   * The Java files the planner may use (every eligible one the user did not leave out), read for
+   * it, and its plan. A file that cannot be read is not used.
+   */
+  private static SymbolPlanner.Plan planSymbols(
+      ProjectIndex index,
+      ProjectReader reader,
+      List<Candidate> order,
+      Adjustments adjustments,
+      ContextBudget budget,
+      ScanOptions options,
+      SymbolOptions symbols) {
+    List<SymbolPlanner.JavaSource> sources = new ArrayList<>();
+    for (ProjectFile f : index.files()) {
+      if (!"java".equals(f.language()) || adjustments.exclude().contains(f.path())) continue;
+      try {
+        sources.add(
+            new SymbolPlanner.JavaSource(
+                f.path(),
+                reader.read(f, options.maxFileBytes()),
+                f.kind() == ProjectFile.Kind.TEST));
+      } catch (IOException ex) {
+        // an unreadable file is simply not part of the symbol index
+      }
+    }
+    Set<String> picked = new LinkedHashSet<>();
+    for (Candidate c : order) picked.add(c.path());
+    return SymbolPlanner.plan(sources, picked, symbols, budget);
   }
 
   // ---- overview ----
@@ -192,13 +298,12 @@ public final class ContextBuilder {
     String head = header(index, mode, 0, eligibleCount, worst, o.dependencyLines);
     String fullTree = tree(index.files(), Set.of(), false);
     int window = budget.effectiveWindow();
-    int fullTokens =
-        ContextBudget.estimateTokens(head + "\nPROJECT STRUCTURE\n" + fullTree + "\nFILES\n");
-    o.compact = ContextBudget.estimateTokens(fullTree) > Math.max(1_000, window / 5);
+    int fullTokens = budget.estimate(head + "\nPROJECT STRUCTURE\n" + fullTree + "\nFILES\n");
+    o.compact = budget.estimate(fullTree) > Math.max(1_000, window / 5);
     String shown = o.compact ? tree(index.files(), Set.of(), true) : fullTree;
     int overviewTokens =
         o.compact
-            ? ContextBudget.estimateTokens(head + "\nPROJECT STRUCTURE\n" + shown + "\nFILES\n")
+            ? budget.estimate(head + "\nPROJECT STRUCTURE\n" + shown + "\nFILES\n")
             : fullTokens;
     o.available = budget.availableForFiles(fixedTokens + overviewTokens);
     int roomForOverview = budget.availableForFiles(fixedTokens);
@@ -240,6 +345,30 @@ public final class ContextBuilder {
       int eligible,
       List<Omitted> omitted,
       List<String> dependencyLines) {
+    return header(index, mode, included, eligible, omitted, dependencyLines, false);
+  }
+
+  /**
+   * Said once when any file is sent in part, so that a model never takes a placeholder for code or
+   * writes a whole file it has only seen the outline of.
+   */
+  static final String PARTIAL_NOTE =
+      "Files marked (partial view) show only some of their code: the methods the request is about"
+          + " in full, the others as their declaration followed by { /* body not shown */ } (the"
+          + " text of that placeholder is not in the file: never copy it into a SEARCH part).\n"
+          + "Comments are left out, except those above a method shown in full. Change a partial"
+          + " file only with edit blocks that copy lines shown in full; never write such a file"
+          + " out as a whole. If you need a body that is not shown, say so instead of guessing"
+          + " it.\n";
+
+  private static String header(
+      ProjectIndex index,
+      ContextMode mode,
+      int included,
+      int eligible,
+      List<Omitted> omitted,
+      List<String> dependencyLines,
+      boolean partial) {
     StringBuilder out = new StringBuilder();
     out.append("PROJECT: ").append(index.name()).append('\n');
     out.append("Mode: ").append(mode.label()).append('\n');
@@ -268,6 +397,7 @@ public final class ContextBuilder {
       out.append("Declared dependencies:\n");
       for (String line : dependencyLines) out.append(line).append('\n');
     }
+    if (partial) out.append(PARTIAL_NOTE);
     return out.toString();
   }
 
@@ -290,6 +420,12 @@ public final class ContextBuilder {
    * with their file counts instead of every file.
    */
   static String tree(List<ProjectFile> files, Set<String> included, boolean compact) {
+    return tree(files, included, Set.of(), compact);
+  }
+
+  /** As above; a file in {@code partial} is marked as shown in part. */
+  static String tree(
+      List<ProjectFile> files, Set<String> included, Set<String> partial, boolean compact) {
     List<String> paths = new ArrayList<>();
     for (ProjectFile f : files) paths.add(f.path());
     paths.sort(BY_SEGMENTS);
@@ -318,6 +454,7 @@ public final class ContextBuilder {
         out.append("  ".repeat(d)).append(parts[d]).append("/\n");
       out.append("  ".repeat(parts.length - 1)).append(parts[parts.length - 1]);
       if (!included.contains(p)) out.append(" (not included)");
+      else if (partial.contains(p)) out.append(" (partial view)");
       out.append('\n');
       open = Arrays.copyOf(parts, parts.length - 1);
     }
@@ -353,8 +490,9 @@ public final class ContextBuilder {
         .append(" (")
         .append(l.file().language() == null ? "text" : l.file().language())
         .append(", ")
-        .append(l.lines())
-        .append(l.lines() == 1 ? " line) " : " lines) ")
+        .append(l.partial() ? "partial view: " + l.lines() + " of " : "")
+        .append(l.partial() ? l.originalLines() : l.lines())
+        .append(l.partial() || l.lines() != 1 ? " lines) " : " line) ")
         .append(marker)
         .append('\n');
     out.append(l.text());
@@ -375,10 +513,15 @@ public final class ContextBuilder {
     return text.endsWith("\n") ? n : n + 1;
   }
 
-  private static String snapshotId(ContextMode mode, Map<String, String> hashes) {
+  private static String snapshotId(
+      ContextMode mode, Map<String, String> hashes, Set<String> partial) {
     StringBuilder all = new StringBuilder(mode.name());
     for (var e : hashes.entrySet())
-      all.append('\n').append(e.getKey()).append(':').append(e.getValue());
+      all.append('\n')
+          .append(e.getKey())
+          .append(':')
+          .append(e.getValue())
+          .append(partial.contains(e.getKey()) ? ":partial" : "");
     return ProjectReader.hash(all.toString()).substring(0, 12);
   }
 

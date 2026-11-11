@@ -211,6 +211,13 @@ public final class MultiFileReply {
               "The file changed after the project was sent; the change was matched against its"
                   + " current text."));
     ChangeReply.Interpreted interpreted = ChangeReply.interpret(section.body(), original, path);
+    if (snapshot.partialPaths().contains(path)
+        && interpreted.format() == ChangeReply.Format.WHOLE_BLOCK)
+      throw new AiException(
+          AiException.Kind.REFUSED,
+          FailureReason.NO_EDIT_BLOCK,
+          "was shown to the model only in part, so a whole new copy of it is not accepted: it"
+              + " would drop the code the model never saw. Ask for edit blocks instead.");
     String replacement =
         ResponseParser.matchLineEndings(
             original, ResponseParser.matchTrailingNewline(original, interpreted.code()));

@@ -24,6 +24,7 @@ Only the tests tagged `eval` run (`mvn test` never runs them, and never calls a 
 | `-Deval.editBlockMinLines=0` | the product default (40) | `0` asks for edit blocks for every selection, to compare with whole blocks |
 | `-Deval.structured=true` | `false` | asks for JSON edits (Ollama's `format`), to compare with text |
 | `-Deval.plan=3` | off | runs project tasks (rename, change a signature) through the Phase 3 planner and step executor with at most that many steps; combine with `-Deval.retries` |
+| `-Deval.symbols=small` | off | Smart Context at symbol level for the project tasks, with that profile (`small` or `frontier`); not with `-Deval.plan`, which builds its own step context |
 
 It writes two files to `target/eval/`: `results-<date>.json` (every task of every run) and `baseline-<date>.md` (the readable summary). To publish a baseline, copy the Markdown to `docs/eval/baseline-<date>.md` and commit it. If Ollama is not running or the model is not installed the run stops with that message instead of recording a row of failures.
 
@@ -100,3 +101,24 @@ No numbers for this are recorded here: they need a run against the model.
 `mvn -Peval test -Deval.model=<model> -Deval.retries=2 -Deval.plan=3` runs the multi-file tasks (rename across files, change a signature and its callers) through the planner and the step executor: the model first writes a plan of at most 3 steps, each one file and one method, and then each step is its own request, checked in memory before the next. Selection and add-tests tasks are not affected. A task passes only when every step of its plan completed and the judging test then passes; a plan that is refused or stops half way is a failure under the reason of the step that stopped it. The report says the runs were planned. The comparison Phase 3 is measured by is the pass rate of the `RENAME_ACROSS_FILES` and `CHANGE_SIGNATURE` rows against a run of the same model and profile with `-Deval.retries=2` and no plan, which is the Phase 2 result. Committed single-attempt baselines without a plan, for reference: `baseline-2026-11-08-qwen3.5-9b-think-3.md` (100% and 75%), `baseline-2026-11-08-qwen3.5-9b-nothink-2.md` (100% and 50%) and `baseline-2026-11-08-qwen2.5-coder-7b-nothink-2.md` (0% and 50%).
 
 No numbers for the planned run are recorded here: they need a run against the model.
+
+## Phase 4: symbol-level context
+
+`mvn -Peval test -Deval.model=<model> -Deval.symbols=small` runs the project tasks (rename across files, change a signature) with Smart Context at symbol level; the report says so. Compare it with the same model and seed without the option: the question is whether the pass rate holds while the context shrinks. No numbers for the pass rate are recorded here: they need a run against the model.
+
+The size of the context needs no model. `SymbolCorpusSizeTest` builds the context for the 8 project tasks both ways and writes `target/eval/symbol-context-size.md`. Estimated tokens, 2026-11-11:
+
+| | whole files | `small` | `frontier` | `small` with no whole-file threshold (diagnostic) |
+| --- | --- | --- | --- | --- |
+| the 8 project tasks, total | 4,649 | 4,649 | 4,649 | 5,314 |
+
+The corpus does not exercise the feature: every fixture file is below the profile's whole-file threshold (400 tokens for `small`), so it is sent whole, as designed. The last column shows why the threshold exists: a view of a file that small, with the note that explains placeholders, costs more than the file.
+
+On a codebase large enough to need it, this project's own source, with 8 requests written for this check (each names a method as `Class.method`, which is the form the planner trusts most; vaguer wording has not been measured):
+
+| Window | Whole files | `small` | `frontier` |
+| --- | --- | --- | --- |
+| everything fits (500k), tokens for the same selection | 2,825,909 | 1,089,862 (61% less) | 1,728,192 (39% less) |
+| 32k, files that fit per request | 18 to 26 | 33 to 56 | not measured |
+
+In a 32k window the context is full either way (about 28,500 tokens): the gain is coverage, not fewer tokens. Whether the extra files help the model is not measured.

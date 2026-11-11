@@ -12,7 +12,8 @@ import java.util.Locale;
  * first two. Token counts are estimates: no tokenizer is bundled, so the estimate is deliberately
  * on the high side. JavaFX-free.
  */
-public record ContextBudget(int modelMaxTokens, int runtimeTokens, int reserveTokens) {
+public record ContextBudget(
+    int modelMaxTokens, int runtimeTokens, int reserveTokens, double charsPerToken) {
   public static final int DEFAULT_RUNTIME_TOKENS = 32_768,
       MIN_RUNTIME_TOKENS = 2_048,
       MAX_RUNTIME_TOKENS = 262_144;
@@ -29,6 +30,31 @@ public record ContextBudget(int modelMaxTokens, int runtimeTokens, int reserveTo
   public ContextBudget {
     if (runtimeTokens < 1) throw new IllegalArgumentException("runtimeTokens must be positive");
     if (reserveTokens < 0) throw new IllegalArgumentException("reserveTokens must not be negative");
+    if (!(charsPerToken > 0)) throw new IllegalArgumentException("charsPerToken must be positive");
+  }
+
+  /** A budget that estimates with the standard {@link #CHARS_PER_TOKEN}. */
+  public ContextBudget(int modelMaxTokens, int runtimeTokens, int reserveTokens) {
+    this(modelMaxTokens, runtimeTokens, reserveTokens, CHARS_PER_TOKEN);
+  }
+
+  /**
+   * The same budget estimating with {@code chars} characters per token (see {@link
+   * TokenCalibration}).
+   */
+  public ContextBudget withCharsPerToken(double chars) {
+    return new ContextBudget(modelMaxTokens, runtimeTokens, reserveTokens, chars);
+  }
+
+  /** True when the estimate has been adjusted to the model in use. */
+  public boolean isCalibrated() {
+    return charsPerToken != CHARS_PER_TOKEN;
+  }
+
+  /** An estimate of the tokens in {@code text} with this budget's characters per token. */
+  public int estimate(String text) {
+    if (text == null || text.isEmpty()) return 0;
+    return (int) Math.ceil(text.length() / charsPerToken);
   }
 
   /** An estimate of the tokens in {@code text}; never less than the real count by much. */
@@ -76,11 +102,16 @@ public record ContextBudget(int modelMaxTokens, int runtimeTokens, int reserveTo
 
   /** How much of the budget {@code usedTokens} of file text and framing is. */
   public Usage usage(int usedTokens) {
-    return new Usage(usedTokens, effectiveWindow(), reserveTokens);
+    return new Usage(
+        usedTokens, effectiveWindow(), reserveTokens, isCalibrated() ? charsPerToken : 0);
   }
 
   /** Consumption, for the preview: used of window, with the reserve for the answer. */
-  public record Usage(int usedTokens, int windowTokens, int reserveTokens) {
+  public record Usage(int usedTokens, int windowTokens, int reserveTokens, double calibratedChars) {
+    public Usage(int usedTokens, int windowTokens, int reserveTokens) {
+      this(usedTokens, windowTokens, reserveTokens, 0);
+    }
+
     public int freeTokens() {
       return Math.max(0, windowTokens - reserveTokens - usedTokens);
     }
@@ -101,7 +132,12 @@ public record ContextBudget(int modelMaxTokens, int runtimeTokens, int reserveTo
           + format(windowTokens)
           + " and "
           + format(reserveTokens)
-          + " are kept free for the answer. Counts are estimates.";
+          + " are kept free for the answer. Counts are estimates"
+          + (calibratedChars > 0
+              ? ", adjusted to this model at "
+                  + String.format(Locale.ROOT, "%.1f", calibratedChars)
+                  + " characters per token."
+              : ".");
     }
   }
 

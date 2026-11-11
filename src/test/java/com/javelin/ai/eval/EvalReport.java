@@ -24,10 +24,26 @@ record EvalReport(
     List<List<TaskResult>> runs,
     long millis,
     int retries,
-    int planSteps) {
+    int planSteps,
+    String symbols) {
 
   EvalReport {
     runs = runs.stream().map(List::copyOf).toList();
+    if (symbols != null && symbols.isBlank()) symbols = null;
+  }
+
+  /** A report of runs without symbol-level context. */
+  EvalReport(
+      String profile,
+      String model,
+      String date,
+      long seed,
+      int tasks,
+      List<List<TaskResult>> runs,
+      long millis,
+      int retries,
+      int planSteps) {
+    this(profile, model, date, seed, tasks, runs, millis, retries, planSteps, null);
   }
 
   /** A report of runs with the verification loop and one request per project task. */
@@ -40,7 +56,7 @@ record EvalReport(
       List<List<TaskResult>> runs,
       long millis,
       int retries) {
-    this(profile, model, date, seed, tasks, runs, millis, retries, 0);
+    this(profile, model, date, seed, tasks, runs, millis, retries, 0, null);
   }
 
   /** A single-attempt report: the Phase 0 shape, with no verification loop. */
@@ -52,7 +68,12 @@ record EvalReport(
       int tasks,
       List<List<TaskResult>> runs,
       long millis) {
-    this(profile, model, date, seed, tasks, runs, millis, -1, 0);
+    this(profile, model, date, seed, tasks, runs, millis, -1, 0, null);
+  }
+
+  /** True when Smart Context worked at symbol level (Phase 4). */
+  boolean symbolic() {
+    return symbols != null;
   }
 
   /** True when project tasks went through the Phase 3 planner and step executor. */
@@ -204,6 +225,7 @@ record EvalReport(
     summary.put("failures", reasons);
     summary.put("contractFailures", contractFailures());
     if (planned()) summary.put("planSteps", planSteps);
+    if (symbolic()) summary.put("symbols", symbols);
     if (verified()) {
       summary.put("retries", retries);
       summary.put("reachedReviewCompiling", reachedReviewCompiling());
@@ -267,6 +289,11 @@ record EvalReport(
           .append(planSteps)
           .append(" steps, one file and method each, every step checked before the next, ")
           .append("Phase 3); compare them with the same model's baseline without a plan. ");
+    if (symbolic())
+      md.append("Smart Context worked at symbol level with the `")
+          .append(symbols)
+          .append("` profile (Phase 4): large Java files were sent as the methods the request is")
+          .append(" about plus signatures; compare with the same model's baseline without it. ");
     md.append("A task passes when its judging test passes after the ");
     md.append("change is applied; nothing is judged by a model.\n\n");
     md.append("## Result\n\n");

@@ -27,6 +27,8 @@ import com.javelin.ai.project.ProjectProposal;
 import com.javelin.ai.project.ProjectWorkspace;
 import com.javelin.ai.project.ProposalApplier;
 import com.javelin.ai.project.ScanOptions;
+import com.javelin.ai.project.TokenCalibration;
+import com.javelin.ai.symbols.SymbolConfig;
 import com.javelin.ai.verify.JavacVerifier;
 import com.javelin.ai.verify.ProjectClasspath;
 import com.javelin.ai.verify.Verifier;
@@ -75,6 +77,7 @@ final class EvalRunner {
   private final Path scratch;
   private final int retries;
   private final int planSteps;
+  private final SymbolConfig symbols;
 
   /** One attempt per task, as in Phase 0. */
   EvalRunner(AiProvider provider, EvalProfile profile, Path scratch) {
@@ -97,11 +100,35 @@ final class EvalRunner {
    * completed; a run that stopped early is a failure, whatever it had done so far.
    */
   EvalRunner(AiProvider provider, EvalProfile profile, Path scratch, int retries, int planSteps) {
+    this(provider, profile, scratch, retries, planSteps, SymbolConfig.defaults());
+  }
+
+  /**
+   * With {@code symbols} enabled, Smart Context for a project request works at symbol level (Phase
+   * 4). It applies to the one-request path only: a planned run builds its own step context, so
+   * asking for both is an error rather than a silent half-measure.
+   */
+  EvalRunner(
+      AiProvider provider,
+      EvalProfile profile,
+      Path scratch,
+      int retries,
+      int planSteps,
+      SymbolConfig symbols) {
+    if (symbols.enabled() && planSteps > 0)
+      throw new IllegalArgumentException(
+          "-Deval.symbols and -Deval.plan cannot be combined: a planned run does not use Smart"
+              + " Context");
     this.provider = provider;
     this.profile = profile;
     this.scratch = scratch;
     this.retries = retries;
     this.planSteps = planSteps;
+    this.symbols = symbols;
+  }
+
+  SymbolConfig symbols() {
+    return symbols;
   }
 
   int retries() {
@@ -278,7 +305,9 @@ final class EvalRunner {
         new ProjectAiService(
             metered,
             config,
-            new ProjectAiConfig(profile.contextTokens(), profile.reserveTokens(), scan));
+            new ProjectAiConfig(profile.contextTokens(), profile.reserveTokens(), scan),
+            symbols,
+            new TokenCalibration());
     AiCancel cancel = new AiCancel();
     ProjectAiResult result =
         planSteps > 0

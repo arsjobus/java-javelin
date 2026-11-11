@@ -5,7 +5,9 @@ import java.util.List;
 /**
  * The project as the model will see it: one block of text (an overview, the structure and the
  * files, each between markers that name it), which files are in it and why, which are not and why,
- * and the budget it uses. Built by {@link ContextBuilder}; knows nothing of Ollama or JavaFX.
+ * and the budget it uses. {@code notes} are plain statements about what symbol-level context did or
+ * did not do (they are not problems). Built by {@link ContextBuilder}; knows nothing of Ollama or
+ * JavaFX.
  */
 public record ProjectContext(
     String projectName,
@@ -17,11 +19,43 @@ public record ProjectContext(
     int textTokens,
     ContextBudget.Usage usage,
     List<String> warnings,
-    ProjectSnapshot snapshot) {
+    ProjectSnapshot snapshot,
+    List<String> notes) {
   public ProjectContext {
     included = List.copyOf(included);
     omitted = List.copyOf(omitted);
     warnings = List.copyOf(warnings);
+    notes = List.copyOf(notes);
+  }
+
+  public ProjectContext(
+      String projectName,
+      ContextMode mode,
+      String text,
+      List<ContextEntry> included,
+      List<Omitted> omitted,
+      int eligibleFiles,
+      int textTokens,
+      ContextBudget.Usage usage,
+      List<String> warnings,
+      ProjectSnapshot snapshot) {
+    this(
+        projectName,
+        mode,
+        text,
+        included,
+        omitted,
+        eligibleFiles,
+        textTokens,
+        usage,
+        warnings,
+        snapshot,
+        List.of());
+  }
+
+  /** The files of which only some symbols are sent. */
+  public List<ContextEntry> partialEntries() {
+    return included.stream().filter(ContextEntry::isPartial).toList();
   }
 
   /** The files that were wanted but did not fit the budget. */

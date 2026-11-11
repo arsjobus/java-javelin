@@ -2,23 +2,39 @@ package com.javelin.ai.project;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * What the project looked like when a context was built: the size and time of every eligible file,
  * and the fingerprint of the text of each file that was actually sent. An answer is tied to the
  * snapshot it was given, so the window can say "the project has changed since this answer" and a
  * proposal is never applied to a file that is no longer what the model saw. Same inputs give the
- * same {@code id}; the time is information only.
+ * same {@code id}; the time is information only. {@code partialPaths} names the files of which only
+ * some symbols were sent (symbol-level context): their hash in {@code sentHashes} is still that of
+ * the whole file, so a change to any part of them is noticed, but a reply may not rewrite one as a
+ * whole, because the model never saw all of it.
  */
 public record ProjectSnapshot(
-    String id, long takenAtMillis, Map<String, Stamp> stamps, Map<String, String> sentHashes) {
+    String id,
+    long takenAtMillis,
+    Map<String, Stamp> stamps,
+    Map<String, String> sentHashes,
+    Set<String> partialPaths) {
   /** A file's size and last-modified time. */
   public record Stamp(long size, long modified) {}
 
   public ProjectSnapshot {
     stamps = java.util.Collections.unmodifiableMap(new TreeMap<>(stamps));
     sentHashes = java.util.Collections.unmodifiableMap(new TreeMap<>(sentHashes));
+    partialPaths = java.util.Collections.unmodifiableSet(new TreeSet<>(partialPaths));
+  }
+
+  /** A snapshot in which every sent file was sent whole. */
+  public ProjectSnapshot(
+      String id, long takenAtMillis, Map<String, Stamp> stamps, Map<String, String> sentHashes) {
+    this(id, takenAtMillis, stamps, sentHashes, Set.of());
   }
 
   /** The files that were sent, in path order. */

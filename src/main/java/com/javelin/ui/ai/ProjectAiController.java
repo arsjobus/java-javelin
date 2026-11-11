@@ -24,6 +24,8 @@ import com.javelin.ai.project.ProjectRefresh;
 import com.javelin.ai.project.ProjectWorkspace;
 import com.javelin.ai.project.ProposalApplier;
 import com.javelin.ai.project.ScanOptions;
+import com.javelin.ai.project.TokenCalibration;
+import com.javelin.ai.symbols.SymbolConfig;
 import com.javelin.ai.verify.JavacVerifier;
 import com.javelin.ai.verify.ProjectClasspath;
 import com.javelin.ai.verify.Verified;
@@ -61,6 +63,9 @@ final class ProjectAiController {
   private AppliedChanges lastApplied; // FX thread only
   private ProjectReader lastReader;
 
+  /** What the model's own token counts have taught this session; shared by every request. */
+  private final TokenCalibration calibration = new TokenCalibration();
+
   ProjectAiController(
       AiController parent, Workbench bench, EditorTabs editors, BottomPanel bottom) {
     this.parent = parent;
@@ -90,7 +95,12 @@ final class ProjectAiController {
       return;
     }
     ProjectAiService service =
-        new ProjectAiService(provider, config, ProjectAiConfig.from(bench.settings()));
+        new ProjectAiService(
+            provider,
+            config,
+            ProjectAiConfig.from(bench.settings()),
+            SymbolConfig.from(bench.settings()),
+            calibration);
     prepare(service, asked.get().mode(), asked.get().instruction(), Adjustments.NONE);
   }
 

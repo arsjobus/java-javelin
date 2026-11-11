@@ -111,7 +111,7 @@ public final class MethodFinder {
    * semicolon, which keeps calls out; a method with no body ends with one, and is a declaration
    * when what is before the semicolon reads as one ({@code abstract int f(int x);}).
    */
-  private static Optional<String> declaredName(String line) {
+  static Optional<String> declaredName(String line) {
     Optional<String> name = CodeSpans.declaredName(line);
     if (name.isPresent()) return name;
     String t = line.strip();

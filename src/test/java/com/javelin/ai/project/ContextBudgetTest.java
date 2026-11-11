@@ -1,6 +1,7 @@
 package com.javelin.ai.project;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -57,5 +58,19 @@ class ContextBudgetTest {
   void impossibleNumbersAreRefused() {
     assertThrows(IllegalArgumentException.class, () -> new ContextBudget(0, 0, 0));
     assertThrows(IllegalArgumentException.class, () -> new ContextBudget(0, 100, -1));
+  }
+
+  @Test
+  void theEstimateFollowsTheCharactersPerTokenOfTheBudget() {
+    ContextBudget standard = new ContextBudget(0, 10_000, 1_000);
+    assertEquals(ContextBudget.CHARS_PER_TOKEN, standard.charsPerToken());
+    assertFalse(standard.isCalibrated());
+    assertEquals(standard.estimate("x".repeat(30)), ContextBudget.estimateTokens("x".repeat(30)));
+    ContextBudget adjusted = standard.withCharsPerToken(4.0);
+    assertTrue(adjusted.isCalibrated());
+    assertEquals(8, adjusted.estimate("x".repeat(30)));
+    assertEquals(0, adjusted.estimate(""));
+    assertEquals(0, adjusted.estimate(null));
+    assertThrows(IllegalArgumentException.class, () -> standard.withCharsPerToken(0));
   }
 }
