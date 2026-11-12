@@ -1,6 +1,6 @@
 # AI edit baseline: qwen3.5:9b-q4_K_M, 2026-11-11
 
-Measured with `mvn -Peval test -Deval.model=qwen3.5:9b-q4_K_M`. Profile `small`: the editor's own limits and window, temperature 0, seed 42 plus the run number. 24 tasks, 3 runs, each proposal compiled in memory and, when that failed, repaired with the compiler's messages up to 2 more requests (Phase 2). Smart Context worked at symbol level with the `small` profile (Phase 4): large Java files were sent as the methods the request is about plus signatures; compare with the same model's baseline without it. A task passes when its judging test passes after the change is applied; nothing is judged by a model.
+Measured with `mvn -Peval test -Deval.model=qwen3.5:9b-q4_K_M -Deval.editBlockMinLines=0 -Deval.retries=2 -Deval.symbols=small`. Profile `small`: the editor's own limits and window, temperature 0, seed 42 plus the run number. 24 tasks, 3 runs, each proposal compiled in memory and, when that failed, repaired with the compiler's messages up to 2 more requests (Phase 2). Smart Context worked at symbol level with the `small` profile (Phase 4): large Java files were sent as the methods the request is about plus signatures; compare with the same model's baseline without it. A task passes when its judging test passes after the change is applied; nothing is judged by a model.
 
 ## Result
 
