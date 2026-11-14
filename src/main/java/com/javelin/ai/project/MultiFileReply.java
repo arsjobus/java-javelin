@@ -3,6 +3,7 @@ package com.javelin.ai.project;
 import com.javelin.ai.AiException;
 import com.javelin.ai.ChangeChecker;
 import com.javelin.ai.ChangeReply;
+import com.javelin.ai.EditBlocks;
 import com.javelin.ai.FailureReason;
 import com.javelin.ai.Finding;
 import com.javelin.ai.JsonEdits;
@@ -13,6 +14,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -100,10 +102,10 @@ public final class MultiFileReply {
         if (!sections.isEmpty()) explanation = textBeforeFirstDiff(text);
       }
     }
+    sections = mergeRepeatedFiles(sections);
     Set<String> seen = new HashSet<>();
     for (Section section : sections) {
-      String path = section.path().replace('\\', '/');
-      while (path.startsWith("./")) path = path.substring(2);
+      String path = normalizePath(section.path());
       if (!seen.add(path)) {
         problems.add(path + ": appears more than once in the reply; only the first is used.");
         continue;
@@ -128,6 +130,42 @@ public final class MultiFileReply {
     changes.removeIf(
         c -> c.original().equals(c.replacement()) && c.kind() == FileChange.Kind.MODIFY);
     return new ProjectProposal(snapshot.id(), explanation, changes, problems, failures);
+  }
+
+  private static String normalizePath(String raw) {
+    String path = raw.replace('\\', '/');
+    while (path.startsWith("./")) path = path.substring(2);
+    return path;
+  }
+
+  /**
+   * Small models often write a file heading again for each change to the same file. When every
+   * part for a file is made of edit blocks, the parts are one list of edits, in the order written,
+   * instead of the later ones being dropped. A repeated heading of anything else (a new file, a
+   * diff, a whole copy) is still left for the caller to report, since two such parts cannot be
+   * combined.
+   */
+  private static List<Section> mergeRepeatedFiles(List<Section> sections) {
+    List<Section> out = new ArrayList<>();
+    Map<String, Integer> firstAt = new HashMap<>();
+    for (Section s : sections) {
+      String key = normalizePath(s.path());
+      Integer i = firstAt.get(key);
+      if (i == null) {
+        firstAt.put(key, out.size());
+      } else {
+        Section first = out.get(i);
+        if (!first.declaredNew()
+            && !s.declaredNew()
+            && EditBlocks.looksLike(first.body())
+            && EditBlocks.looksLike(s.body())) {
+          out.set(i, new Section(first.path(), false, first.body() + "\n" + s.body()));
+          continue;
+        }
+      }
+      out.add(s);
+    }
+    return out;
   }
 
   private static FileChange change(

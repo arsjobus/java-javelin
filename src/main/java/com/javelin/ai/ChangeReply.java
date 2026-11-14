@@ -143,6 +143,14 @@ public final class ChangeReply {
     List<Finding> notes = new ArrayList<>();
     for (EditBlocks.Anchor a : anchors) {
       if (!a.rung().isLoose()) continue;
+      if (a.rung() == AnchorRung.ALREADY_APPLIED) {
+        notes.add(
+            Finding.warning(
+                "Edit "
+                    + a.edit()
+                    + " was skipped: its change is already made by an earlier edit of the reply."));
+        continue;
+      }
       notes.add(
           Finding.warning(
               a.rung() == AnchorRung.SIGNATURE

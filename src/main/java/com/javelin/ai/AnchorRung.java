@@ -19,7 +19,14 @@ public enum AnchorRung {
    * The lines did not match, but the method they start with is declared once in the code, and the
    * edit is a whole method for a whole method: the method is replaced.
    */
-  SIGNATURE("by the signature of the method");
+  SIGNATURE("by the signature of the method"),
+  /**
+   * The edit was not applied because its work is already in the code: it repeats an earlier edit of
+   * the same reply, or its lines are gone and its replacement is there. Small models often write
+   * the same change twice (once short, once as the whole method); doing it twice would duplicate
+   * lines, and refusing it would throw away the good edits around it.
+   */
+  ALREADY_APPLIED("already in the code");
 
   private final String label;
 

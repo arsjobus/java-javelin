@@ -150,9 +150,15 @@ public final class EditBlocks {
     List<String> lines = LineMatch.split(original);
     List<Anchor> anchors = new ArrayList<>();
     int number = 0;
+    java.util.Set<Edit> done = new java.util.HashSet<>();
     for (Edit edit : edits) {
       number++;
       List<String> search = LineMatch.split(edit.search());
+      if (!edit.search().isBlank() && !done.add(edit)) {
+        // the very same edit again: making it twice would double its lines
+        anchors.add(new Anchor(number, AnchorRung.ALREADY_APPLIED));
+        continue;
+      }
       if (edit.search().isBlank())
         throw refused(
             FailureReason.UNPARSEABLE,
@@ -175,6 +181,10 @@ public final class EditBlocks {
       int at;
       int length;
       AnchorRung rung;
+      if (found.isEmpty() && alreadyThere(lines, replacement, from, to)) {
+        anchors.add(new Anchor(number, AnchorRung.ALREADY_APPLIED));
+        continue;
+      }
       if (found.isEmpty()) {
         Signature bySignature = edit.hasAnchor() ? null : bySignature(lines, search, replacement);
         if (bySignature == null)
@@ -197,9 +207,14 @@ public final class EditBlocks {
                 + number
                 + " matches "
                 + found.size()
-                + " places in the code (it starts with `"
+                + " places in the code, at lines "
+                + found.stream()
+                    .map(f -> String.valueOf(f.index() + 1))
+                    .collect(java.util.stream.Collectors.joining(", "))
+                + " (it starts with `"
                 + shorten(first)
-                + "`), so it is not clear where it belongs. Nothing was applied.");
+                + "`), so it is not clear where it belongs. Nothing was applied. Add the line above"
+                + " or below it that is different in each place, so it matches in one place only.");
       } else {
         at = found.get(0).index();
         length = search.size();
@@ -218,6 +233,20 @@ public final class EditBlocks {
       anchors.add(new Anchor(number, rung));
     }
     return new Applied(String.join("\n", lines), anchors);
+  }
+
+  /**
+   * True when the replacement (some real text, not a deletion) is in the code exactly once: an
+   * earlier edit already made this change.
+   */
+  private static boolean alreadyThere(
+      List<String> lines, List<String> replacement, int from, int to) {
+    int first = 0;
+    int last = replacement.size();
+    while (first < last && replacement.get(first).isBlank()) first++;
+    while (last > first && replacement.get(last - 1).isBlank()) last--;
+    if (first == last) return false;
+    return LineMatch.candidates(lines, replacement.subList(first, last), from, to, 0).size() == 1;
   }
 
   private static AiException refused(FailureReason reason, String message) {

@@ -123,4 +123,48 @@ class EditBlocksTest {
     assertEquals(CODE.replace("a - b", "a + b"), result);
     assertTrue(result.endsWith("}\n"));
   }
+
+  @Test
+  void theSameBlockWrittenTwiceIsMadeOnce() throws Exception {
+    String block = reply("    int twice(int a) {", "    int twice(int a) {\n        // doubles");
+    assertEquals(
+        CODE.replace("    int twice(int a) {", "    int twice(int a) {\n        // doubles"),
+        applied(block + block, CODE));
+  }
+
+  @Test
+  void aBlockWhoseChangeIsAlreadyThereIsSkippedInsteadOfRefusingEverything() throws Exception {
+    String two =
+        reply("        return a - b;", "        return a + b;")
+            + reply("        return a - b;", "        return a + b;\n")
+            + reply("        return a * 2;", "        return a << 1;");
+    String text =
+        EditBlocks.applyWithAnchors(CODE, EditBlocks.parse(two).edits()).text();
+    assertEquals(CODE.replace("a - b", "a + b").replace("a * 2", "a << 1"), text);
+  }
+
+  @Test
+  void aSkippedBlockIsReportedAsAlreadyApplied() throws Exception {
+    String two =
+        reply("        return a - b;", "        return a + b;")
+            + reply("        return a - b;", "        return a + b;");
+    EditBlocks.Applied a = EditBlocks.applyWithAnchors(CODE, EditBlocks.parse(two).edits());
+    assertEquals(AnchorRung.EXACT, a.anchors().get(0).rung());
+    assertEquals(AnchorRung.ALREADY_APPLIED, a.anchors().get(1).rung());
+  }
+
+  @Test
+  void anAmbiguousBlockSaysWhichLinesItMatchesAndHowToFixIt() {
+    String twice = "void a() {\n    run();\n}\nvoid b() {\n    run();\n}\n";
+    AiException ex =
+        assertThrows(AiException.class, () -> applied(reply("    run();", "    go();"), twice));
+    assertTrue(ex.getMessage().contains("lines 2, 5"));
+    assertTrue(ex.getMessage().contains("different in each place"));
+  }
+
+  @Test
+  void aBlockWhoseLinesAreNeitherThereNorAlreadyChangedIsStillRefused() {
+    assertThrows(
+        AiException.class, () -> applied(reply("nothing like this", "int twice(int a) {"), "x\n"));
+  }
 }

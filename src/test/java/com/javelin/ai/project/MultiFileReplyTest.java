@@ -230,7 +230,7 @@ class MultiFileReplyTest {
   }
 
   @Test
-  void aRepeatedFileIsUsedOnlyOnce() {
+  void aFileHeadingRepeatedForEachBlockKeepsEveryBlock() {
     ProjectProposal p =
         parse(
             "=== FILE: "
@@ -240,7 +240,25 @@ class MultiFileReplyTest {
                 + "=== FILE: "
                 + EDITOR
                 + " ===\n"
-                + edit("  public String text() {", "  public String text() { // 2"));
+                + edit("  public String highlight() {", "  public String highlight() { // 2"));
+    assertEquals(1, p.changes().size());
+    String text = p.changes().get(0).replacement();
+    assertTrue(text.contains("// 1"));
+    assertTrue(text.contains("// 2"));
+    assertTrue(p.problems().isEmpty());
+  }
+
+  @Test
+  void aRepeatedFileThatCannotBeMergedIsUsedOnlyOnce() {
+    ProjectProposal p =
+        parse(
+            "=== FILE: "
+                + EDITOR
+                + " ===\n"
+                + edit("  public String text() {", "  public String text() { // 1")
+                + "=== FILE: "
+                + EDITOR
+                + " ===\n```java\nclass Other {}\n```\n");
     assertEquals(1, p.changes().size());
     assertTrue(p.changes().get(0).replacement().contains("// 1"));
     assertTrue(p.problems().get(0).contains("more than once"));

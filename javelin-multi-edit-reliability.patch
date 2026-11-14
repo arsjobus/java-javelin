@@ -1,0 +1,303 @@
+diff --git a/FEATURES.md b/FEATURES.md
+index 29b150b..72f1aa3 100644
+--- a/FEATURES.md
++++ b/FEATURES.md
+@@ -97,6 +97,7 @@ Nothing here runs unless an AI menu command is chosen. See [AI.md](AI.md) for th
+ | Proposed changes: Propose Change asks what to change; the reply's code block (or edit blocks, or a diff, see below) becomes a proposal shown as a diff; a reply with no code, a block that never closes, or one the model cut off produces no proposal | AI > Propose Change... | `ResponseParserTest`, `LineDiffTest`, `AiProposalTest`, `AiServiceTest` |
+ | Whole lines: Propose Change widens the selection to whole lines before sending (a selection that starts mid-line sends the line with its indentation; one that already covers whole lines is untouched), so the replacement splices in as lines. Explain and Debug send exactly the selection | AI > Propose Change... | `AiContextTest.aChangeIsProposedForWholeLinesSoTheModelSeesTheIndentation`, `AiContextTest.aSelectionThatAlreadyCoversWholeLinesIsNotWidened`, `AiContextTest.onlyAChangeIsWidenedNotWhatTheModelJustReads`, `AiServiceTest.aSelectionThatStartsMidLineIsSentAsWholeLinesAndTheReplyIsSplicedBackCleanly` |
+ | Edit blocks: from `ai.editBlockMinLines` lines (default 40) the model is asked for SEARCH / REPLACE blocks instead of a whole copy. Lines are found by content through a ladder, strictest first: exactly, ignoring trailing spaces, ignoring indentation, ignoring runs of spaces (the replacement is re-indented to match); a block whose lines are in no place is, as a last resort, placed by the signature of its method, but only when the block is a whole method, that signature is declared once and the replacement is a whole method of the same name. A block that matches nowhere or in several places, or is empty, applies nothing, and a reply cut off inside a block proposes nothing | AI > Propose Change..., `ai.editBlockMinLines` | `EditBlocksTest`, `AnchorLadderTest`, `CodeSpansTest`, `EditContractTest`, `PromptBuilderTest.aLongChangeAsksForEditBlocksInsteadOfAWholeCopy`, `AiServiceTest.editBlocksAreAppliedToTheSelectedCode`, `AiServiceTest.editBlocksThatDoNotMatchTheCodeProposeNothingAndSayWhy`, `AiServiceTest.theEditBlockLimitFromTheSettingsDecidesWhatTheModelIsAskedFor`, `AiConfigTest.theEditBlockLimitIsReadClampedAndReported` |
++| Several changes to several files in one reply: a file heading written again for each block keeps every block (the blocks of one file are one list of edits, in the order written) instead of dropping the later ones; a block that repeats an earlier block, or whose replacement is already in the code, is skipped with a warning instead of refusing the whole file; a block that matches several places says at which lines and asks for a neighbouring line to tell them apart; the prompt asks for one heading per file and no repeated blocks | AI > Project request | `MultiFileReplyTest.aFileHeadingRepeatedForEachBlockKeepsEveryBlock`, `MultiFileReplyTest.aRepeatedFileThatCannotBeMergedIsUsedOnlyOnce`, `EditBlocksTest.theSameBlockWrittenTwiceIsMadeOnce`, `EditBlocksTest.aBlockWhoseChangeIsAlreadyThereIsSkippedInsteadOfRefusingEverything`, `EditBlocksTest.aSkippedBlockIsReportedAsAlreadyApplied`, `EditBlocksTest.anAmbiguousBlockSaysWhichLinesItMatchesAndHowToFixIt`, `EditBlocksTest.aBlockWhoseLinesAreNeitherThereNorAlreadyChangedIsStillRefused` |
+ | How each edit was found: the rung that placed every edit is kept on the proposal, and an edit that was not an exact copy of the code is flagged in the review (ignoring indentation, ignoring spaces, or placed by the signature of its method with the whole method replaced) | review dialog | `AnchorLadderTest.anEditFoundByAnythingButExactTextIsFlaggedForTheReview`, `AnchorLadderTest.aMethodPlacedBySignatureIsFlaggedAsAWholeMethodReplacement`, `AnchorLadderTest.theRungsAreKeptOnTheProposal`, `MultiFileJsonReplyTest.aLooseMatchIsFlaggedOnTheFileThatHasIt` |
+ | JSON edits: with `ai.structuredEdits` on and a provider that can hold an answer to a shape (Ollama), Propose Change and project requests ask for `{explanation, edits: [{file, anchor, old, new}]}` instead of text markers; an anchor is a line that must appear once in the code and limits the edit to its method; an anchor that is in no place or several, a file other than the one sent, an empty `old`, JSON cut off or broken, or an empty edit list proposes nothing and says why. JSON is understood whatever was asked, and text replies still are. Off by default | AI > Propose Change..., AI > Project Request..., `ai.structuredEdits` | `JsonEditsTest`, `StructuredEditsTest`, `EditContractTest`, `MultiFileJsonReplyTest`, `AiConfigTest.theStructuredEditsSettingIsOffUntilTurnedOn` |
+ | Diff replies: a unified diff in a code block is applied by its context and removed lines; line numbers and counts are only a hint for which of several equal places is meant, a missing space in front of context lines is understood, and a hunk that does not fit stops everything (never half a patch) | AI > Propose Change... | `UnifiedPatchTest`, `ChangeReplyTest.aDiffBlockIsAppliedAsAPatch`, `ChangeReplyTest.aPatchThatDoesNotFitIsAnErrorNotAGuess`, `AiServiceTest.aUnifiedDiffReplyIsAppliedAsAPatch` |
+diff --git a/src/main/java/com/javelin/ai/AnchorRung.java b/src/main/java/com/javelin/ai/AnchorRung.java
+index cc8abb6..9bffe83 100644
+--- a/src/main/java/com/javelin/ai/AnchorRung.java
++++ b/src/main/java/com/javelin/ai/AnchorRung.java
+@@ -19,7 +19,14 @@ public enum AnchorRung {
+    * The lines did not match, but the method they start with is declared once in the code, and the
+    * edit is a whole method for a whole method: the method is replaced.
+    */
+-  SIGNATURE("by the signature of the method");
++  SIGNATURE("by the signature of the method"),
++  /**
++   * The edit was not applied because its work is already in the code: it repeats an earlier edit of
++   * the same reply, or its lines are gone and its replacement is there. Small models often write
++   * the same change twice (once short, once as the whole method); doing it twice would duplicate
++   * lines, and refusing it would throw away the good edits around it.
++   */
++  ALREADY_APPLIED("already in the code");
+ 
+   private final String label;
+ 
+diff --git a/src/main/java/com/javelin/ai/ChangeReply.java b/src/main/java/com/javelin/ai/ChangeReply.java
+index dccd5c6..b8fafa5 100644
+--- a/src/main/java/com/javelin/ai/ChangeReply.java
++++ b/src/main/java/com/javelin/ai/ChangeReply.java
+@@ -143,6 +143,14 @@ public final class ChangeReply {
+     List<Finding> notes = new ArrayList<>();
+     for (EditBlocks.Anchor a : anchors) {
+       if (!a.rung().isLoose()) continue;
++      if (a.rung() == AnchorRung.ALREADY_APPLIED) {
++        notes.add(
++            Finding.warning(
++                "Edit "
++                    + a.edit()
++                    + " was skipped: its change is already made by an earlier edit of the reply."));
++        continue;
++      }
+       notes.add(
+           Finding.warning(
+               a.rung() == AnchorRung.SIGNATURE
+diff --git a/src/main/java/com/javelin/ai/EditBlocks.java b/src/main/java/com/javelin/ai/EditBlocks.java
+index 2808cc1..83816d0 100644
+--- a/src/main/java/com/javelin/ai/EditBlocks.java
++++ b/src/main/java/com/javelin/ai/EditBlocks.java
+@@ -150,9 +150,15 @@ public final class EditBlocks {
+     List<String> lines = LineMatch.split(original);
+     List<Anchor> anchors = new ArrayList<>();
+     int number = 0;
++    java.util.Set<Edit> done = new java.util.HashSet<>();
+     for (Edit edit : edits) {
+       number++;
+       List<String> search = LineMatch.split(edit.search());
++      if (!edit.search().isBlank() && !done.add(edit)) {
++        // the very same edit again: making it twice would double its lines
++        anchors.add(new Anchor(number, AnchorRung.ALREADY_APPLIED));
++        continue;
++      }
+       if (edit.search().isBlank())
+         throw refused(
+             FailureReason.UNPARSEABLE,
+@@ -175,6 +181,10 @@ public final class EditBlocks {
+       int at;
+       int length;
+       AnchorRung rung;
++      if (found.isEmpty() && alreadyThere(lines, replacement, from, to)) {
++        anchors.add(new Anchor(number, AnchorRung.ALREADY_APPLIED));
++        continue;
++      }
+       if (found.isEmpty()) {
+         Signature bySignature = edit.hasAnchor() ? null : bySignature(lines, search, replacement);
+         if (bySignature == null)
+@@ -197,9 +207,14 @@ public final class EditBlocks {
+                 + number
+                 + " matches "
+                 + found.size()
+-                + " places in the code (it starts with `"
++                + " places in the code, at lines "
++                + found.stream()
++                    .map(f -> String.valueOf(f.index() + 1))
++                    .collect(java.util.stream.Collectors.joining(", "))
++                + " (it starts with `"
+                 + shorten(first)
+-                + "`), so it is not clear where it belongs. Nothing was applied.");
++                + "`), so it is not clear where it belongs. Nothing was applied. Add the line above"
++                + " or below it that is different in each place, so it matches in one place only.");
+       } else {
+         at = found.get(0).index();
+         length = search.size();
+@@ -220,6 +235,20 @@ public final class EditBlocks {
+     return new Applied(String.join("\n", lines), anchors);
+   }
+ 
++  /**
++   * True when the replacement (some real text, not a deletion) is in the code exactly once: an
++   * earlier edit already made this change.
++   */
++  private static boolean alreadyThere(
++      List<String> lines, List<String> replacement, int from, int to) {
++    int first = 0;
++    int last = replacement.size();
++    while (first < last && replacement.get(first).isBlank()) first++;
++    while (last > first && replacement.get(last - 1).isBlank()) last--;
++    if (first == last) return false;
++    return LineMatch.candidates(lines, replacement.subList(first, last), from, to, 0).size() == 1;
++  }
++
+   private static AiException refused(FailureReason reason, String message) {
+     return new AiException(AiException.Kind.BAD_RESPONSE, reason, message);
+   }
+diff --git a/src/main/java/com/javelin/ai/project/MultiFileReply.java b/src/main/java/com/javelin/ai/project/MultiFileReply.java
+index 92625f3..9dffa60 100644
+--- a/src/main/java/com/javelin/ai/project/MultiFileReply.java
++++ b/src/main/java/com/javelin/ai/project/MultiFileReply.java
+@@ -3,6 +3,7 @@ package com.javelin.ai.project;
+ import com.javelin.ai.AiException;
+ import com.javelin.ai.ChangeChecker;
+ import com.javelin.ai.ChangeReply;
++import com.javelin.ai.EditBlocks;
+ import com.javelin.ai.FailureReason;
+ import com.javelin.ai.Finding;
+ import com.javelin.ai.JsonEdits;
+@@ -13,6 +14,7 @@ import java.io.IOException;
+ import java.nio.file.Files;
+ import java.nio.file.Path;
+ import java.util.ArrayList;
++import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Locale;
+@@ -100,10 +102,10 @@ public final class MultiFileReply {
+         if (!sections.isEmpty()) explanation = textBeforeFirstDiff(text);
+       }
+     }
++    sections = mergeRepeatedFiles(sections);
+     Set<String> seen = new HashSet<>();
+     for (Section section : sections) {
+-      String path = section.path().replace('\\', '/');
+-      while (path.startsWith("./")) path = path.substring(2);
++      String path = normalizePath(section.path());
+       if (!seen.add(path)) {
+         problems.add(path + ": appears more than once in the reply; only the first is used.");
+         continue;
+@@ -130,6 +132,42 @@ public final class MultiFileReply {
+     return new ProjectProposal(snapshot.id(), explanation, changes, problems, failures);
+   }
+ 
++  private static String normalizePath(String raw) {
++    String path = raw.replace('\\', '/');
++    while (path.startsWith("./")) path = path.substring(2);
++    return path;
++  }
++
++  /**
++   * Small models often write a file heading again for each change to the same file. When every
++   * part for a file is made of edit blocks, the parts are one list of edits, in the order written,
++   * instead of the later ones being dropped. A repeated heading of anything else (a new file, a
++   * diff, a whole copy) is still left for the caller to report, since two such parts cannot be
++   * combined.
++   */
++  private static List<Section> mergeRepeatedFiles(List<Section> sections) {
++    List<Section> out = new ArrayList<>();
++    Map<String, Integer> firstAt = new HashMap<>();
++    for (Section s : sections) {
++      String key = normalizePath(s.path());
++      Integer i = firstAt.get(key);
++      if (i == null) {
++        firstAt.put(key, out.size());
++      } else {
++        Section first = out.get(i);
++        if (!first.declaredNew()
++            && !s.declaredNew()
++            && EditBlocks.looksLike(first.body())
++            && EditBlocks.looksLike(s.body())) {
++          out.set(i, new Section(first.path(), false, first.body() + "\n" + s.body()));
++          continue;
++        }
++      }
++      out.add(s);
++    }
++    return out;
++  }
++
+   private static FileChange change(
+       String path,
+       Section section,
+diff --git a/src/main/java/com/javelin/ai/project/ProjectPromptBuilder.java b/src/main/java/com/javelin/ai/project/ProjectPromptBuilder.java
+index 8d473e9..9d88ef6 100644
+--- a/src/main/java/com/javelin/ai/project/ProjectPromptBuilder.java
++++ b/src/main/java/com/javelin/ai/project/ProjectPromptBuilder.java
+@@ -36,7 +36,8 @@ public final class ProjectPromptBuilder {
+       For a file that does not exist yet, write
+       === NEW FILE: path/relative/to/the/project ===
+       followed by ONE fenced code block with the complete content of the new file.
+-      Rules: change only files that were shown to you; each SEARCH part must match the file character for character and be long enough to match in one place only; write only what changes; no placeholders such as "..." or "rest of the code"; no line numbers; do not delete or rename files; do not run or suggest running commands as part of the change. If the request is a question or no change is needed, answer in words and write no FILE heading.\
++      Write the heading of a file once and put all of that file's edit blocks under it. Edit blocks are applied top to bottom, each to the text left by the one before: never change the same lines twice, and never repeat a block.
++      Rules: change only files that were shown to you; each SEARCH part must match the file character for character and be long enough to match in one place only (add a neighbouring line, such as the method's signature, when the lines alone appear more than once); write only what changes; no placeholders such as "..." or "rest of the code"; no line numbers; do not delete or rename files; do not run or suggest running commands as part of the change. If the request is a question or no change is needed, answer in words and write no FILE heading.\
+       """;
+ 
+   static final String HOW_TO_ANSWER_JSON =
+diff --git a/src/test/java/com/javelin/ai/EditBlocksTest.java b/src/test/java/com/javelin/ai/EditBlocksTest.java
+index 60057f5..df3749e 100644
+--- a/src/test/java/com/javelin/ai/EditBlocksTest.java
++++ b/src/test/java/com/javelin/ai/EditBlocksTest.java
+@@ -123,4 +123,48 @@ class EditBlocksTest {
+     assertEquals(CODE.replace("a - b", "a + b"), result);
+     assertTrue(result.endsWith("}\n"));
+   }
++
++  @Test
++  void theSameBlockWrittenTwiceIsMadeOnce() throws Exception {
++    String block = reply("    int twice(int a) {", "    int twice(int a) {\n        // doubles");
++    assertEquals(
++        CODE.replace("    int twice(int a) {", "    int twice(int a) {\n        // doubles"),
++        applied(block + block, CODE));
++  }
++
++  @Test
++  void aBlockWhoseChangeIsAlreadyThereIsSkippedInsteadOfRefusingEverything() throws Exception {
++    String two =
++        reply("        return a - b;", "        return a + b;")
++            + reply("        return a - b;", "        return a + b;\n")
++            + reply("        return a * 2;", "        return a << 1;");
++    String text =
++        EditBlocks.applyWithAnchors(CODE, EditBlocks.parse(two).edits()).text();
++    assertEquals(CODE.replace("a - b", "a + b").replace("a * 2", "a << 1"), text);
++  }
++
++  @Test
++  void aSkippedBlockIsReportedAsAlreadyApplied() throws Exception {
++    String two =
++        reply("        return a - b;", "        return a + b;")
++            + reply("        return a - b;", "        return a + b;");
++    EditBlocks.Applied a = EditBlocks.applyWithAnchors(CODE, EditBlocks.parse(two).edits());
++    assertEquals(AnchorRung.EXACT, a.anchors().get(0).rung());
++    assertEquals(AnchorRung.ALREADY_APPLIED, a.anchors().get(1).rung());
++  }
++
++  @Test
++  void anAmbiguousBlockSaysWhichLinesItMatchesAndHowToFixIt() {
++    String twice = "void a() {\n    run();\n}\nvoid b() {\n    run();\n}\n";
++    AiException ex =
++        assertThrows(AiException.class, () -> applied(reply("    run();", "    go();"), twice));
++    assertTrue(ex.getMessage().contains("lines 2, 5"));
++    assertTrue(ex.getMessage().contains("different in each place"));
++  }
++
++  @Test
++  void aBlockWhoseLinesAreNeitherThereNorAlreadyChangedIsStillRefused() {
++    assertThrows(
++        AiException.class, () -> applied(reply("nothing like this", "int twice(int a) {"), "x\n"));
++  }
+ }
+diff --git a/src/test/java/com/javelin/ai/project/MultiFileReplyTest.java b/src/test/java/com/javelin/ai/project/MultiFileReplyTest.java
+index b173092..f108071 100644
+--- a/src/test/java/com/javelin/ai/project/MultiFileReplyTest.java
++++ b/src/test/java/com/javelin/ai/project/MultiFileReplyTest.java
+@@ -230,7 +230,7 @@ class MultiFileReplyTest {
+   }
+ 
+   @Test
+-  void aRepeatedFileIsUsedOnlyOnce() {
++  void aFileHeadingRepeatedForEachBlockKeepsEveryBlock() {
+     ProjectProposal p =
+         parse(
+             "=== FILE: "
+@@ -240,7 +240,25 @@ class MultiFileReplyTest {
+                 + "=== FILE: "
+                 + EDITOR
+                 + " ===\n"
+-                + edit("  public String text() {", "  public String text() { // 2"));
++                + edit("  public String highlight() {", "  public String highlight() { // 2"));
++    assertEquals(1, p.changes().size());
++    String text = p.changes().get(0).replacement();
++    assertTrue(text.contains("// 1"));
++    assertTrue(text.contains("// 2"));
++    assertTrue(p.problems().isEmpty());
++  }
++
++  @Test
++  void aRepeatedFileThatCannotBeMergedIsUsedOnlyOnce() {
++    ProjectProposal p =
++        parse(
++            "=== FILE: "
++                + EDITOR
++                + " ===\n"
++                + edit("  public String text() {", "  public String text() { // 1")
++                + "=== FILE: "
++                + EDITOR
++                + " ===\n```java\nclass Other {}\n```\n");
+     assertEquals(1, p.changes().size());
+     assertTrue(p.changes().get(0).replacement().contains("// 1"));
+     assertTrue(p.problems().get(0).contains("more than once"));

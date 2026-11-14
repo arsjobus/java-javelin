@@ -36,7 +36,8 @@ public final class ProjectPromptBuilder {
       For a file that does not exist yet, write
       === NEW FILE: path/relative/to/the/project ===
       followed by ONE fenced code block with the complete content of the new file.
-      Rules: change only files that were shown to you; each SEARCH part must match the file character for character and be long enough to match in one place only; write only what changes; no placeholders such as "..." or "rest of the code"; no line numbers; do not delete or rename files; do not run or suggest running commands as part of the change. If the request is a question or no change is needed, answer in words and write no FILE heading.\
+      Write the heading of a file once and put all of that file's edit blocks under it. Edit blocks are applied top to bottom, each to the text left by the one before: never change the same lines twice, and never repeat a block.
+      Rules: change only files that were shown to you; each SEARCH part must match the file character for character and be long enough to match in one place only (add a neighbouring line, such as the method's signature, when the lines alone appear more than once); write only what changes; no placeholders such as "..." or "rest of the code"; no line numbers; do not delete or rename files; do not run or suggest running commands as part of the change. If the request is a question or no change is needed, answer in words and write no FILE heading.\
       """;
 
   static final String HOW_TO_ANSWER_JSON =
