@@ -45,6 +45,7 @@ public final class ChangeChecker {
     javaSyntax(languageId, before, after, found);
     removedDeclarations(languageId, before, after, found);
     shrinkage(before, after, found);
+    markdown(languageId, before, after, found);
     found.sort((a, b) -> Boolean.compare(b.isError(), a.isError()));
     return found;
   }
@@ -69,9 +70,13 @@ public final class ChangeChecker {
       String t = lines.get(i).strip();
       if (t.isEmpty() || known.contains(t)) continue;
       boolean bareOk = !"python".equals(languageId); // a lone ... is a real statement in Python
-      if (LEADER_DOTS.matcher(t).matches()
+      boolean markdown = MarkdownText.is(languageId, null);
+      // in Markdown a heading or a bullet is ordinary text ("## Other methods", "* the rest of
+      // the items"), so only a comment that stands for left-out text, or a lone "...", counts
+      boolean commentLeader = !markdown || t.startsWith("<!--");
+      if ((commentLeader && LEADER_DOTS.matcher(t).matches())
           || (bareOk && BARE_DOTS.matcher(t).matches())
-          || LEFT_OUT.matcher(t).matches()) {
+          || (commentLeader && LEFT_OUT.matcher(t).matches())) {
         out.add(
             Finding.error(
                 "Line "
@@ -290,6 +295,28 @@ public final class ChangeChecker {
               "No longer mentioned anywhere in the new text: "
                   + String.join(", ", gone)
                   + ". A refactor should keep a method unless you asked to remove it."));
+  }
+
+  // ---- Markdown: what an edit must not break ----
+
+  /**
+   * A Markdown edit is judged by its structure, as there are no brackets to count: a code fence
+   * that was opened and not closed swallows the rest of the file when it is rendered, and the front
+   * matter ({@code ---} lines at the top) is read by tools that would stop working without it.
+   */
+  private static void markdown(String languageId, String before, String after, List<Finding> out) {
+    if (!MarkdownText.is(languageId, null)) return;
+    if (MarkdownText.openFences(before) == 0 && MarkdownText.openFences(after) > 0)
+      out.add(
+          Finding.error(
+              "A code fence in the new text is opened and never closed, so everything after it would"
+                  + " show as code. A line of ``` was probably lost or added."));
+    List<String> front = MarkdownText.frontMatter(before);
+    if (!front.isEmpty() && MarkdownText.frontMatter(after).isEmpty())
+      out.add(
+          Finding.error(
+              "The front matter at the top of the selected text (between the two `---` lines) is"
+                  + " missing or no longer closed in the new text."));
   }
 
   // ---- much shorter than what was sent ----

@@ -124,7 +124,9 @@ public final class ProposalApplier {
           current,
           "");
     try {
-      ChangeReply.Interpreted again = ChangeReply.interpret(change.rawSection(), current);
+      ChangeReply.Interpreted again =
+          ChangeReply.interpret(
+              change.rawSection(), current, change.path(), FileKinds.languageOf(change.path()));
       String text =
           ResponseParser.matchLineEndings(
               current, ResponseParser.matchTrailingNewline(current, again.code()));

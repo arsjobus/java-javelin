@@ -179,6 +179,33 @@ record EvalReport(
     return outcomes(false);
   }
 
+  /**
+   * For each task that never passed, how it failed most often: the failure reason and the first
+   * line of the detail that came with it. A rate says that a task fails; this says what to look at
+   * (a test that fails on the real code is a different problem from a change that does not
+   * compile). Ordered by task id.
+   */
+  Map<String, String> neverPassedWhy() {
+    Map<String, String> why = new TreeMap<>();
+    for (String id : neverPassed()) {
+      Map<String, Integer> counts = new LinkedHashMap<>();
+      for (List<TaskResult> run : runs)
+        for (TaskResult r : run) {
+          if (!r.id().equals(id)) continue;
+          String detail =
+              r.detail() == null ? "" : r.detail().lines().findFirst().orElse("").strip();
+          if (detail.length() > 160) detail = detail.substring(0, 157) + "...";
+          String key = r.failure() + (detail.isEmpty() ? "" : ": " + detail);
+          counts.merge(key, 1, Integer::sum);
+        }
+      counts.entrySet().stream()
+          .max(Map.Entry.comparingByValue())
+          .ifPresent(
+              e -> why.put(id, e.getKey() + " (" + e.getValue() + " of " + runs.size() + " runs)"));
+    }
+    return why;
+  }
+
   private List<String> outcomes(boolean mixed) {
     Map<String, int[]> counts = new TreeMap<>();
     for (List<TaskResult> run : runs)
@@ -236,6 +263,7 @@ record EvalReport(
     summary.put("byCategory", categories);
     summary.put("unstableTasks", unstable());
     summary.put("neverPassed", neverPassed());
+    summary.put("neverPassedWhy", neverPassedWhy());
     root.put("summary", summary);
     List<Object> runList = new ArrayList<>();
     for (List<TaskResult> run : runs) {
@@ -359,6 +387,11 @@ record EvalReport(
             : "Passed in some runs, failed in others: " + String.join(", ", unstable()) + ".\n");
     md.append("\n## Never passed\n\n");
     md.append(neverPassed().isEmpty() ? "None.\n" : String.join(", ", neverPassed()) + ".\n");
+    if (!neverPassed().isEmpty()) {
+      md.append("\n## How the never-passed tasks failed\n\n");
+      neverPassedWhy()
+          .forEach((id, text) -> md.append("- ").append(id).append(": ").append(text).append("\n"));
+    }
     md.append("\n## Cost\n\n");
     for (int i = 0; i < runs.size(); i++) {
       long tokens = tokens(i);

@@ -2,6 +2,7 @@ package com.javelin.ai.eval;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -255,5 +256,75 @@ class EvalReportTest {
     assertFalse(plain.symbolic());
     assertFalse(plain.toMarkdown().contains("symbol level"));
     assertFalse(plain.toJson().contains("\"symbols\""));
+  }
+
+  @Test
+  void aTaskThatNeverPassedSaysHowItFailed() {
+    var add = EvalTask.Category.ADD_TESTS;
+    TaskResult onReal =
+        new TaskResult(
+            "t",
+            add,
+            true,
+            true,
+            false,
+            1,
+            10,
+            -1,
+            -1,
+            5,
+            false,
+            FailureReason.TEST_FAILURE,
+            "the generated tests fail on the real code: slugify(null) threw\nstack");
+    TaskResult onMutant =
+        new TaskResult(
+            "t",
+            add,
+            true,
+            true,
+            false,
+            1,
+            10,
+            -1,
+            -1,
+            5,
+            false,
+            FailureReason.TEST_FAILURE,
+            "the generated tests pass on the real code and also on the code with the planted bug");
+    EvalReport report =
+        new EvalReport(
+            "small",
+            "m",
+            "2026-11-12",
+            42,
+            1,
+            List.of(List.of(onReal), List.of(onReal), List.of(onMutant)),
+            1000,
+            0);
+    assertEquals(
+        Map.of(
+            "t",
+            "TEST_FAILURE: the generated tests fail on the real code: slugify(null) threw"
+                + " (2 of 3 runs)"),
+        report.neverPassedWhy());
+    String md = report.toMarkdown();
+    assertTrue(md.contains("## How the never-passed tasks failed\n\n- t: TEST_FAILURE:"), md);
+    assertNotNull(Json.get(Json.get(Json.parse(report.toJson()), "summary"), "neverPassedWhy"));
+  }
+
+  @Test
+  void aReportWithNoNeverPassedTaskHasNoSuchSection() {
+    assertFalse(
+        new EvalReport(
+                "small",
+                "m",
+                "2026-11-12",
+                42,
+                1,
+                List.of(List.of(r("a", EvalTask.Category.FIX_BUG, null, 10))),
+                1000,
+                0)
+            .toMarkdown()
+            .contains("How the never-passed tasks failed"));
   }
 }

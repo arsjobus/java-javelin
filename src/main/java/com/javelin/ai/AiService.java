@@ -111,13 +111,16 @@ public final class AiService {
           FailureReason.TRUNCATED);
     try {
       if (plan.action() == AiAction.GENERATE_TESTS) {
-        ResponseParser.Parsed parsed = ResponseParser.parse(text);
+        ResponseParser.Parsed parsed =
+            ResponseParser.parse(
+                text, MarkdownText.is(plan.context().languageId(), plan.context().name()));
         AiProposal proposal =
             AiProposal.newDocument(plan.testFileName(), parsed.code(), parsed.explanation());
         return new AiResult(text, proposal, extraBlocksNote(parsed.extraBlocks()));
       }
       ChangeReply.Interpreted change =
-          ChangeReply.interpret(text, plan.context().text(), plan.context().name());
+          ChangeReply.interpret(
+              text, plan.context().text(), plan.context().name(), plan.context().languageId());
       AiProposal proposal =
           AiProposal.replace(plan.context(), change.code(), change.explanation(), change.anchors());
       List<Finding> findings = new ArrayList<>(change.notes());

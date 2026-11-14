@@ -67,6 +67,18 @@ public final class ChangeReply {
    */
   public static Interpreted interpret(String rawReply, String original, String fileName)
       throws AiException {
+    return interpret(rawReply, original, fileName, null);
+  }
+
+  /**
+   * As above; {@code languageId} (null when unknown) and the file's name tell whether the code is
+   * Markdown, which is read differently: a reply that wraps the file in a {@code ```markdown} fence
+   * keeps the fences inside the file, and a line of {@code =} that underlines a heading is not
+   * taken for the divider of an edit block.
+   */
+  public static Interpreted interpret(
+      String rawReply, String original, String fileName, String languageId) throws AiException {
+    boolean markdown = MarkdownText.is(languageId, fileName);
     String reply = withoutReasoning(rawReply);
     if (JsonEdits.looksLike(reply)) {
       JsonEdits.Parsed parsed = JsonEdits.parse(reply);
@@ -97,7 +109,7 @@ public final class ChangeReply {
           applied.anchors());
     }
     if (EditBlocks.looksLike(reply)) {
-      EditBlocks.Parsed parsed = EditBlocks.parse(reply);
+      EditBlocks.Parsed parsed = EditBlocks.parse(reply, original);
       EditBlocks.Applied applied = EditBlocks.applyWithAnchors(original, parsed.edits());
       return new Interpreted(
           applied.text(),
@@ -107,7 +119,7 @@ public final class ChangeReply {
           looseAnchorNotes(applied.anchors()),
           applied.anchors());
     }
-    ResponseParser.Parsed block = ResponseParser.parse(reply);
+    ResponseParser.Parsed block = ResponseParser.parse(reply, markdown);
     if (UnifiedPatch.looksLike(block.code()))
       return new Interpreted(
           UnifiedPatch.apply(original, block.code()),

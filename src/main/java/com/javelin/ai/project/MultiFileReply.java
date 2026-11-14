@@ -6,10 +6,9 @@ import com.javelin.ai.ChangeReply;
 import com.javelin.ai.FailureReason;
 import com.javelin.ai.Finding;
 import com.javelin.ai.JsonEdits;
+import com.javelin.ai.MarkdownText;
 import com.javelin.ai.ResponseParser;
 import com.javelin.ai.SensitiveFiles;
-import com.javelin.language.Languages;
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -141,7 +140,7 @@ public final class MultiFileReply {
       throws AiException, IOException {
     refuseIfNotChangeable(path);
     Path file = reader.resolve(path);
-    String language = Languages.idFor(new File(path));
+    String language = FileKinds.languageOf(path);
     String earlier = overlay.get(path);
     boolean exists = earlier != null || Files.isRegularFile(file);
     if (earlier == null && Files.exists(file) && !exists)
@@ -175,7 +174,7 @@ public final class MultiFileReply {
             Finding.warning(
                 "The reply treats this as an existing file, but there is no such file; it is"
                     + " proposed as a new file."));
-      ResponseParser.Parsed block = parseNewFile(section.body());
+      ResponseParser.Parsed block = parseNewFile(section.body(), MarkdownText.is(language, path));
       String code = block.code().endsWith("\n") ? block.code() : block.code() + "\n";
       if (code.length() > MAX_FILE_CHARS)
         throw new AiException(
@@ -210,7 +209,8 @@ public final class MultiFileReply {
           Finding.warning(
               "The file changed after the project was sent; the change was matched against its"
                   + " current text."));
-    ChangeReply.Interpreted interpreted = ChangeReply.interpret(section.body(), original, path);
+    ChangeReply.Interpreted interpreted =
+        ChangeReply.interpret(section.body(), original, path, language);
     if (snapshot.partialPaths().contains(path)
         && interpreted.format() == ChangeReply.Format.WHOLE_BLOCK)
       throw new AiException(
@@ -261,10 +261,11 @@ public final class MultiFileReply {
     return content;
   }
 
-  private static ResponseParser.Parsed parseNewFile(String body) throws AiException {
+  private static ResponseParser.Parsed parseNewFile(String body, boolean markdown)
+      throws AiException {
     if (UnifiedPatchHelper.isCreationDiff(body))
       return new ResponseParser.Parsed("", UnifiedPatchHelper.addedText(body), 0);
-    return ResponseParser.parse(body);
+    return ResponseParser.parse(body, markdown);
   }
 
   /**

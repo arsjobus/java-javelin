@@ -122,3 +122,5 @@ On a codebase large enough to need it, this project's own source, with 8 request
 | 32k, files that fit per request | 18 to 26 | 33 to 56 | not measured |
 
 In a 32k window the context is full either way (about 28,500 tokens): the gain is coverage, not fewer tokens. Whether the extra files help the model is not measured.
+
+See [HARD-TASKS.md](HARD-TASKS.md) for the tasks that rarely pass and what was changed for them.

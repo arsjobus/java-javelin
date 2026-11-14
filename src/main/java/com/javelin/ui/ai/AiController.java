@@ -14,13 +14,13 @@ import com.javelin.ai.AiSource;
 import com.javelin.ai.ExternalAccess;
 import com.javelin.ai.profile.ModelProfile;
 import com.javelin.ai.profile.ModelProfiles;
+import com.javelin.ai.project.FileKinds;
 import com.javelin.ai.verify.JavacVerifier;
 import com.javelin.ai.verify.ProjectClasspath;
 import com.javelin.ai.verify.Verified;
 import com.javelin.ai.verify.Verifier;
 import com.javelin.ai.verify.VerifyConfig;
 import com.javelin.ai.verify.VerifyTarget;
-import com.javelin.language.Languages;
 import com.javelin.language.TextEdits;
 import com.javelin.settings.Settings;
 import com.javelin.ui.editor.EditorTabs;
@@ -214,7 +214,7 @@ public final class AiController {
         new AiSource(
             file == null ? "Untitled" : bench.displayPath(file),
             file == null ? null : file.getName(),
-            file == null ? null : Languages.idFor(file),
+            file == null ? null : FileKinds.languageOf(file.getName()),
             editor.getText(),
             selection.getStart(),
             selection.getEnd());

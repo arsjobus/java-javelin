@@ -62,28 +62,38 @@ public final class EditBlocks {
   }
 
   public static Parsed parse(String reply) throws AiException {
+    return parse(reply, null);
+  }
+
+  /**
+   * As {@link #parse(String)}. {@code original}, the text the edits are for, settles a block that
+   * has more than one line that could be its divider: in Markdown a line of {@code =} also
+   * underlines a heading, so {@code Install / ======= / text / ======= / ...} has two. The divider
+   * is then the one that leaves the longest SEARCH part found in {@code original} in one place
+   * only; with no such split (or no {@code original}) it is the first, as it always was.
+   */
+  public static Parsed parse(String reply, String original) throws AiException {
+    List<String> originalLines = original == null ? null : LineMatch.split(original);
     List<Edit> edits = new ArrayList<>();
     List<String> outside = new ArrayList<>();
-    List<String> search = null, replace = null;
+    List<String> block = null;
+    boolean dividerSeen = false;
     for (String line : LineMatch.split(reply)) {
-      if (search == null) { // outside a block
-        if (SEARCH.matcher(line).matches()) search = new ArrayList<>();
-        else if (!line.strip().startsWith("```") && !line.strip().startsWith("~~~"))
+      if (block == null) { // outside a block
+        if (SEARCH.matcher(line).matches()) {
+          block = new ArrayList<>();
+          dividerSeen = false;
+        } else if (!line.strip().startsWith("```") && !line.strip().startsWith("~~~"))
           outside.add(line);
-      } else if (replace == null) { // in the SEARCH part
-        if (DIVIDER.matcher(line).matches()) replace = new ArrayList<>();
-        else search.add(line);
-      } else { // in the REPLACE part
-        if (REPLACE.matcher(line).matches()) {
-          edits.add(new Edit(String.join("\n", search), String.join("\n", replace)));
-          search = null;
-          replace = null;
-        } else {
-          replace.add(line);
-        }
+      } else if (dividerSeen && REPLACE.matcher(line).matches()) {
+        edits.add(split(block, originalLines));
+        block = null;
+      } else {
+        if (DIVIDER.matcher(line).matches()) dividerSeen = true;
+        block.add(line);
       }
     }
-    if (search != null)
+    if (block != null)
       throw new AiException(
           AiException.Kind.BAD_RESPONSE,
           FailureReason.TRUNCATED,
@@ -96,6 +106,31 @@ public final class EditBlocks {
           "The reply has no complete edit block, so there is no change to propose. Its text is in"
               + " the AI panel.");
     return new Parsed(edits, String.join("\n", outside).strip());
+  }
+
+  /** The edit a block holds: the lines before its divider and the lines after it. */
+  private static Edit split(List<String> block, List<String> originalLines) {
+    List<Integer> dividers = new ArrayList<>();
+    for (int i = 0; i < block.size(); i++)
+      if (DIVIDER.matcher(block.get(i)).matches()) dividers.add(i);
+    int chosen = dividers.get(0);
+    if (dividers.size() > 1 && originalLines != null) {
+      for (int k = dividers.size() - 1; k >= 0; k--) {
+        int at = dividers.get(k);
+        if (at == 0) continue;
+        List<String> search = block.subList(0, at);
+        if (search.stream().allMatch(String::isBlank)) continue;
+        if (LineMatch.candidates(originalLines, search, 0, originalLines.size(), LineMatch.MAX_TIER)
+                .size()
+            == 1) {
+          chosen = at;
+          break;
+        }
+      }
+    }
+    return new Edit(
+        String.join("\n", block.subList(0, chosen)),
+        String.join("\n", block.subList(chosen + 1, block.size())));
   }
 
   /**

@@ -125,6 +125,8 @@ public final class PromptBuilder {
       AiAction action, AiContext context, String instruction, int editBlockMinLines) {
     String language =
         context.languageId() == null ? "the language of this file" : context.languageId();
+    String markdown =
+        MarkdownText.is(context.languageId(), context.name()) ? markdownRules(action) : "";
     return switch (action) {
       case EXPLAIN ->
           "Explain what the code between the markers does, step by step, in plain language. Point"
@@ -137,35 +139,58 @@ public final class PromptBuilder {
           "Write unit tests for the code between the markers, in "
               + language
               + " with the framework most projects in that language use (for Java: JUnit 5). Cover"
-              + " normal cases, edge cases and failures. Reply with at most two short sentences and"
-              + " then ONE fenced code block that holds the complete test file. Do not change the"
-              + " code under test.";
+              + " normal cases and edge cases, and the failures that the code or its documentation"
+              + " states. Rules for the tests: assert only what the code or its documentation says;"
+              + " work out each expected value by following the code by hand with a small input;"
+              + " do not test inputs the code says nothing about (such as null), because a guessed"
+              + " expectation makes a test fail; test a limit at the limit itself, not only on both"
+              + " sides of it; keep each test to one behavior. Reply with at most two short"
+              + " sentences and then ONE fenced code block that holds the complete test file. Do"
+              + " not change the code under test."
+              + testHints(context);
       case PROPOSE_CHANGE ->
-          usesEditBlocks(context, editBlockMinLines)
-              ? "Change the code between the markers as follows:\n"
-                  + instruction
-                  + "\n\n"
-                  + "Reply with at most two short sentences and then one or more edit blocks, each"
-                  + " in exactly this form:\n"
-                  + "<<<<<<< SEARCH\n"
-                  + "(some lines copied exactly from the code, with their indentation)\n"
-                  + "=======\n"
-                  + "(what those lines become)\n"
-                  + ">>>>>>> REPLACE\n\n"
-                  + "Each SEARCH part must be copied character for character and be long enough to"
-                  + " match in one place only. Write only the parts that change: do not repeat code"
-                  + " that stays the same, do not write placeholders such as \"...\" or \"rest of"
-                  + " the code\", leave out the markers of the code and do not add line numbers. If"
-                  + " the change cannot be made, reply without an edit block and say why."
-              : "Change the code between the markers as follows:\n"
-                  + instruction
-                  + "\n\n"
-                  + "Reply with at most two short sentences and then ONE fenced code block that"
-                  + " holds the complete replacement for exactly the code between the markers: keep"
-                  + " its indentation, write every line (no placeholders such as \"...\" or \"rest"
-                  + " of the code\"), leave out the markers and do not add line numbers. If the"
-                  + " change cannot be made, reply without a code block and say why.";
+          (usesEditBlocks(context, editBlockMinLines)
+                  ? "Change the code between the markers as follows:\n"
+                      + instruction
+                      + "\n\n"
+                      + "Reply with at most two short sentences and then one or more edit blocks, each"
+                      + " in exactly this form:\n"
+                      + "<<<<<<< SEARCH\n"
+                      + "(some lines copied exactly from the code, with their indentation)\n"
+                      + "=======\n"
+                      + "(what those lines become)\n"
+                      + ">>>>>>> REPLACE\n\n"
+                      + "Each SEARCH part must be copied character for character and be long enough to"
+                      + " match in one place only. Write only the parts that change: do not repeat code"
+                      + " that stays the same, do not write placeholders such as \"...\" or \"rest of"
+                      + " the code\", leave out the markers of the code and do not add line numbers. If"
+                      + " the change cannot be made, reply without an edit block and say why."
+                  : "Change the code between the markers as follows:\n"
+                      + instruction
+                      + "\n\n"
+                      + "Reply with at most two short sentences and then ONE fenced code block that"
+                      + " holds the complete replacement for exactly the code between the markers: keep"
+                      + " its indentation, write every line (no placeholders such as \"...\" or \"rest"
+                      + " of the code\"), leave out the markers and do not add line numbers. If the"
+                      + " change cannot be made, reply without a code block and say why.")
+              + markdown;
     };
+  }
+
+  /** What Propose Change must know about a Markdown file, in a few sentences. */
+  private static String markdownRules(AiAction action) {
+    if (action != AiAction.PROPOSE_CHANGE) return "";
+    return "\n\nThis is a Markdown file. Keep its structure: headings, lists, tables, links and"
+        + " front matter stay valid, and a heading is copied with its # marks (or with the line of"
+        + " = or - under it). Change only the wording the instruction is about. If a block you"
+        + " write contains code fences, put that whole block in a fence of FOUR backticks"
+        + " (````markdown) so the fences inside it do not end it early.";
+  }
+
+  /** The hints for Generate Tests that come from reading the code, or "". */
+  private static String testHints(AiContext context) {
+    String hints = TestTargets.hints(context.text(), context.name(), context.languageId());
+    return hints.isEmpty() ? "" : "\n\n" + hints;
   }
 
   /**

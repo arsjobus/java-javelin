@@ -18,6 +18,16 @@ public final class ResponseParser {
   public record Parsed(String explanation, String code, int extraBlocks) {}
 
   public static Parsed parse(String reply) throws AiException {
+    return parse(reply, false);
+  }
+
+  /**
+   * As {@link #parse(String)}; with {@code markdown} (the code is a Markdown file) a reply that
+   * wraps the whole file in a {@code ```markdown} fence is read as one block even though the file
+   * has fenced code blocks of its own inside: those would otherwise end the block at the first one,
+   * and the file would be cut off in the middle.
+   */
+  public static Parsed parse(String reply, boolean markdown) throws AiException {
     List<String> lines =
         new ArrayList<>(List.of(reply.replace("\r\n", "\n").replace('\r', '\n').split("\n", -1)));
     int open = -1;
@@ -40,6 +50,10 @@ public final class ResponseParser {
     int close = -1;
     for (int i = open + 1; i < lines.size() && close < 0; i++)
       if (Fence.closes(lines.get(i), fenceChar, fenceLength)) close = i;
+    if (markdown
+        && close >= 0
+        && MarkdownText.isMarkdownInfo(MarkdownText.fenceInfo(lines.get(open))))
+      close = wrapperClose(lines, open, fenceChar, fenceLength, close);
     if (close < 0)
       throw new AiException(
           AiException.Kind.BAD_RESPONSE,
@@ -70,6 +84,42 @@ public final class ResponseParser {
     String explanation =
         (before + (before.isEmpty() || after.isEmpty() ? "" : "\n\n") + after).strip();
     return new Parsed(explanation, code, extra);
+  }
+
+  /**
+   * The closing line of a fence that wraps a Markdown file. Fences inside the file are followed by
+   * counting: one with a word after it ({@code ```java}) opens an inner block, a bare one closes
+   * the innermost open block, and a bare one with nothing open closes the wrapper. When that leaves
+   * fences after the wrapper (an inner block opened with a bare fence upsets the count), the last
+   * bare fence of the reply is taken as the wrapper's end, because the wrapper holds the whole
+   * file.
+   */
+  private static int wrapperClose(
+      List<String> lines, int open, char character, int length, int firstClose) {
+    int depth = 0;
+    int counted = -1;
+    for (int i = open + 1; i < lines.size() && counted < 0; i++) {
+      String line = lines.get(i);
+      if (Fence.closes(line, character, length)) {
+        if (depth == 0) counted = i;
+        else depth--;
+      } else {
+        Fence inner = Fence.opening(line);
+        if (inner != null && inner.character == character && inner.length >= length) depth++;
+      }
+    }
+    if (counted < 0) counted = firstClose;
+    boolean fencesAfter = false;
+    for (int i = counted + 1; i < lines.size() && !fencesAfter; i++)
+      fencesAfter = Fence.opening(lines.get(i)) != null;
+    if (!fencesAfter && counted >= firstClose) return counted;
+    int last = counted;
+    for (int i = lines.size() - 1; i > counted; i--)
+      if (Fence.closes(lines.get(i), character, length)) {
+        last = i;
+        break;
+      }
+    return last;
   }
 
   /**
