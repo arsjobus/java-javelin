@@ -46,6 +46,15 @@ public interface AiProvider {
   }
 
   /**
+   * True when a request's {@link AiRequest#contextTokens} decides how much room the model has for
+   * its answer, so that asking again with a larger window can rescue an answer that was cut off.
+   * The default is false: a provider with its own output limit gains nothing from a second try.
+   */
+  default boolean sizesContextWindow() {
+    return false;
+  }
+
+  /**
    * True when the provider reports how many tokens a request used ({@link AiReply#usage}), so the
    * token estimate can be calibrated against it. The default is false.
    */

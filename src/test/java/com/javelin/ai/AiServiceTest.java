@@ -144,6 +144,68 @@ class AiServiceTest {
     assertTrue(r.note().contains("cut off"));
   }
 
+  private static final String GOOD_REPLY =
+      "Fixed the sign.\n```java\n    int add(int a, int b) { return a + b; }\n```";
+
+  @Test
+  void aCutOffChangeIsAskedAgainWithMoreRoomWhenTheProviderSizesItsWindow() throws Exception {
+    provider.sizesWindow = true;
+    provider.firstTruncatedAnswer =
+        "<<<<<<< SEARCH\n    int add(int a, int b) { return a - b; }\n====";
+    provider.answer = GOOD_REPLY;
+    StringBuilder shown = new StringBuilder();
+    AiResult r =
+        service.run(
+            service.prepare(AiAction.PROPOSE_CHANGE, source("Foo.java", SEL_START, SEL_END), "fix"),
+            shown::append,
+            new AiCancel());
+    assertNotNull(r.proposal(), r.note());
+    assertEquals(2, provider.requests.size());
+    assertEquals(0, provider.requests.get(0).contextTokens());
+    assertTrue(provider.requests.get(1).contextTokens() > 4096);
+    assertTrue(shown.toString().contains("asking again with more room"));
+  }
+
+  @Test
+  void aCutOffChangeIsNotAskedAgainByAProviderThatDoesNotSizeItsWindow() throws Exception {
+    provider.truncated = true;
+    provider.answer = GOOD_REPLY;
+    AiResult r =
+        service.run(
+            service.prepare(AiAction.PROPOSE_CHANGE, source("Foo.java", SEL_START, SEL_END), "fix"),
+            s -> {},
+            new AiCancel());
+    assertNull(r.proposal());
+    assertEquals(FailureReason.TRUNCATED, r.failure());
+    assertEquals(1, provider.requests.size());
+  }
+
+  @Test
+  void aChangeThatIsCutOffTwiceProposesNothingAndSaysHowToAskForLess() throws Exception {
+    provider.sizesWindow = true;
+    provider.truncated = true;
+    provider.answer = GOOD_REPLY;
+    AiResult r =
+        service.run(
+            service.prepare(AiAction.PROPOSE_CHANGE, source("Foo.java", SEL_START, SEL_END), "fix"),
+            s -> {},
+            new AiCancel());
+    assertNull(r.proposal());
+    assertEquals(FailureReason.TRUNCATED, r.failure());
+    assertEquals(2, provider.requests.size());
+    assertTrue(r.note().contains("smaller change"));
+  }
+
+  @Test
+  void theRetryWindowDoublesAndStopsAtTheLargestWindow() {
+    AiRequest small = new AiRequest("m", "s", "p".repeat(3000));
+    assertEquals(2 * (small.size() / 3 + 2048), AiService.withMoreRoom(small).contextTokens());
+    assertEquals(
+        AiService.MAX_RETRY_WINDOW,
+        AiService.withMoreRoom(new AiRequest("m", "s", "p", 20_000)).contextTokens());
+    assertNull(AiService.withMoreRoom(new AiRequest("m", "s", "p", AiService.MAX_RETRY_WINDOW)));
+  }
+
   @Test
   void aChangeBecomesAProposalForTheSelectedRange() throws Exception {
     provider.answer = "Fixed the sign.\n```java\n    int add(int a, int b) { return a + b; }\n```";
@@ -307,7 +369,12 @@ class AiServiceTest {
   void editBlocksAreAppliedToTheSelectedCode() throws Exception {
     AiResult r =
         propose(
-            "Fixed the sign.\n<<<<<<< SEARCH\n    int add(int a, int b) { return a - b; }\n=======\n    int add(int a, int b) { return a + b; }\n>>>>>>> REPLACE",
+            "Fixed the sign.\n"
+                + "<<<<<<< SEARCH\n"
+                + "    int add(int a, int b) { return a - b; }\n"
+                + "=======\n"
+                + "    int add(int a, int b) { return a + b; }\n"
+                + ">>>>>>> REPLACE",
             SEL_START,
             SEL_END);
     assertEquals("Fixed the sign.", r.proposal().explanation());
@@ -320,7 +387,11 @@ class AiServiceTest {
   void editBlocksThatDoNotMatchTheCodeProposeNothingAndSayWhy() throws Exception {
     AiResult r =
         propose(
-            "<<<<<<< SEARCH\n    int sub(int a, int b) { return a - b; }\n=======\nx\n>>>>>>> REPLACE",
+            "<<<<<<< SEARCH\n"
+                + "    int sub(int a, int b) { return a - b; }\n"
+                + "=======\n"
+                + "x\n"
+                + ">>>>>>> REPLACE",
             SEL_START,
             SEL_END);
     assertNull(r.proposal());
@@ -332,7 +403,11 @@ class AiServiceTest {
   void aUnifiedDiffReplyIsAppliedAsAPatch() throws Exception {
     AiResult r =
         propose(
-            "```diff\n@@ -1 +1 @@\n-    int add(int a, int b) { return a - b; }\n+    int add(int a, int b) { return a + b; }\n```",
+            "```diff\n"
+                + "@@ -1 +1 @@\n"
+                + "-    int add(int a, int b) { return a - b; }\n"
+                + "+    int add(int a, int b) { return a + b; }\n"
+                + "```",
             SEL_START,
             SEL_END);
     assertEquals(
@@ -352,7 +427,11 @@ class AiServiceTest {
             "rename f3 to three");
     assertTrue(plan.request().prompt().contains("<<<<<<< SEARCH"));
     provider.answer =
-        "<<<<<<< SEARCH\n    int f3() { return 3; }\n=======\n    int three() { return 3; }\n>>>>>>> REPLACE";
+        "<<<<<<< SEARCH\n"
+            + "    int f3() { return 3; }\n"
+            + "=======\n"
+            + "    int three() { return 3; }\n"
+            + ">>>>>>> REPLACE";
     AiResult r = service.run(plan, s -> {}, new AiCancel());
     assertEquals(
         body.toString().replace("int f3()", "int three()"), r.proposal().applyTo(body.toString()));

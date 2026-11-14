@@ -193,6 +193,11 @@ public final class OllamaProvider implements AiProvider {
   }
 
   @Override
+  public boolean sizesContextWindow() {
+    return true;
+  }
+
+  @Override
   public AiReply complete(AiRequest request, Consumer<String> onText, AiCancel cancel)
       throws AiException {
     return completeStreaming(request, onText::accept, cancel);
@@ -211,7 +216,7 @@ public final class OllamaProvider implements AiProvider {
                     Json.obj("role", "system", "content", request.system()),
                     Json.obj("role", "user", "content", request.prompt())),
             "think", thinkLevel == null || thinkLevel.equalsIgnoreCase("none") ? false : thinkLevel,
-            "options", options(request));
+            "options", options(request, thinkLevel));
     if (request.responseSchema() != null)
       payload.put("format", Json.parse(request.responseSchema()));
     String body = Json.write(payload);
@@ -297,10 +302,13 @@ public final class OllamaProvider implements AiProvider {
   }
 
   /** The {@code options} of the chat call: how to sample, and the window. */
-  private static java.util.Map<String, Object> options(AiRequest request) {
+  private static java.util.Map<String, Object> options(AiRequest request, String thinkLevel) {
     java.util.Map<String, Object> options =
         Json.obj(
-            "temperature", request.sampling().temperature(), "num_ctx", contextTokens(request));
+            "temperature",
+            request.sampling().temperature(),
+            "num_ctx",
+            contextTokens(request, thinkLevel));
     if (request.sampling().seed() != null) options.put("seed", request.sampling().seed());
     return options;
   }
@@ -312,10 +320,35 @@ public final class OllamaProvider implements AiProvider {
    * project request, whose budget was worked out against it) is asked for exactly that.
    */
   static int contextTokens(AiRequest request) {
+    return contextTokens(request, null);
+  }
+
+  /**
+   * As above, with room for the model's thinking too. A model that thinks writes its reasoning into
+   * the same window as its answer, and a reasoning model that is allowed to think at length used to
+   * leave the answer almost nothing: the reply was cut off in the middle of an edit and nothing
+   * could be proposed. {@code thinkLevel} (null or "none" for no thinking) adds {@link
+   * #thinkingReserve} tokens.
+   */
+  static int contextTokens(AiRequest request, String thinkLevel) {
     if (request.contextTokens() > 0) return Math.max(2048, request.contextTokens());
-    int estimate = request.size() / 3 + 2048;
+    int estimate = request.size() / 3 + 2048 + thinkingReserve(thinkLevel);
     int rounded = ((estimate + 1023) / 1024) * 1024;
     return Math.max(4096, Math.min(32768, rounded));
+  }
+
+  /**
+   * Tokens to leave in the window for thinking at {@code level}; 0 when the model does not think.
+   */
+  static int thinkingReserve(String level) {
+    if (level == null) return 0;
+    return switch (level.strip().toLowerCase(java.util.Locale.ROOT)) {
+      case "low" -> 1024;
+      case "medium" -> 2048;
+      case "high" -> 4096;
+      case "xhigh" -> 8192;
+      default -> 0;
+    };
   }
 
   private AiException httpError(int status, String body, String model) {

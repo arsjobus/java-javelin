@@ -17,6 +17,8 @@ in practice, and what Javelin does about each:
 | Rewriting what should not change | A long copy that quietly alters unrelated lines | Long selections ask for edit blocks: the model writes only the lines that change |
 | Wrong line numbers in a diff | `git apply` rejects it | A diff is applied by its content, line numbers are only a hint (`UnifiedPatch`) |
 | Reasoning mixed into the reply | Code tried out while "thinking" is taken as the answer | `<think>` sections are dropped before the reply is read |
+| Quoting a long run just to delete it | A SEARCH part that copies 250 lines costs more output than the model has left, and one wrong line in it matches nowhere | A RANGE block names only the first and last line (`FROM:` / `TO:`, `WHICH:` when the code repeats itself); the prompt says never to copy more than a few lines into a SEARCH part (`EditBlocks`) |
+| Reply cut off in the middle of a block | The window was spent on thinking and the long quote, so the last block never closes and nothing is proposed | The window leaves room for thinking (`OllamaProvider.thinkingReserve`); a cut-off reply is asked again once with twice the window (`AiService.withMoreRoom`) |
 | Our own scaffolding | `===== BEGIN CODE`, line numbers or SEARCH markers inside the code | Reported as an error |
 
 ## What the research says (and does not)

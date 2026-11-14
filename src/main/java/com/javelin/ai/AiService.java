@@ -90,6 +90,14 @@ public final class AiService {
     cancel.throwIfCancelled();
     AiReply reply = provider.completeStreaming(plan.request(), listener, cancel);
     cancel.throwIfCancelled();
+    if (reply.truncated() && plan.action().proposes()) {
+      AiRequest roomier = withMoreRoom(plan.request());
+      if (roomier != null && provider.sizesContextWindow()) {
+        listener.onText("\n\n----- cut off: asking again with more room for the answer -----\n\n");
+        reply = provider.completeStreaming(roomier, listener, cancel);
+        cancel.throwIfCancelled();
+      }
+    }
     String text = reply.text();
     if (text.isBlank())
       throw new AiException(
@@ -106,7 +114,7 @@ public final class AiService {
           text,
           null,
           "The reply was cut off by the model, so nothing is proposed. Its text is in the AI"
-              + " panel.",
+              + " panel. Ask for a smaller change, or one part of the code at a time.",
           List.of(),
           FailureReason.TRUNCATED);
     try {
@@ -192,6 +200,20 @@ public final class AiService {
       shown =
           shown.withFinding(Finding.error(VerificationReport.findingText(chosen.verification())));
     return new Verified<>(shown, verified.attempts());
+  }
+
+  /** The largest window a second try asks for. */
+  static final int MAX_RETRY_WINDOW = 32768;
+
+  /**
+   * The request again with twice the window (up to {@link #MAX_RETRY_WINDOW}), or null when it
+   * already had that much. A reply that is cut off has used all the room the model had; the same
+   * request with more room usually finishes.
+   */
+  static AiRequest withMoreRoom(AiRequest request) {
+    int now = request.contextTokens() > 0 ? request.contextTokens() : request.size() / 3 + 2048;
+    int next = Math.min(MAX_RETRY_WINDOW, now * 2);
+    return next > now ? request.withContextTokens(next) : null;
   }
 
   private static String extraBlocksNote(int extra) {

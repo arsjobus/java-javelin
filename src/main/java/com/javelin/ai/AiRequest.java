@@ -44,6 +44,11 @@ public record AiRequest(
     return new AiRequest(model, system, prompt, contextTokens, sampling, schema);
   }
 
+  /** The same request asking the provider for a window of {@code tokens}. */
+  public AiRequest withContextTokens(int tokens) {
+    return new AiRequest(model, system, prompt, tokens, sampling, responseSchema);
+  }
+
   /** The number of characters this request carries, which is what the context budget counts. */
   public int size() {
     return system.length() + prompt.length();

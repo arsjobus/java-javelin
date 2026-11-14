@@ -9,6 +9,11 @@ final class FakeAiProvider implements AiProvider {
   String answer = "";
   String thinking = "";
   boolean truncated;
+  boolean sizesWindow;
+
+  /** When set, the first reply is cut off and every later one is {@link #answer}. */
+  String firstTruncatedAnswer;
+
   boolean schemaOutput;
   AiException failure;
   List<String> models = List.of("fake-model");
@@ -32,6 +37,11 @@ final class FakeAiProvider implements AiProvider {
   @Override
   public boolean isLocal() {
     return true;
+  }
+
+  @Override
+  public boolean sizesContextWindow() {
+    return sizesWindow;
   }
 
   @Override
@@ -59,6 +69,10 @@ final class FakeAiProvider implements AiProvider {
     requests.add(request);
     if (failure != null) throw failure;
     if (!thinking.isEmpty()) listener.onThinking(thinking);
+    if (firstTruncatedAnswer != null && requests.size() == 1) {
+      listener.onText(firstTruncatedAnswer);
+      return new AiReply(firstTruncatedAnswer, true);
+    }
     listener.onText(answer);
     return new AiReply(answer, truncated);
   }

@@ -105,6 +105,33 @@ class PromptBuilderTest {
   }
 
   @Test
+  void aLongChangeTellsTheModelToNameTheEndsOfALongRunInsteadOfCopyingIt() throws Exception {
+    String prompt =
+        PromptBuilder.build(
+                AiAction.PROPOSE_CHANGE,
+                longContext(PromptBuilder.EDIT_BLOCK_MIN_LINES),
+                "remove the duplicate methods",
+                "m")
+            .prompt();
+    assertTrue(
+        prompt.contains("<<<<<<< RANGE") && prompt.contains("FROM:") && prompt.contains("TO:"));
+    assertTrue(prompt.contains("WHICH: 2") && prompt.contains("END OF CODE"));
+    assertTrue(prompt.contains("Never copy more than a few lines into a SEARCH part"));
+  }
+
+  @Test
+  void aShortChangeDoesNotMentionRangeBlocks() throws Exception {
+    String prompt =
+        PromptBuilder.build(
+                AiAction.PROPOSE_CHANGE,
+                longContext(PromptBuilder.EDIT_BLOCK_MIN_LINES - 1),
+                "rename x",
+                "m")
+            .prompt();
+    assertFalse(prompt.contains("RANGE"));
+  }
+
+  @Test
   void aLongChangeAsksForEditBlocksInsteadOfAWholeCopy() throws Exception {
     AiContext c = longContext(PromptBuilder.EDIT_BLOCK_MIN_LINES);
     assertTrue(PromptBuilder.usesEditBlocks(c));

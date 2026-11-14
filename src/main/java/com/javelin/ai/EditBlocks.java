@@ -16,8 +16,24 @@ import java.util.regex.Pattern;
  * &gt;&gt;&gt;&gt;&gt;&gt;&gt; REPLACE
  * </pre>
  *
- * Small models drop, shorten or re-indent code when they have to write all of it again; copying a
- * few lines and changing some is much easier for them. The lines are found by content, never by
+ * A long run of lines to delete or replace is written as a RANGE block instead, which names only
+ * its first and last line (the model does not have to copy a hundred lines to remove them):
+ *
+ * <pre>
+ * &lt;&lt;&lt;&lt;&lt;&lt;&lt; RANGE
+ * FROM: the first line of the range, copied
+ * TO: the last line of the range, copied
+ * WHICH: 2          (only when the first line is in several places: 2, or last)
+ * =======
+ * what the lines become (nothing at all deletes them)
+ * &gt;&gt;&gt;&gt;&gt;&gt;&gt; REPLACE
+ * </pre>
+ *
+ * {@code FROM: START OF CODE} and {@code TO: END OF CODE} stand for the ends of the code that was
+ * sent. {@code TO} is the first such line at or after {@code FROM}.
+ *
+ * <p>Small models drop, shorten or re-indent code when they have to write all of it again; copying
+ * a few lines and changing some is much easier for them. The lines are found by content, never by
  * line number, so a model that cannot count does no harm. All or nothing: if one block cannot be
  * placed unambiguously, nothing is applied.
  */
@@ -30,13 +46,39 @@ public final class EditBlocks {
    * must match in exactly one place, and {@code search} is then only looked for inside the method
    * (or, for a line that is not a declaration, after that line).
    */
-  public record Edit(String search, String replace, String anchor) {
+  public record Edit(String search, String replace, String anchor, Range range) {
+    public Edit(String search, String replace, String anchor) {
+      this(search, replace, anchor, null);
+    }
+
     public Edit(String search, String replace) {
-      this(search, replace, null);
+      this(search, replace, null, null);
+    }
+
+    /** A RANGE edit: the lines from {@code from} to {@code to} become {@code replace}. */
+    public static Edit range(String from, String to, String which, String replace) {
+      return new Edit("", replace, null, new Range(from, to, which));
     }
 
     boolean hasAnchor() {
       return anchor != null && !anchor.isBlank();
+    }
+  }
+
+  /**
+   * The first and last line of a RANGE edit, as the model wrote them. {@code which} (null for none)
+   * says which of several places the first line is in: a number from 1, or "last".
+   */
+  public record Range(String from, String to, String which) {
+    static final String START = "START OF CODE";
+    static final String END = "END OF CODE";
+
+    boolean fromStart() {
+      return from.strip().equalsIgnoreCase(START);
+    }
+
+    boolean toEnd() {
+      return to.strip().equalsIgnoreCase(END);
     }
   }
 
@@ -50,12 +92,14 @@ public final class EditBlocks {
   public record Parsed(List<Edit> edits, String explanation) {}
 
   private static final Pattern SEARCH =
-      Pattern.compile("^\\s*<{5,}\\s*SEARCH\\s*$", Pattern.CASE_INSENSITIVE);
+      Pattern.compile("^\\s*<{5,}\\s*(SEARCH|RANGE)\\s*$", Pattern.CASE_INSENSITIVE);
+  private static final Pattern FIELD =
+      Pattern.compile("^\\s*(FROM|TO|WHICH)\\s*:\\s?(.*)$", Pattern.CASE_INSENSITIVE);
   private static final Pattern DIVIDER = Pattern.compile("^\\s*={5,}\\s*$");
   private static final Pattern REPLACE =
       Pattern.compile("^\\s*>{5,}\\s*REPLACE\\s*$", Pattern.CASE_INSENSITIVE);
 
-  /** True when the reply contains at least one SEARCH marker. */
+  /** True when the reply contains at least one SEARCH or RANGE marker. */
   public static boolean looksLike(String reply) {
     for (String line : LineMatch.split(reply)) if (SEARCH.matcher(line).matches()) return true;
     return false;
@@ -78,15 +122,18 @@ public final class EditBlocks {
     List<String> outside = new ArrayList<>();
     List<String> block = null;
     boolean dividerSeen = false;
+    boolean range = false;
     for (String line : LineMatch.split(reply)) {
       if (block == null) { // outside a block
-        if (SEARCH.matcher(line).matches()) {
+        java.util.regex.Matcher open = SEARCH.matcher(line);
+        if (open.matches()) {
           block = new ArrayList<>();
           dividerSeen = false;
+          range = open.group(1).equalsIgnoreCase("RANGE");
         } else if (!line.strip().startsWith("```") && !line.strip().startsWith("~~~"))
           outside.add(line);
       } else if (dividerSeen && REPLACE.matcher(line).matches()) {
-        edits.add(split(block, originalLines));
+        edits.add(range ? splitRange(block) : split(block, originalLines));
         block = null;
       } else {
         if (DIVIDER.matcher(line).matches()) dividerSeen = true;
@@ -106,6 +153,42 @@ public final class EditBlocks {
           "The reply has no complete edit block, so there is no change to propose. Its text is in"
               + " the AI panel.");
     return new Parsed(edits, String.join("\n", outside).strip());
+  }
+
+  /** The RANGE edit a block holds: FROM / TO / WHICH lines, a divider, and the replacement. */
+  private static Edit splitRange(List<String> block) throws AiException {
+    int divider = 0;
+    while (!DIVIDER.matcher(block.get(divider)).matches()) divider++;
+    String from = null;
+    String to = null;
+    String which = null;
+    for (String line : block.subList(0, divider)) {
+      if (line.isBlank()) continue;
+      java.util.regex.Matcher m = FIELD.matcher(line);
+      if (!m.matches())
+        throw refused(
+            FailureReason.UNPARSEABLE,
+            "A RANGE block may only hold FROM:, TO: and WHICH: lines above its =======, but it has"
+                + " `"
+                + shorten(line.strip())
+                + "`. Nothing was applied.");
+      String value = m.group(2);
+      switch (m.group(1).toUpperCase(java.util.Locale.ROOT)) {
+        case "FROM" -> from = value;
+        case "TO" -> to = value;
+        default -> which = value.strip();
+      }
+    }
+    if (from == null || from.isBlank() || to == null || to.isBlank())
+      throw refused(
+          FailureReason.UNPARSEABLE,
+          "A RANGE block needs a FROM: line and a TO: line that say where the range starts and"
+              + " ends (or START OF CODE / END OF CODE). Nothing was applied.");
+    return Edit.range(
+        from,
+        to,
+        which == null || which.isEmpty() ? null : which,
+        String.join("\n", block.subList(divider + 1, block.size())));
   }
 
   /** The edit a block holds: the lines before its divider and the lines after it. */
@@ -153,6 +236,24 @@ public final class EditBlocks {
     java.util.Set<Edit> done = new java.util.HashSet<>();
     for (Edit edit : edits) {
       number++;
+      if (edit.range() != null) {
+        if (!done.add(edit)) {
+          anchors.add(new Anchor(number, AnchorRung.ALREADY_APPLIED));
+          continue;
+        }
+        RangePlace place = placeRange(lines, edit.range(), number);
+        List<String> replacement =
+            edit.replace().isEmpty() ? new ArrayList<>() : LineMatch.split(edit.replace());
+        if (place.rung() != AnchorRung.EXACT)
+          replacement =
+              LineMatch.shiftIndent(
+                  replacement,
+                  LineMatch.firstIndent(lines.subList(place.at(), place.at() + place.length())),
+                  place.writtenIndent());
+        lines = splice(lines, place.at(), place.length(), replacement);
+        anchors.add(new Anchor(number, place.rung()));
+        continue;
+      }
       List<String> search = LineMatch.split(edit.search());
       if (!edit.search().isBlank() && !done.add(edit)) {
         // the very same edit again: making it twice would double its lines
@@ -226,13 +327,118 @@ public final class EditBlocks {
                 replacement,
                 LineMatch.firstIndent(lines.subList(at, at + length)),
                 LineMatch.firstIndent(search));
-      List<String> next = new ArrayList<>(lines.subList(0, at));
-      next.addAll(replacement);
-      next.addAll(lines.subList(at + length, lines.size()));
-      lines = next;
+      lines = splice(lines, at, length, replacement);
       anchors.add(new Anchor(number, rung));
     }
     return new Applied(String.join("\n", lines), anchors);
+  }
+
+  private static List<String> splice(
+      List<String> lines, int at, int length, List<String> replacement) {
+    List<String> next = new ArrayList<>(lines.subList(0, at));
+    next.addAll(replacement);
+    next.addAll(lines.subList(at + length, lines.size()));
+    return next;
+  }
+
+  private record RangePlace(int at, int length, AnchorRung rung, String writtenIndent) {}
+
+  /**
+   * Where a RANGE edit's lines are: from the line FROM names (the one {@code which} picks when
+   * there are several) to the first line at or after it that TO names. A place is never guessed: a
+   * FROM or TO that is in no place, or a FROM that is in several with no WHICH, refuses the edit,
+   * and so everything.
+   */
+  private static RangePlace placeRange(List<String> lines, Range range, int number)
+      throws AiException {
+    int n = lines.size();
+    int first;
+    int tier = 0;
+    if (range.fromStart()) {
+      first = 0;
+    } else {
+      List<LineMatch.Found> found =
+          LineMatch.candidates(lines, List.of(range.from()), 0, n, LineMatch.MAX_TIER);
+      if (found.isEmpty())
+        throw refused(
+            FailureReason.ANCHOR_NOT_FOUND,
+            "Edit "
+                + number
+                + " is a RANGE that starts at a line that is not in the code (`"
+                + shorten(range.from().strip())
+                + "`), so nothing was applied. The model probably changed or invented it.");
+      int pick = 0;
+      if (found.size() > 1) {
+        pick = whichOf(range.which(), found.size());
+        if (pick == -2)
+          throw refused(
+              FailureReason.UNPARSEABLE,
+              "Edit "
+                  + number
+                  + " has a WHICH: line that is neither a number nor `last` (`"
+                  + shorten(range.which())
+                  + "`). Nothing was applied.");
+        if (pick < 0)
+          throw refused(
+              FailureReason.ANCHOR_NOT_FOUND,
+              "Edit "
+                  + number
+                  + " is a RANGE whose first line (`"
+                  + shorten(range.from().strip())
+                  + "`) is in "
+                  + found.size()
+                  + " places, at lines "
+                  + found.stream()
+                      .map(f -> String.valueOf(f.index() + 1))
+                      .collect(java.util.stream.Collectors.joining(", "))
+                  + ", so it is not clear which is meant. Nothing was applied. Add a line `WHICH:"
+                  + " 2` (or `WHICH: last`) to the block to say which one.");
+      }
+      first = found.get(pick).index();
+      tier = found.get(pick).tier();
+    }
+    int last;
+    if (range.toEnd()) {
+      last = n - 1;
+      if (last > first && lines.get(last).isEmpty()) last--; // keep the final line break
+    } else {
+      List<LineMatch.Found> after =
+          LineMatch.candidates(lines, List.of(range.to()), first, n, LineMatch.MAX_TIER);
+      if (after.isEmpty())
+        throw refused(
+            FailureReason.ANCHOR_NOT_FOUND,
+            "Edit "
+                + number
+                + " is a RANGE whose last line (`"
+                + shorten(range.to().strip())
+                + "`) is not in the code after its first line (line "
+                + (first + 1)
+                + "), so nothing was applied.");
+      last = after.get(0).index();
+      tier = Math.max(tier, after.get(0).tier());
+    }
+    return new RangePlace(
+        first, last - first + 1, AnchorRung.ofTier(tier), LineMatch.indentOf(range.from()));
+  }
+
+  /**
+   * The 0-based choice a WHICH value makes among {@code count} places: -1 when there is none, -2
+   * when it cannot be read, and the choice, or -1, when it is out of range.
+   */
+  private static int whichOf(String which, int count) {
+    if (which == null || which.isBlank()) return -1;
+    String w = which.strip().toLowerCase(java.util.Locale.ROOT);
+    int number;
+    if (w.contains("last")) number = count;
+    else if (w.contains("first")) number = 1;
+    else if (w.contains("second")) number = 2;
+    else if (w.contains("third")) number = 3;
+    else {
+      java.util.regex.Matcher digits = java.util.regex.Pattern.compile("\\d+").matcher(w);
+      if (!digits.find()) return -2;
+      number = Integer.parseInt(digits.group());
+    }
+    return number >= 1 && number <= count ? number - 1 : -1;
   }
 
   /**
