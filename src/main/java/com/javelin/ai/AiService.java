@@ -87,6 +87,16 @@ public final class AiService {
   /** Sends a plan and reports answer and thinking output separately as they arrive. */
   public AiResult runStreaming(AiPlan plan, AiProvider.StreamListener listener, AiCancel cancel)
       throws AiException {
+    return runStreaming(plan, listener, cancel, true);
+  }
+
+  /**
+   * As above. {@code mayRepair}: an edit reply that cannot be used (a block without its new lines,
+   * lines that are in no place) is sent back once with the reason, see {@link EditRepair}.
+   */
+  private AiResult runStreaming(
+      AiPlan plan, AiProvider.StreamListener listener, AiCancel cancel, boolean mayRepair)
+      throws AiException {
     cancel.throwIfCancelled();
     AiReply reply = provider.completeStreaming(plan.request(), listener, cancel);
     cancel.throwIfCancelled();
@@ -137,6 +147,12 @@ public final class AiService {
               plan.context().languageId(), plan.context().text(), proposal.replacement()));
       return new AiResult(text, proposal, extraBlocksNote(change.extraBlocks()), findings);
     } catch (AiException ex) {
+      if (mayRepair && EditRepair.worthAsking(ex.reason(), text)) {
+        listener.onText(
+            "\n\n----- the reply could not be used: asking again with the problem -----\n\n");
+        AiRequest again = EditRepair.again(plan.request(), text, ex.getMessage());
+        return runStreaming(plan.withRequest(again), listener, cancel, false);
+      }
       return new AiResult(text, null, ex.getMessage(), List.of(), ex.reason());
     }
   }
@@ -210,7 +226,7 @@ public final class AiService {
    * already had that much. A reply that is cut off has used all the room the model had; the same
    * request with more room usually finishes.
    */
-  static AiRequest withMoreRoom(AiRequest request) {
+  public static AiRequest withMoreRoom(AiRequest request) {
     int now = request.contextTokens() > 0 ? request.contextTokens() : request.size() / 3 + 2048;
     int next = Math.min(MAX_RETRY_WINDOW, now * 2);
     return next > now ? request.withContextTokens(next) : null;

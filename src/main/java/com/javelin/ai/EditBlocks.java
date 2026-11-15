@@ -96,6 +96,15 @@ public final class EditBlocks {
   private static final Pattern FIELD =
       Pattern.compile("^\\s*(FROM|TO|WHICH)\\s*:\\s?(.*)$", Pattern.CASE_INSENSITIVE);
   private static final Pattern DIVIDER = Pattern.compile("^\\s*={5,}\\s*$");
+  /**
+   * The lines that fence the code or a file in the text that was sent ({@code ===== END FILE: a/B.py
+   * =====}, {@code ===== BEGIN CODE =====}). A model that has copied the last lines of a file often
+   * goes on and copies the fence too; it is never part of an edit.
+   */
+  private static final Pattern SENT_MARKER =
+      Pattern.compile(
+          "^\\s*={5,}\\s*(?:BEGIN|END)\\s+(?:CODE|FILE\\b.*?)\\s*={5,}\\s*$",
+          Pattern.CASE_INSENSITIVE);
   private static final Pattern REPLACE =
       Pattern.compile("^\\s*>{5,}\\s*REPLACE\\s*$", Pattern.CASE_INSENSITIVE);
 
@@ -123,18 +132,37 @@ public final class EditBlocks {
     List<String> block = null;
     boolean dividerSeen = false;
     boolean range = false;
-    for (String line : LineMatch.split(reply)) {
+    List<String> replyLines = LineMatch.split(reply);
+    for (int at = 0; at < replyLines.size(); at++) {
+      String line = replyLines.get(at);
       if (block == null) { // outside a block
         java.util.regex.Matcher open = SEARCH.matcher(line);
         if (open.matches()) {
           block = new ArrayList<>();
           dividerSeen = false;
           range = open.group(1).equalsIgnoreCase("RANGE");
-        } else if (!line.strip().startsWith("```") && !line.strip().startsWith("~~~"))
-          outside.add(line);
+        } else if (!line.strip().startsWith("```")
+            && !line.strip().startsWith("~~~")
+            && !SENT_MARKER.matcher(line).matches()) outside.add(line);
       } else if (dividerSeen && REPLACE.matcher(line).matches()) {
         edits.add(range ? splitRange(block) : split(block, originalLines));
         block = null;
+      } else if (!dividerSeen
+          && SENT_MARKER.matcher(line).matches()
+          && dividerFollows(replyLines, at + 1)) {
+        // A fence written in place of the end of the SEARCH part, just above the divider: noise.
+      } else if (SENT_MARKER.matcher(line).matches() || SEARCH.matcher(line).matches()) {
+        // The block ran into the fence of the sent text, or into the next block, without its
+        // closing line. With a divider the new lines are all there and the block is taken as
+        // closed; without one there is nothing to change the found lines into.
+        if (!dividerSeen) throw noDivider();
+        edits.add(range ? splitRange(block) : split(block, originalLines));
+        java.util.regex.Matcher open = SEARCH.matcher(line);
+        if (open.matches()) {
+          block = new ArrayList<>();
+          dividerSeen = false;
+          range = open.group(1).equalsIgnoreCase("RANGE");
+        } else block = null;
       } else {
         if (DIVIDER.matcher(line).matches()) dividerSeen = true;
         block.add(line);
@@ -145,6 +173,9 @@ public final class EditBlocks {
           AiException.Kind.BAD_RESPONSE,
           FailureReason.TRUNCATED,
           "The reply stops inside an edit block (it was probably cut off), so nothing is proposed."
+              + (dividerSeen
+                  ? ""
+                  : " The block has the lines to find but no ======= line and no new lines.")
               + " Its text is in the AI panel.");
     if (edits.isEmpty())
       throw new AiException(
@@ -153,6 +184,22 @@ public final class EditBlocks {
           "The reply has no complete edit block, so there is no change to propose. Its text is in"
               + " the AI panel.");
     return new Parsed(edits, String.join("\n", outside).strip());
+  }
+
+  /** True when the next line that is not blank, from {@code from} on, is a divider. */
+  private static boolean dividerFollows(List<String> lines, int from) {
+    for (int i = from; i < lines.size(); i++) {
+      if (lines.get(i).isBlank()) continue;
+      return DIVIDER.matcher(lines.get(i)).matches();
+    }
+    return false;
+  }
+
+  private static AiException noDivider() {
+    return refused(
+        FailureReason.UNPARSEABLE,
+        "An edit block has the lines to find (SEARCH) but no ======= line and no new lines after"
+            + " it, so there is nothing to change those lines into. Nothing was applied.");
   }
 
   /** The RANGE edit a block holds: FROM / TO / WHICH lines, a divider, and the replacement. */

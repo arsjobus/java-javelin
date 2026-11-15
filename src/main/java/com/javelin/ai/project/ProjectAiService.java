@@ -6,6 +6,8 @@ import com.javelin.ai.AiException;
 import com.javelin.ai.AiProvider;
 import com.javelin.ai.AiReply;
 import com.javelin.ai.AiRequest;
+import com.javelin.ai.AiService;
+import com.javelin.ai.EditRepair;
 import com.javelin.ai.FailureReason;
 import com.javelin.ai.Finding;
 import com.javelin.ai.symbols.SymbolConfig;
@@ -186,10 +188,33 @@ public final class ProjectAiService {
       AiProvider.StreamListener listener,
       AiCancel cancel)
       throws AiException {
+    return runStreaming(plan, workspace, listener, cancel, true);
+  }
+
+  /**
+   * As above. A reply the provider cut off is asked again once with more room for the answer, and
+   * so is a reply of edit blocks that cannot be used ({@code mayRepair}), with the reason (see
+   * {@link EditRepair}).
+   */
+  private ProjectAiResult runStreaming(
+      ProjectPlan plan,
+      ProjectWorkspace workspace,
+      AiProvider.StreamListener listener,
+      AiCancel cancel,
+      boolean mayRepair)
+      throws AiException {
     cancel.throwIfCancelled();
     AiReply reply = provider.completeStreaming(plan.request(), listener, cancel);
     cancel.throwIfCancelled();
     calibration.record(plan.request().model(), plan.request().size(), 2, reply.usage());
+    if (reply.truncated() && mayRepair && provider.sizesContextWindow()) {
+      AiRequest roomier = AiService.withMoreRoom(plan.request());
+      if (roomier != null) {
+        listener.onText("\n\n----- cut off: asking again with more room for the answer -----\n\n");
+        reply = provider.completeStreaming(roomier, listener, cancel);
+        cancel.throwIfCancelled();
+      }
+    }
     String text = reply.text();
     ProjectSnapshot snapshot = plan.context().snapshot();
     if (text.isBlank())
@@ -215,6 +240,15 @@ public final class ProjectAiService {
     ProjectProposal proposal =
         MultiFileReply.parse(text, workspace.reader(), snapshot, workspace.options());
     String note = proposal.problems().isEmpty() ? null : String.join("\n", proposal.problems());
+    if (proposal.isEmpty() && mayRepair && note != null) {
+      FailureReason why = proposal.failures().isEmpty() ? null : proposal.failures().get(0);
+      if (EditRepair.worthAsking(why, text)) {
+        listener.onText(
+            "\n\n----- the reply could not be used: asking again with the problem -----\n\n");
+        AiRequest again = EditRepair.again(plan.request(), text, note);
+        return runStreaming(plan.withRequest(again), workspace, listener, cancel, false);
+      }
+    }
     if (proposal.isEmpty())
       return new ProjectAiResult(
           text,
