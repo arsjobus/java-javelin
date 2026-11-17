@@ -388,8 +388,11 @@ class LanguageServiceTest {
     session.start();
     session.whenReady().get(30, TimeUnit.SECONDS);
     assertTrue(logLine("R initialize") != null);
-    session.stopAsync();
-    until(() -> !session.isAlive());
+    // stopNow waits until the process is gone. stopAsync + isAlive() is not enough here:
+    // isAlive() turns false as soon as the stop begins, while the server is still running and
+    // writing server.log into the temp directory that JUnit is about to delete.
+    session.stopNow();
+    assertFalse(session.isAlive());
   }
 
   @Test

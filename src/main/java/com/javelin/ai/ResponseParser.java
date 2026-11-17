@@ -123,6 +123,26 @@ public final class ResponseParser {
   }
 
   /**
+   * True when the first line that is not blank opens a fenced code block. A reply that does not
+   * start with a fence (a Markdown file written out as it is, with fenced blocks of its own) is the
+   * file itself and not a block to cut out of it.
+   */
+  public static boolean opensWithFence(String text) {
+    for (String line : text.replace("\r\n", "\n").replace('\r', '\n').split("\n", -1)) {
+      if (line.isBlank()) continue;
+      return Fence.opening(line) != null;
+    }
+    return false;
+  }
+
+  /** True when any line of the text opens a fenced code block. */
+  public static boolean containsFence(String text) {
+    for (String line : text.replace("\r\n", "\n").replace('\r', '\n').split("\n", -1))
+      if (Fence.opening(line) != null) return true;
+    return false;
+  }
+
+  /**
    * The code with the final line break of the original kept or dropped, so replacing a selection
    * does not add or remove a line.
    */

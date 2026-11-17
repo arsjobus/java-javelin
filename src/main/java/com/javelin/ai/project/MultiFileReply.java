@@ -303,6 +303,23 @@ public final class MultiFileReply {
       throws AiException {
     if (UnifiedPatchHelper.isCreationDiff(body))
       return new ResponseParser.Parsed("", UnifiedPatchHelper.addedText(body), 0);
+    // A new file written out as it is, with no fence around it, is the whole body. For Markdown
+    // that holds even when the file has fenced blocks of its own: taking the first one would keep
+    // one small block (a folder tree or a shell command) and drop the rest. For any other file it
+    // holds when the body has no fence at all (a requirements.txt of one line, a .gitignore),
+    // which would otherwise be refused as a reply without a code block.
+    if (!body.isBlank()
+        && !ResponseParser.opensWithFence(body)
+        && !EditBlocks.looksLike(body)
+        && (markdown || !ResponseParser.containsFence(body))) {
+      if (MarkdownText.openFences(body) != 0)
+        throw new AiException(
+            AiException.Kind.BAD_RESPONSE,
+            FailureReason.TRUNCATED,
+            "The new file stops inside a code block (it was probably cut off), so nothing is"
+                + " proposed.");
+      return new ResponseParser.Parsed("", body.strip(), 0);
+    }
     return ResponseParser.parse(body, markdown);
   }
 

@@ -97,6 +97,59 @@ class MultiFileReplyTest {
   }
 
   @Test
+  void aNewMarkdownFileWrittenWithoutAWrapperFenceIsTakenWhole() {
+    String readme =
+        "# Demo\n\nA small project.\n\n## Structure\n\n```\ndemo/\n  main.py\n```\n\n"
+            + "## Run\n\n```bash\npython main.py\n```\n\n## License\n\nMIT\n";
+    ProjectProposal p = parse("Plan.\n=== NEW FILE: docs/USAGE.md ===\n" + readme);
+    assertEquals(1, p.changes().size(), p.problems().toString());
+    FileChange c = p.changes().get(0);
+    assertEquals(FileChange.Kind.CREATE, c.kind());
+    assertEquals(readme, c.replacement());
+  }
+
+  @Test
+  void aNewMarkdownFileTheModelCallsAnExistingOneIsStillTakenWhole() {
+    String readme = "# Demo\n\n```bash\nmvn test\n```\n\nDone.\n";
+    ProjectProposal p = parse("=== FILE: NOTES.md ===\n" + readme);
+    assertEquals(readme, p.changes().get(0).replacement());
+    assertEquals(FileChange.Kind.CREATE, p.changes().get(0).kind());
+  }
+
+  @Test
+  void aNewMarkdownFileWrappedInAMarkdownFenceStillLosesOnlyTheWrapper() {
+    String readme = "# Demo\n\n```bash\nmvn test\n```\n\nDone.";
+    ProjectProposal p =
+        parse("=== NEW FILE: docs/USAGE.md ===\n```markdown\n" + readme + "\n```\n");
+    assertEquals(readme + "\n", p.changes().get(0).replacement());
+  }
+
+  @Test
+  void aNewMarkdownFileCutOffInsideACodeBlockIsNotProposed() {
+    ProjectProposal p = parse("=== NEW FILE: docs/USAGE.md ===\n# Demo\n\n```bash\nmvn te");
+    assertTrue(p.isEmpty());
+    assertEquals(List.of(com.javelin.ai.FailureReason.TRUNCATED), p.failures());
+  }
+
+  @Test
+  void aNewPlainTextFileWithoutAnyFenceIsTakenWhole() {
+    ProjectProposal p =
+        parse("Adding it.\n=== NEW FILE: requirements.txt ===\npygame>=2.0.0\n");
+    assertEquals(1, p.changes().size(), p.problems().toString());
+    FileChange c = p.changes().get(0);
+    assertEquals(FileChange.Kind.CREATE, c.kind());
+    assertEquals("pygame>=2.0.0\n", c.replacement());
+    assertEquals("Adding it.", p.explanation());
+  }
+
+  @Test
+  void aNewPlainTextFileOfSeveralLinesKeepsEveryLine() {
+    ProjectProposal p =
+        parse("=== NEW FILE: config/requirements.txt ===\npygame>=2.0.0\nnumpy\n\n");
+    assertEquals("pygame>=2.0.0\nnumpy\n", p.changes().get(0).replacement());
+  }
+
+  @Test
   void severalFilesInOneReplyAreSeparatedByTheirHeadings() {
     ProjectProposal p =
         parse(
